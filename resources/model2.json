@@ -1,0 +1,142 @@
+{
+   "location": {
+      "id": "",
+      "name": ""
+   },
+   "businessDrivers": [
+      {
+         "id": "",
+         "name": "",
+         "values": [
+            {
+               "date": "",
+               "value": ""
+            }
+         ]
+      }
+   ],
+   "jobs": [
+      {
+         "id": "",
+         "name": "",
+         "config": {
+            "configSet1": {
+               "settings": {
+                  "id": "",
+                  "configSetId": "",
+                  "standardType": "",
+                  "periodLength": 30,
+                  "minShift": 4.0,
+                  "maxShift": 8.0
+                  "roundingThresholdBelowOne": 1.0,
+                  "roundingThresholdAboveOne": 1.0,
+                  "mealBreakAfter": 4.0,
+                  "mealBreakLength": 30.0,
+                  "nonMealBreakEvery": 2.0,
+                  "nonMealBreakLength": 15.0,
+                  "generateLongShifts": true,
+                  "limitShiftToMaxShift": true,
+                  "truncateMaxCoverage": true,
+                  "defaultNonFlowedDistributionMethod": ""
+               },
+               "shifts": [
+                  {
+                     "id": "",
+                     "configSetId": "",
+                     "sequence": 1,
+                     "name": "",
+                     "wage": 123.45,
+                     "definitions": [
+                        {
+                           "id": "",
+                           "startTime": "",
+                           "endTime": "",
+                           "hoursBefore": 1.0,
+                           "hoursAfter": 1.0,
+                           "minNumberShifts": 0
+                        }
+                     ]
+                  }
+               ],
+               "openDates": [
+                  {
+                     "id": "",
+                     "configSetId": "",
+                     "startDate": "",
+                     "endDate": ""
+                  }
+               ],
+               "coverage": [
+                  {
+                     "configSetId": "",
+                     "values": [
+                        {
+                           "min": 0,
+                           "max": 0
+                        }
+                     ]
+                  }
+               ]
+            }
+         },
+         "shifts": [
+            {
+               "id": "",
+               "configSetId": "",
+               "sequence": 1,
+               "name": "",
+               "wage": 123.45,
+               "definitions": [
+                  {
+                     "id": "",
+                     "startTime": "",
+                     "endTime": "",
+                     "hoursBefore": 1.0,
+                     "hoursAfter": 1.0,
+                     "minNumberShifts": 0
+                  }
+               ]
+            }
+         ],
+         "effectiveDates": [
+            {
+               "id": "",
+               "configSetId": "",
+               "startDate": "",
+               "endDate": ""
+            }
+         ],
+         "coverage": [
+            {
+               "configSetId": "",
+               "values": [
+                  {
+                     "min": 0,
+                     "max": 0
+                  }
+               ]
+            }
+         ],
+         "settings": [
+            {
+               "id": "",
+               "configSetId": "",
+               "standardType": "",
+               "periodLength": 30,
+               "minShift": 4.0,
+               "maxShift": 8.0
+               "roundingThresholdBelowOne": 1.0,
+               "roundingThresholdAboveOne": 1.0,
+               "mealBreakAfter": 4.0,
+               "mealBreakLength": 30.0,
+               "nonMealBreakEvery": 2.0,
+               "nonMealBreakLength": 15.0,
+               "generateLongShifts": true,
+               "limitShiftToMaxShift": true,
+               "truncateMaxCoverage": true,
+               "defaultNonFlowedDistributionMethod": ""
+            }
+         ]
+      }
+   ]
+}

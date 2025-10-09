@@ -1,0 +1,3616 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://www.unifocus.com/database"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://www.unifocus.com/database http://www.unifocus.com/database"
+          version="10.6"
+          foreignKeyMode="triggers"
+          booleanMode="yn">
+
+   <table name="Assignment">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="ParentAssignmentID" type="int"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="Abbrev" type="varchar" length="25"/>
+         <column name="LevelID" type="int"/>
+
+         <!-- misc columns -->
+         <column name="MasterJobClassID" type="int"/>
+         <column name="JobCategoryID" type="int"/>
+         <column name="EventLabor" type="boolean" required="true"/>
+         <column name="ExcludeFromPayrollExport" type="boolean" required="true"/>
+         <column name="LastPublishedDateTime" type="datetime"/>
+         <column name="LastPublishedWeekEndDate" type="date"/>
+         <column name="Flags" type="int"/>
+         <column name="PayCode" type="varchar" length="50"/>
+         <column name="WorkersCompClass" type="varchar" length="25"/>
+         <column name="Publishable" type="boolean" required="true" default="true"/>
+         <column name="RequiresApproval" type="boolean" required="true" default="false"/>
+         <column name="Notes" type="memo"/>
+         <column name="FstVarianceFrom" type="short" minValue="0" maxValue="100"/>
+         <column name="FstVarianceTo" type="short" minValue="0" maxValue="100"/>
+         <column name="StdVarianceFrom" type="short" minValue="0" maxValue="100"/>
+         <column name="StdVarianceTo" type="short" minValue="0" maxValue="100"/>
+         <column name="OTPercentage" type="short" minValue="0" maxValue="100"/>
+         <column name="ShowOnDashboard" type="boolean" default="true" required="true"/>
+         <column name="LaborCostPercentageKBIID" type="int"/>
+
+         <!-- scheduling columns -->
+         <column name="PlannedShiftSortingMethod" type="enum" length="2" enumType="PlannedShiftSortingMethod"/>
+         <column name="ProjectedHoursReductionMethod" type="enum" length="2" enumType="ProjectedHoursReductionMethod"/>
+         <column name="SchedulingMethod" type="enum" length="1" required="true" enumType="SchedulingMethod"/>
+         <column name="BalanceSchedules" type="boolean" required="true"/>
+         <column name="MinHoursOff" type="decimal" length="9" scale="4" minValue="0.0" maxValue="24.0"/>
+         <column name="MinDaysOff" type="short" minValue="0" maxValue="7"/>
+         <column name="DayOrder" type="char" length="13"/>
+         <column name="RotationPlanID" type="int"/>
+         <column name="JobRotationPlanID" type="int"/>
+         <column name="DepartmentalSeniority" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="ParentAssignmentID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="ParentAssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="LevelID" table="LaborLevel" column="ID" type="setnull"/>
+         <relation src="RotationPlanID" table="RotationPlan" column="ID" type="setnull"/>
+         <relation src="JobRotationPlanID" table="RotationPlan" column="ID" type="setnull"/>
+         <relation src="MasterJobClassID" table="MasterJob" column="ID" type="setnull"/>
+         <relation src="JobCategoryID" table="JobCategory" column="ID" type="setnull"/>
+         <relation src="LaborCostPercentageKBIID" table="KBI" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentOrder">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="OrderNo" type="short" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+         </unique>
+         <index>
+            <column name="OrderNo"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentPayRate" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="EffectiveDate" type="date" required="true"/>
+         <column name="HourlyRate" type="decimal" length="9" scale="4"/>
+         <column name="MinWage" type="decimal" length="9" scale="4"/>
+         <column name="TipRate" type="decimal" length="9" scale="4"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="EffectiveDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentProductivity">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="ProductivityKBIID" type="int" required="true"/>
+         <column name="ProductivityUnitCode" type="enum" length="2" required="true" enumType="ProductivityUnitType"/>
+         <column name="ProductivityGoal" type="decimal" length="9" scale="4"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="ProductivityKBIID"/>
+            <column name="ProductivityUnitCode"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="ProductivityKBIID" table="KBI" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentShift">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="ShiftNo" type="short" required="true"/>
+         <column name="ShiftName" type="varchar" length="50" required="true"/>
+         <column name="Wage" type="decimal" length="9" scale="4" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="ShiftNo"/>
+         </unique>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="ShiftName"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentShiftDetail">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentShiftID" type="int" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="StartTime" type="time"/>
+         <column name="EndTime" type="time"/>
+         <column name="HoursBefore" type="decimal" length="9" scale="2" required="true" default="0.0"/>
+         <column name="HoursAfter" type="decimal" length="9" scale="2" required="true" default="0.0"/>
+         <column name="MinNumberOfShifts" type="int" required="true" default="0"/>
+         <column name="ShiftGroupingForSameEvent" type="int" required="true" default="0"/>
+         <column name="WeightingFactor" type="int" required="true" default="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentShiftID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentShiftID" table="AssignmentShift" column="ID" type="cascade"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentSortOrder">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="OrderNo" type="int" required="true"/>
+         <column name="SortOrderCode" type="enum" length="2" required="true" enumType="JCSortOrderType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="OrderNo"/>
+            <column name="SortOrderCode"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AuxLaborHours" data="true" exportDataColumn="StatDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="JobclassID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="ShiftCategoryID" type="int" required="true"/>
+         <column name="ShiftType" type="enum" length="1" required="true" enumType="ShiftType"/>
+         <column name="Source" type="enum" length="1" required="true" enumType="ShiftSourceType"/>
+         <column name="WorkedHours" type="decimal" length="19" scale="2"/>
+         <column name="AdjHours" type="decimal" length="19" scale="2"/>
+         <column name="NetHours" type="decimal" length="19" scale="2"/>
+         <column name="AvgRate" type="decimal" length="19" scale="2"/>
+         <column name="NetDollars" type="decimal" length="19" scale="2"/>
+         <column name="RegHours" type="decimal" length="19" scale="2"/>
+         <column name="RegRate" type="decimal" length="19" scale="2"/>
+         <column name="RegDollars" type="decimal" length="19" scale="2"/>
+         <column name="OTHours" type="decimal" length="19" scale="2"/>
+         <column name="OTRate" type="decimal" length="19" scale="2"/>
+         <column name="OTDollars" type="decimal" length="19" scale="2"/>
+         <column name="DTHours" type="decimal" length="19" scale="2"/>
+         <column name="DTRate" type="decimal" length="19" scale="2"/>
+         <column name="DTDollars" type="decimal" length="19" scale="2"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="ShiftType"/>
+            <column name="JobclassID"/>
+            <column name="StatDate"/>
+            <column name="ShiftCategoryID"/>
+            <column name="Source"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="JobclassID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="ShiftCategoryID" table="ShiftCategory" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="CalendarPlan">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="CalYear" type="short" required="true"/>
+         <column name="SunOpen" type="boolean" required="true"/>
+         <column name="MonOpen" type="boolean" required="true"/>
+         <column name="TueOpen" type="boolean" required="true"/>
+         <column name="WedOpen" type="boolean" required="true"/>
+         <column name="ThuOpen" type="boolean" required="true"/>
+         <column name="FriOpen" type="boolean" required="true"/>
+         <column name="SatOpen" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+            <column name="CalYear"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="CalendarPlanDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="CalendarPlanID" type="int" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="CalendarPlanID"/>
+            <column name="StartDate"/>
+            <column name="EndDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="CalendarPlanID" table="CalendarPlan" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="DayOffPlan">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="NumberWeeks" type="short" required="true" minValue="1" maxValue="14"/>
+         <column name="LastRotated" type="date"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="DayOffPattern">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="DayOffPlanID" type="int" required="true"/>
+         <column name="PatternNo" type="short" required="true"/>
+         <column name="SunOff" type="boolean" required="true"/>
+         <column name="MonOff" type="boolean" required="true"/>
+         <column name="TueOff" type="boolean" required="true"/>
+         <column name="WedOff" type="boolean" required="true"/>
+         <column name="ThuOff" type="boolean" required="true"/>
+         <column name="FriOff" type="boolean" required="true"/>
+         <column name="SatOff" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+      </keys>
+      <relations>
+         <relation src="DayOffPlanID" table="DayOffPlan" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="Employee" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="PayGroupID" type="int" required="true"/>
+         <column name="EmpID" type="varchar" length="25" required="true"/>
+         <column name="LastName" type="varchar" length="50" required="true"/>
+         <column name="FirstName" type="varchar" length="50" required="true"/>
+         <column name="MiddleName" type="varchar" length="25"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="EmployeeTypeCode" type="enum" length="1" required="true" enumType="EmployeeType"/>
+         <column name="HireDate" type="date" required="true"/>
+         <column name="SeniorityDate" type="date" required="true"/>
+         <column name="WorkClassID" type="int" required="true"/>
+         <column name="EmpClassID" type="int"/>
+         <column name="SecEmpClassID" type="int"/>
+         <column name="BirthDate" type="date"/>
+         <column name="AltEmpID" type="varchar" length="25"/>
+         <column name="PayrollEmpID" type="varchar" length="25"/>
+         <column name="Gender" type="enum" length="1" enumType="GenderType"/>
+         <column name="Tipped" type="enum" length="1" enumType="TippedType"/>
+         <column name="HoursAvailable" type="decimal" length="9" scale="2" minValue="0.0" maxValue="80.0"/>
+         <column name="MinHoursOff" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="MinDaysOff" type="short" minValue="0" maxValue="7"/>
+         <column name="DayOffPlanID" type="int"/>
+         <column name="CurrentPatternNo" type="short"/>
+         <column name="Photograph" type="blob"/>
+         <column name="Address" type="varchar" length="50"/>
+         <column name="Address2" type="varchar" length="50"/>
+         <column name="City" type="varchar" length="50"/>
+         <column name="StateID" type="int"/>
+         <column name="Zip" type="varchar" length="25"/>
+         <column name="HomePhone" type="varchar" length="25"/>
+         <column name="MobilePhone" type="varchar" length="25"/>
+         <column name="OtherPhone" type="varchar" length="25"/>
+         <column name="Email" type="varchar" length="254"/>
+         <column name="EmergencyContact" type="varchar" length="50"/>
+         <column name="EmergencyPhone" type="varchar" length="25"/>
+         <column name="OrientationDate" type="date"/>
+         <column name="Eligible401KDate" type="date"/>
+         <column name="Enrolled401KDate" type="date"/>
+         <column name="NextReviewDate" type="date"/>
+         <column name="LastReviewDate" type="date"/>
+         <column name="MaritalStatus" type="enum" length="1" enumType="MaritalStatusType"/>
+         <column name="NumDependents" type="short"/>
+         <column name="ADA" type="varchar" length="100"/>
+         <column name="Locale" type="varchar" length="10"/>
+         <column name="ExtraData" type="varchar" length="25"/>
+         <column name="Password" type="varchar" length="50"/>
+         <column name="ClockAdmin" type="boolean" required="true"/>
+         <column name="BypassBiometric" type="boolean" required="true"/>
+         <column name="AutoPunchMode" type="boolean" required="true"/>
+         <column name="PIN" type="varchar" length="200"/>
+         <column name="WatsonUserID" type="int"/>
+         <column name="PortalUserID" type="int"/>
+         <column name="Flags" type="int"/>
+         <column name="PrivateSchedules" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="PayGroupID"/>
+            <column name="EmpID"/>
+         </unique>
+         <index include="Name">
+            <column name="PropertyID"/>
+            <column name="ID"/>
+            <column name="EmpID"/>
+         </index>
+         <index>
+            <column name="PortalUserID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="PayGroupID" table="PayGroup" column="ID" type="cascade"/>
+         <relation src="WorkClassID" table="EmployeeWorkClass" column="ID" type="enforce"/>
+         <relation src="EmpClassID" table="EmployeeClass" column="ID" type="setnull"/>
+         <relation src="SecEmpClassID" table="EmployeeClass" column="ID" type="setnull"/>
+         <relation src="DayOffPlanID" table="DayOffPlan" column="ID" type="setnull"/>
+         <relation src="StateID" table="State" column="ID" type="setnull"/>
+         <relation src="WatsonUserID" table="WatsonUser" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeReconcileHashCode" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="EmpID" type="varchar" length="25" required="true"/>
+         <column name="LastReconcileEmployeeHashCode" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="EmpID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeAssignment" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="OrderNo" type="short" required="true"/>
+         <column name="Rank" type="short" required="true" minValue="1" maxValue="10000"/>
+         <column name="Active" type="boolean" required="true" default="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="EmployeeID"/>
+            <column name="AssignmentID"/>
+         </unique>
+         <unique>
+            <column name="EmployeeID"/>
+            <column name="OrderNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeJobStatus" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="JobID" type="int" required="true"/>
+         <column name="ScheduleOrder" type="short" required="true"/>
+         <column name="SeniorityDate" type="date" required="true"/>
+         <column name="Rank" type="short" minValue="1" maxValue="10000" required="true"/>
+         <column name="SubOnly" type="boolean" required="true"/>
+         <column name="PayTypeCode" type="enum" enumType="EmployeePayType" required="true"/>
+         <column name="AnnualBased" type="boolean" required="true"/>
+         <column name="Home" type="boolean" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+         <column name="PayRateReasonID" type="int"/>
+         <column name="HourlyRate" type="decimal" length="9" scale="4"/>
+         <column name="AnnualRate" type="decimal" length="19" scale="4"/>
+         <column name="PieceRate" type="decimal" length="9" scale="4"/>
+         <column name="SalaryDistID" type="int"/>
+         <column name="ContractHours" type="decimal" length="9" scale="2"/>
+         <column name="ContractDays" type="decimal" length="9" scale="2"/>
+         <column name="ReconcileCodeID" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="StartDate"/>
+            <column name="EmployeeID"/>
+            <column name="EndDate"/>
+            <column name="JobID"/>
+         </unique>
+         <index include="PropertyID,EmployeeID,JobID,ScheduleOrder">
+            <column name="StartDate"/>
+            <column name="EndDate"/>
+         </index>
+         <index>
+            <column name="EmployeeID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="JobID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="SalaryDistID" table="SalaryDist" column="ID" type="setnull"/>
+         <relation src="PayRateReasonID" table="PayRateReason" column="ID" type="setnull"/>
+         <relation src="ReconcileCodeID" table="ReconcileCode" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeAvailability" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="RequestTypeCode" type="enum" length="2" required="true" enumType="EmployeeAvailType"/>
+         <column name="StartTime" type="time" required="true"/>
+         <column name="EndTime" type="time" required="true"/>
+         <column name="Duration" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="EmployeeID"/>
+            <column name="DayNo"/>
+            <column name="RequestTypeCode"/>
+            <column name="StartTime"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeAvailabilityPending" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="RequestTypeCode" type="enum" length="2" required="true" enumType="EmployeeAvailType"/>
+         <column name="StartTime" type="time" required="true"/>
+         <column name="EndTime" type="time" required="true"/>
+         <column name="Duration" type="decimal" length="9" scale="2" required="true"/>
+         <column name="Status" type="enum" length="1" required="true" enumType="EmployeeAvailabilityRequestStatusType"/>
+         <column name="Note" type="memo" required="false"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="EmployeeID"/>
+            <column name="DayNo"/>
+            <column name="RequestTypeCode"/>
+            <column name="StartTime"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeAvailabilityRequest" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="Status" type="enum" length="1" required="true" enumType="EmployeeAvailabilityRequestStatusType"/>
+         <column name="ChangeText" type="memo" required="true"/>
+         <column name="EnteredOn" type="datetime" required="true"/>
+         <column name="StatusChangedOn" type="datetime"/>
+         <column name="StatusChangedByUserID" type="int"/>
+         <column name="ResponseRequired" type="boolean" required="true"/>
+         <column name="EMailSent" type="boolean" required="true"/>
+         <column name="EMailSentOn" type="datetime"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="EmployeeID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade"/>
+         <relation src="StatusChangedByUserID" table="WatsonUser" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeClass">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="IsPrimary" type="boolean" required="true"/>
+         <column name="IsUnion" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Code"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeRegularPeriod" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="PeriodTypeCode" type="enum" length="1" required="true" enumType="EmployeePeriodType"/>
+         <column name="StartTime" type="time" required="true"/>
+         <column name="EndTime" type="time" required="true"/>
+         <column name="Duration" type="decimal" length="9" scale="2" required="true"/>
+         <column name="JobclassID" type="int"/>
+         <column name="AssignmentID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="EmployeeID"/>
+            <column name="DayNo"/>
+            <column name="StartTime"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="JobclassID" table="Assignment" column="ID" type="setnull"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeScheduleGroup" data="true">
+      <columns>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="ScheduleGroupID" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="EmployeeID"/>
+            <column name="ScheduleGroupID"/>
+         </primary>
+         <unique>
+            <column name="ScheduleGroupID"/>
+            <column name="EmployeeID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="ScheduleGroupID" table="ScheduleGroup" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeShift" lockEscalation="disable" data="true" exportDataColumn="ShiftDate" compress="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="JobID" type="int" required="true"/>
+         <column name="ShiftDate" type="date" required="true"/>
+         <column name="ShiftTypeCode" type="enum" length="1" required="true" enumType="ShiftType"/>
+         <column name="ShiftCategoryID" type="int" required="true"/>
+         <column name="Source" type="enum" length="1" required="true" enumType="ShiftSourceType"/>
+         <column name="CreatedOnDT" type="datetime" required="true"/>
+         <column name="AssignmentID" type="int"/>
+         <column name="WorkedHours" type="decimal" length="9" scale="4"/>
+         <column name="AdjHours" type="decimal" length="9" scale="4"/>
+         <column name="NetHours" type="decimal" length="9" scale="4"/>
+         <column name="AvgRate" type="decimal" length="9" scale="4"/>
+         <column name="NetDollars" type="decimal" length="9" scale="2"/>
+         <column name="RegHours" type="decimal" length="9" scale="4"/>
+         <column name="RegRate" type="decimal" length="9" scale="4"/>
+         <column name="RegDollars" type="decimal" length="9" scale="2"/>
+         <column name="AutoOTHours" type="decimal" length="9" scale="4"/>
+         <column name="AdjOTHours" type="decimal" length="9" scale="4"/>
+         <column name="OTHours" type="decimal" length="9" scale="4"/>
+         <column name="OTRate" type="decimal" length="9" scale="4"/>
+         <column name="OTDollars" type="decimal" length="9" scale="2"/>
+         <column name="AutoDTHours" type="decimal" length="9" scale="4"/>
+         <column name="AdjDTHours" type="decimal" length="9" scale="4"/>
+         <column name="DTHours" type="decimal" length="9" scale="4"/>
+         <column name="DTRate" type="decimal" length="9" scale="4"/>
+         <column name="DTDollars" type="decimal" length="9" scale="2"/>
+         <column name="BankedHours" type="decimal" length="9" scale="4"/>
+         <column name="StartTime" type="datetime"/>
+         <column name="EndTime" type="datetime"/>
+         <column name="EmpApprovedDT" type="datetime"/>
+         <column name="MgrApprovedDT" type="datetime"/>
+         <column name="MgrApprovedBy" type="int"/>
+         <column name="CheckID" type="int"/>
+         <column name="PlannedShiftID" type="int"/>
+         <column name="Notes" type="varchar" length="400"/>
+         <column name="Overlap" type="boolean" required="true"/>
+         <column name="Flags" type="int"/>
+         <column name="ReallocatedFromAdjustmentID" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="ShiftTypeCode"/>
+            <column name="EmployeeID"/>
+            <column name="ShiftDate"/>
+            <column name="ShiftCategoryID"/>
+            <column name="ID"/>
+         </unique>
+         <index compress="true">
+            <column name="EmployeeID"/>
+            <column name="ShiftDate"/>
+         </index>
+         <index>
+            <column name="PlannedShiftID"/>
+         </index>
+         <index>
+            <column name="ReallocatedFromAdjustmentID"/>
+         </index>
+         <index compress="true" include="ID,EmployeeID">
+            <column name="ShiftTypeCode"/>
+            <column name="StartTime"/>
+         </index>
+         <index compress="true">
+            <column name="ShiftCategoryID"/>
+            <column name="JobID"/>
+            <column name="ShiftDate"/>
+            <column name="ShiftTypeCode"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade"/>
+         <relation src="JobID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="CheckID" table="ManualCheck" column="ID" type="cascade"/>
+         <relation src="ShiftCategoryID" table="ShiftCategory" column="ID" type="cascade"/>
+         <relation src="MgrApprovedBy" table="WatsonUser" column="ID" type="setnull"/>
+         <relation src="PlannedShiftID" table="PlannedShift" column="ID" type="setnull"/>
+         <relation src="ReallocatedFromAdjustmentID" table="EmployeeShiftAdjustment" column="ID" type="cascade"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeShiftBreak" data="true" compress="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="EmployeeShiftID" type="int" required="true"/>
+         <column name="ScheduleBreakID" type="int" required="true"/>
+         <column name="StartDateTime" type="datetime" required="true"/>
+         <column name="EndDateTime" type="datetime" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="EmployeeShiftID"/>
+            <column name="ScheduleBreakID"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="EmployeeShiftID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeShiftID" table="EmployeeShift" column="ID" type="cascade"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="ScheduleBreakID" table="PropertyScheduleBreak" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeShiftError" data="true" compress="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="EmployeeShiftID" type="int" required="true"/>
+         <column name="ErrorCode" type="varchar" length="25" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="EmployeeShiftID"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="EmployeeShiftID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeShiftID" table="EmployeeShift" column="ID" type="cascade"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeShiftPunch" exportDataColumn="PunchTime" data="true" compress="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="EmployeeShiftID" type="int" required="true"/>
+         <column name="PunchTypeCode" type="enum" length="8" required="true" enumType="PunchType"/>
+         <column name="RawPunch" type="varchar" length="100" required="true"/>
+         <column name="PunchTime" type="datetime" required="true"/>
+         <column name="AdjTime" type="datetime" required="true"/>
+         <column name="RoundedTime" type="datetime" required="true"/>
+         <column name="BadgeNo" type="varchar" length="25" required="true"/>
+         <column name="Source" type="enum" length="1" required="true" enumType="PunchSourceType"/>
+         <column name="Rounded" type="enum" length="1" enumType="RoundedType"/>
+         <column name="TimeClockID" type="int"/>
+         <column name="latitude" type="decimal" length="10" scale="8"/>
+         <column name="longitude" type="decimal" length="11" scale="8"/>
+         <column name="accuracy" type="decimal" length="19" scale="2"/>
+         <column name="AutoPunchMode" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="EmployeeShiftID"/>
+            <column name="RoundedTime"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="EmployeeShiftID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeShiftID" table="EmployeeShift" column="ID" type="cascade"/>
+         <relation src="TimeClockID" table="TimeClock" column="ID" type="setnull"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeStatus" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+         <column name="StatusTypeCode" type="enum" length="1" required="true" enumType="EmployeeStatusType"/>
+         <column name="StatusReasonID" type="int"/>
+         <column name="Note" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="EmployeeID"/>
+            <column name="StartDate"/>
+            <column name="StatusTypeCode"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade"/>
+         <relation src="StatusReasonID" table="EmployeeStatusReason" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeStatusReason">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="ProcessorCode" type="varchar" length="25" required="true"/>
+         <column name="ReasonType" type="enum" length="1" required="true" enumType="StatusReasonType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeTimeOff" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="StartDateTime" type="datetime" required="true"/>
+         <column name="EndDateTime" type="datetime" required="true"/>
+         <column name="FullDay" type="boolean" required="true"/>
+         <column name="HoursRequested" type="decimal" length="19" scale="2" required="true"/>
+         <column name="TimeOffTypeID" type="int" required="true"/>
+         <column name="Status" type="enum" length="1" required="true" enumType="TimeOffStatusType"/>
+         <column name="EnteredOn" type="datetime" required="true"/>
+         <column name="StatusChangedOn" type="datetime"/>
+         <column name="StatusChangedByUserID" type="int"/>
+         <column name="EnteredByUserID" type="int"/>
+         <column name="EmployeeComment" type="varchar" length="255"/>
+         <column name="ManagerComment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="EmployeeID"/>
+            <column name="StartDateTime"/>
+            <column name="ID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade"/>
+         <relation src="StatusChangedByUserID" table="WatsonUser" column="ID" type="setnull"/>
+         <relation src="EnteredByUserID" table="WatsonUser" column="ID" type="setnull"/>
+         <relation src="TimeOffTypeID" table="EmployeeTimeOffType" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeTimeOffType" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="25" required="true"/>
+         <column name="DefaultEarningTypeID" type="int"/>
+         <column name="SortOrder" type="int" required="true" default="0"/>
+         <column name="IncludeInMobile" type="boolean" default="true" required="true"/>
+         <column name="Color" type="varchar" length="7"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="DefaultEarningTypeID" table="EarningType" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="EmployeeWorkClass">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Fulltime" type="boolean" required="true"/>
+         <column name="HoursAvailable" type="decimal" length="9" scale="2" minValue="0.0" maxValue="80.0" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Code"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="Environment">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="DayOfWeek" type="int" minValue="1" maxValue="7"/>
+         <column name="IgnoreDOW" type="boolean" required="true"/>
+         <column name="SystemEnv" type="boolean" required="true"/>
+         <column name="Comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="EnvStat" data="true" exportDataColumn="EnvDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="EnvDate" type="date" required="true"/>
+         <column name="ForecastEnvID" type="int"/>
+         <column name="ActualEnvID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIID"/>
+            <column name="EnvDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="ForecastEnvID" table="Environment" column="ID" type="setnull"/>
+         <relation src="ActualEnvID" table="Environment" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="GlobalEnvironment" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+         <column name="Comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+            <column name="StartDate"/>
+            <column name="EndDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="FlowPattern">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="TotalPercent" type="decimal" length="19" scale="4" required="true"/>
+         <column name="TotalActual" type="decimal" length="19" scale="4" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="FlowPatternActual" data="true" exportDataColumn="StatDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="FlowPatternID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="PeriodNo" type="short" required="true" minValue="1" maxValue="1440"/>
+         <column name="ActualValue" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="FlowPatternID"/>
+            <column name="StatDate"/>
+            <column name="PeriodNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="FlowPatternID" table="FlowPattern" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="FlowPatternPeriod">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="FlowPatternID" type="int" required="true"/>
+         <column name="PeriodNo" type="short" required="true" minValue="1" maxValue="1440"/>
+         <column name="PatternValue" type="decimal" length="19" scale="4" required="true"/>
+         <column name="ActualValue" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="FlowPatternID"/>
+            <column name="PeriodNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="FlowPatternID" table="FlowPattern" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="FlowPlan">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+         <column name="SunFlowPatternID" type="int"/>
+         <column name="MonFlowPatternID" type="int"/>
+         <column name="TueFlowPatternID" type="int"/>
+         <column name="WedFlowPatternID" type="int"/>
+         <column name="ThuFlowPatternID" type="int"/>
+         <column name="FriFlowPatternID" type="int"/>
+         <column name="SatFlowPatternID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="SunFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="MonFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="TueFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="WedFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="ThuFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="FriFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="SatFlowPatternID" table="FlowPattern" column="ID" type="setnull" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="FlowPlanPattern">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="FlowPlanID" type="int" required="true"/>
+         <column name="SeasonID" type="int"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="FlowPatternID" type="int" required="true"/>
+         <column name="Retention" type="decimal" length="9" scale="2"/>
+         <column name="Capacity" type="int"/>
+         <column name="Utilization" type="decimal" length="9" scale="2"/>
+         <column name="ShiftPatternByMinutes" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="FlowPlanID"/>
+            <column name="SeasonID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="FlowPlanID" table="FlowPlan" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="SeasonID" table="Season" column="ID" type="cascade"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+         <relation src="FlowPatternID" table="FlowPattern" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="HoursDistribution" data="true">
+      <columns>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="HoursDistributionTypeID" type="int" required="true"/>
+         <column name="ShiftID" type="int" required="true"/>
+         <column name="Date" type="date" required="true"/>
+         <column name="OriginalHours" type="decimal" length="9" scale="4"/>
+         <column name="Hours" type="decimal" length="9" scale="4"/>
+         <column name="BaseRate" type="decimal" length="9" scale="4"/>
+         <column name="PremiumRate" type="decimal" length="9" scale="4"/>
+         <column name="TotalCosts" type="decimal" length="9" scale="2"/>
+         <column name="HoursRuleItemID" type="int"/>
+         <column name="RateRuleItemID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="PropertyID"/>
+            <column name="Date"/>
+            <column name="HoursDistributionTypeID"/>
+            <column name="ShiftID"/>
+         </primary>
+         <index>
+            <column name="ShiftID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="HoursDistributionTypeID" table="HoursDistributionType" column="ID" type="cascade"/>
+         <relation src="ShiftID" table="EmployeeShift" column="ID" type="cascade"/>
+         <relation src="HoursRuleItemID" table="RuleItem" column="ID" type="setnull"/>
+         <relation src="RateRuleItemID" table="RuleItem" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="HoursDistributionType" noExport="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="ProcessorCode" type="varchar" length="20" required="true"/>
+         <column name="Premium" type="boolean" required="true"/>
+         <column name="Factor" type="decimal" length="9" scale="2" required="true" default="1.0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <initialData>
+         <sql>insert into HoursDistributionType (Name,ProcessorCode,Premium,Factor) values ('Regular','REG','N',1.0)</sql>
+         <sql>insert into HoursDistributionType (Name,ProcessorCode,Premium,Factor) values ('Overtime','OT','Y',1.5)</sql>
+         <sql>insert into HoursDistributionType (Name,ProcessorCode,Premium,Factor) values ('Double Time','DT','Y',2.0)</sql>
+      </initialData>
+   </table>
+
+   <table name="JobclassLaborData" data="true" exportDataColumn="StatDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="JobclassID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="ForecastHours" type="decimal" length="19" scale="2"/>
+         <column name="StandardHours" type="decimal" length="19" scale="2"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="JobclassID"/>
+            <column name="StatDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="JobclassID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="KBI">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="ShowInModule" type="enum" length="1" required="true" enumType="ShowInModuleType"/>
+         <column name="MasterKBICodeID" type="int"/>
+         <column name="UnitID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Code"/>
+         </unique>
+         <index>
+            <column name="MasterKBICodeID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="UnitID" table="Unit" column="ID" type="setnull"/>
+         <relation src="MasterKBICodeID" table="MasterKBICode" column="ID" type="setnull"/>
+      </relations>
+      <triggers>
+         <delete databaseType="mssql">
+            update EmployeeProductivityConfig set Ratio = null where KBI2ID is null;
+         </delete>
+         <delete databaseType="pgsql">
+            update EmployeeProductivityConfig set Ratio = null where KBI2ID is null;
+         </delete>
+      </triggers>
+   </table>
+
+   <table name="KBIConfig">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="KBISetID" type="int" required="true"/>
+         <column name="KBITypeCode" type="enum" length="1" required="true" enumType="KBIType"/>
+         <column name="IsEnv" type="boolean" required="true"/>
+         <column name="IsPrimary" type="boolean" required="true"/>
+         <column name="Notes" type="varchar" length="200"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIID"/>
+            <column name="KBISetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="KBISetID" table="KBISet" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigEnvFlowPlan">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="EnvID" type="int" required="true"/>
+         <column name="FlowPlanID" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="EnvID"/>
+            <column name="FlowPlanID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="EnvID" table="Environment" column="ID" type="cascade"/>
+         <relation src="FlowPlanID" table="FlowPlan" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigFormula">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="FormulaText" type="memo"/>
+         <column name="FormulaCode" type="blob"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigFormulaUsage">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="FormulaKBIConfigID" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="FormulaKBIConfigID"/>
+         </unique>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="FormulaKBIConfigID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="FormulaKBIConfigID" table="KBIConfig" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigPercent">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="BaseKBIConfigID" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="BaseKBIConfigID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="BaseKBIConfigID" table="KBIConfig" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigTAES">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="RelatedKBIConfigID" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="DayNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="RelatedKBIConfigID" table="KBIConfig" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigPercentOfBase">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="PeriodNo" type="short" required="true" minValue="1" maxValue="13"/>
+         <column name="SunPercent" type="decimal" length="12" scale="2"/>
+         <column name="MonPercent" type="decimal" length="12" scale="2"/>
+         <column name="TuePercent" type="decimal" length="12" scale="2"/>
+         <column name="WedPercent" type="decimal" length="12" scale="2"/>
+         <column name="ThuPercent" type="decimal" length="12" scale="2"/>
+         <column name="FriPercent" type="decimal" length="12" scale="2"/>
+         <column name="SatPercent" type="decimal" length="12" scale="2"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="PeriodNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigRegression">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="RelatedKBIConfigNo" type="short" required="true" minValue="1" maxValue="500"/>
+         <column name="RelatedKBIConfigID" type="int" required="true"/>
+         <column name="OperationTypeCode" type="enum" length="1" required="true" enumType="KBIOperationType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="DayNo"/>
+            <column name="RelatedKBIConfigID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="RelatedKBIConfigID" table="KBIConfig" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="KBIConfigStatistical">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIConfigID" type="int" required="true"/>
+         <column name="Mode" type="enum" length="1" required="true" enumType="KBIModeType"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="TypeCode" type="enum" length="1" required="true" enumType="KBIStatType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIConfigID"/>
+            <column name="Mode"/>
+            <column name="DayNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIConfigID" table="KBIConfig" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="KBILaborConfig">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="KBISetID" type="int" required="true"/>
+         <column name="LaborKBITypeCode" type="enum" length="1" required="true" enumType="KBIType"/>
+         <column name="KBIClassCode" type="enum" length="1" required="true" enumType="KBIClassType"/>
+         <column name="FlowPlanID" type="int"/>
+         <column name="ActFlowPlanID" type="int"/>
+         <column name="ShowInWizard" type="boolean" required="true"/>
+         <column name="ShowInReforecast" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIID"/>
+            <column name="KBISetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="KBISetID" table="KBISet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="FlowPlanID" table="FlowPlan" column="ID" type="setnull"/>
+         <relation src="ActFlowPlanID" table="FlowPlan" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="KBIStat" lockEscalation="disable" data="true" exportDataColumn="StatDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="EstValue" type="decimal" length="19" scale="4"/>
+         <column name="FstValue" type="decimal" length="19" scale="4"/>
+         <column name="AdjValue" type="decimal" length="19" scale="4"/>
+         <column name="ActValue" type="decimal" length="19" scale="4"/>
+         <column name="FstMAPEInclusive" type="short"/>
+         <column name="FstMADInclusive" type="int"/>
+         <column name="AdjMAPEInclusive" type="short"/>
+         <column name="AdjMADInclusive" type="int"/>
+         <column name="FstMAPEExclusive" type="short"/>
+         <column name="FstMADExclusive" type="int"/>
+         <column name="AdjMAPEExclusive" type="short"/>
+         <column name="AdjMADExclusive" type="int"/>
+         <column name="LastDateTimeAccuracyCalculated" type="datetime"/>
+         <column name="LastDateTimeForecastCalculated" type="datetime"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="StatDate"/>
+            <column name="KBIID"/>
+         </unique>
+         <index>
+            <column name="KBIID"/>
+            <column name="StatDate"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="KBIStatOverride" data="true" exportDataColumn="StatDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="StatValue" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIID"/>
+            <column name="StatDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="MarketGroup">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="ShowInModule" type="enum" length="1" required="true" enumType="ShowInModuleType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="MarketSegment">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="MarketGroupID" type="int" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="MSTypeCode" type="enum" length="2" required="true" enumType="MarketSegmentType"/>
+         <column name="RoomsKBIID" type="int" required="true"/>
+         <column name="ArrivalsKBIID" type="int"/>
+         <column name="GuestsKBIID" type="int"/>
+         <column name="DeparturesKBIID" type="int"/>
+         <column name="ArrivalsCalculated" type="boolean" required="true"/>
+         <column name="GuestsCalculated" type="boolean" required="true"/>
+         <column name="ForecastAccuracyModerateThreshold" type="short" minValue="1" maxValue="100"/>
+         <column name="ForecastAccuracyCriticalThreshold" type="short" minValue="1" maxValue="100"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="MarketGroupID"/>
+            <column name="MSTypeCode"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="MarketGroupID" table="MarketGroup" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="RoomsKBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="ArrivalsKBIID" table="KBI" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="GuestsKBIID" table="KBI" column="ID" type="setnull" disableUsageChecking="true"/>
+         <relation src="DeparturesKBIID" table="KBI" column="ID" type="setnull" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="PreSchedule" data="true" exportDataColumn="ScheduleDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="ScheduleDate" type="date" required="true"/>
+         <column name="StartDateTime" type="datetime" required="true"/>
+         <column name="EndDateTime" type="datetime" required="true"/>
+         <column name="JobID" type="int" required="true"/>
+         <column name="ShiftCategoryID" type="int" required="true"/>
+         <column name="AssignmentID" type="int"/>
+         <column name="Comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="EmployeeID"/>
+            <column name="ScheduleDate"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade"/>
+         <relation src="JobID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="PreScheduleJobclass">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="OrderNo" type="short" required="true" minValue="1"/>
+         <column name="JobclassID" type="int" required="true"/>
+         <column name="GroupNo" type="short"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="OrderNo"/>
+            <column name="JobclassID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="JobclassID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="Property">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="ShortName" type="varchar" length="25" required="true"/>
+         <column name="Code" type="varchar" length="25" required="true"/>
+         <column name="AltCode" type="varchar" length="25" required="true"/>
+         <column name="NumberRooms" type="short" required="true" minValue="0" maxValue="20000"/>
+         <column name="PeriodStartDate" type="date" required="true"/>
+         <column name="PeriodEndDate" type="date" required="true"/>
+         <column name="WeekEndDay" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="WeeksOut" type="short" required="true" minValue="1" maxValue="4"/>
+         <column name="PayPeriodTypeCode" type="enum" length="2" required="true" enumType="PayPeriodType"/>
+         <column name="PayPeriodStartDayOfMonth" type="int" required="true" minValue="1" maxValue="31"/>
+         <column name="CurrentPPEndDate" type="date"/>
+         <column name="PlanningPeriodType" type="enum" length="2" required="true" enumType="DateRangeType"/>
+         <column name="PlanningPeriodStartDayOfMonth" type="int" required="true" minValue="1" maxValue="31"/>
+         <column name="EmployeeIDGenerator" type="enum" length="1" required="true" enumType="EmployeeIDGeneratorType"/>
+         <column name="MinEmployeeIDLength" type="short" required="true" minValue="1" maxValue="25"/>
+         <column name="MaxEmployeeIDLength" type="short" required="true" minValue="4" maxValue="25"/>
+         <column name="PunchIDMethod" type="enum" length="10" required="true" enumType="PunchIDMethodType"/>
+         <column name="MaxEmployeeSkills" type="short" required="true" minValue="1" maxValue="100"/>
+         <column name="StartOfDay" type="time" required="true"/>
+         <column name="FinancialYearTypeCode" type="enum" length="1" required="true" enumType="FinancialYearType"/>
+         <column name="FinancialYearStartDate" type="date" required="true"/>
+         <column name="ScheduleStateCode" type="enum" length="1" required="true" enumType="ScheduleStateType"/> <!-- Deprecated - now on SchedulingAssignmentLog table -->
+         <column name="PeriodLength" type="int" required="true"/>
+         <column name="PeriodsPerHour" type="int" required="true"/>
+         <column name="PeriodsPerDay" type="int" required="true"/>
+         <column name="ScheduleMode" type="enum" length="1" required="true" enumType="ScheduleModeType"/>
+         <column name="TimeZoneID" type="varchar" length="50"/>
+         <column name="ShowOnReports" type="boolean" required="true"/>
+         <column name="FstVarianceFrom" type="short" minValue="0" maxValue="100"/>
+         <column name="FstVarianceTo" type="short" minValue="0" maxValue="100"/>
+         <column name="StdVarianceFrom" type="short" minValue="0" maxValue="100"/>
+         <column name="StdVarianceTo" type="short" minValue="0" maxValue="100"/>
+         <column name="OTPercentage" type="short" minValue="0" maxValue="100"/>
+         <column name="DefaultLocale" type="varchar" length="10" required="true" default="'en-US'"/>
+         <column name="DefaultShiftCategoryID" type="int"/>
+         <column name="ForecastStandardSetID" type="int"/>
+         <column name="AnalysisStandardSetID" type="int"/>
+         <column name="PlanningPeriodEndDate" type="date"/>
+         <column name="CalendarPlanID" type="int"/>
+         <column name="StateID" type="int"/>
+         <column name="RegionID" type="int" required="true"/>
+         <column name="BrandID" type="int"/>
+         <column name="PortfolioID" type="int"/>
+         <column name="FTEFactor" type="decimal" length="9" scale="2"/>
+         <column name="OTRate" type="decimal" length="9" scale="2"/>
+         <column name="DTRate" type="decimal" length="9" scale="2"/>
+         <column name="License" type="blob"/>
+         <column name="EnableUFTCRestrictions" type="boolean" required="true"/>
+         <column name="EnableUFTCCanChangeJobs" type="boolean" required="true"/>
+         <column name="PunchToScheduleMethod" type="enum" length="2" required="true" enumType="PunchToScheduleMethod"/>
+         <column name="PromptToEnterTips" type="boolean" required="true"/>
+         <column name="PunchToSchedPreGraceMin" type="int" minValue="0"/>
+         <column name="PunchToSchedPostGraceMin" type="int" minValue="0"/>
+         <column name="EditRevenueInterfaceColumns" type="boolean" required="true" default="true"/>
+         <column name="Active" type="boolean" required="true" default="true"/>
+         <column name="LaborStandardsLocked" type="boolean" required="true"/>
+         <column name="UseActualFlowsForStandardHours" type="boolean" required="true" default="true"/>
+         <column name="MaxSchedulerPasses" type="int" required="true"/>
+         <column name="MaxBalanceLevels" type="int" required="true"/>
+         <column name="DefaultPayGroupID" type="int"/>
+         <column name="WeatherLocationID" type="int"/>
+         <column name="RevenueCenterForecastAccuracyModerateThreshold" type="short" required="true" default="10" minValue="1" maxValue="100"/>
+         <column name="RevenueCenterForecastAccuracyCriticalThreshold" type="short" required="true" default="20" minValue="1" maxValue="100"/>
+         <column name="MarketSegmentForecastAccuracyModerateThreshold" type="short" required="true" default="10" minValue="1" maxValue="100"/>
+         <column name="MarketSegmentForecastAccuracyCriticalThreshold" type="short" required="true" default="20" minValue="1" maxValue="100"/>
+         <column name="TemperatureScale" type="enum" length="1" required="true" enumType="TemperatureScaleType" default="'F'"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="Code"/>
+         </unique>
+         <unique>
+            <column name="AltCode"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="DefaultShiftCategoryID" table="ShiftCategory" column="ID" type="setnull"/>
+         <relation src="ForecastStandardSetID" table="StandardSet" column="ID" type="setnull"/>
+         <relation src="AnalysisStandardSetID" table="StandardSet" column="ID" type="setnull"/>
+         <relation src="CalendarPlanID" table="CalendarPlan" column="ID" type="setnull"/>
+         <relation src="StateID" table="State" column="ID" type="setnull"/>
+         <relation src="RegionID" table="Region" column="ID" type="enforce"/>
+         <relation src="BrandID" table="Brand" column="ID" type="setnull"/>
+         <relation src="PortfolioID" table="Portfolio" column="ID" type="setnull"/>
+         <relation src="DefaultPayGroupID" table="PayGroup" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="PropertyBreak">
+      <columns>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="BreakNo" type="short" required="true" minValue="1" maxValue="10"/>
+         <column name="BreakAfter" type="decimal" length="9" scale="2" required="true"/>
+         <column name="BreakLength" type="decimal" length="9" scale="2" required="true"/>
+         <column name="BreakRepeat" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="PropertyID"/>
+            <column name="BreakNo"/>
+         </primary>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="PropertyScheduleBreak">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="BreakNo" type="short" required="true" minValue="1" maxValue="10"/>
+         <column name="BreakDescription" type="varchar" length="25" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="BreakNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="RevenueCenterPeriod">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="RevenueCenterID" type="int" required="true"/>
+         <column name="PeriodNo" type="short" required="true" minValue="1" maxValue="96"/>
+         <column name="PeriodName" type="varchar" length="50" required="true"/>
+         <column name="KBIID" type="int"/>
+         <column name="UnitID" type="int"/>
+         <column name="ForecastAccuracyModerateThreshold" type="short" minValue="1" maxValue="100"/>
+         <column name="ForecastAccuracyCriticalThreshold" type="short" minValue="1" maxValue="100"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="RevenueCenterID"/>
+            <column name="PeriodName"/>
+         </unique>
+         <unique>
+            <column name="RevenueCenterID"/>
+            <column name="PeriodNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="RevenueCenterID" table="RevenueCenter" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="KBIID" table="KBI" column="ID" type="setnull"/>
+         <relation src="UnitID" table="Unit" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="RevenueCenterPeriodStandardSet">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="RevenueCenterPeriodID" type="int" required="true"/>
+         <column name="CaptureRatioKBIID" type="int"/>
+         <column name="CalendarPlanID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="RevenueCenterPeriodID"/>
+            <column name="StandardSetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="RevenueCenterPeriodID" table="RevenueCenterPeriod" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="CaptureRatioKBIID" table="KBI" column="ID" type="setnull"/>
+         <relation src="CalendarPlanID" table="CalendarPlan" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="RevenueCenterPeriodDay">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="RevenueCenterPeriodStandardSetID" type="int" required="true"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="StartTime" type="time"/>
+         <column name="EndTime" type="time"/>
+         <column name="Capacity" type="int" minValue="0" maxValue="9999"/>
+         <column name="Retention" type="time"/>
+         <column name="Utilization" type="int" minValue="0" maxValue="100"/>
+         <column name="IsOpen" type="boolean" required="true"/>
+         <column name="MinVolume" type="int" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="RevenueCenterPeriodStandardSetID"/>
+            <column name="DayNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="RevenueCenterPeriodStandardSetID" table="RevenueCenterPeriodStandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="RevenueCenter">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="RotationPlan">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="WeeklyRotation" type="boolean" required="true"/>
+         <column name="RotateInterval" type="short" required="true" minValue="1" maxValue="100"/>
+         <column name="RotateEveryDay" type="boolean" required="true"/>
+         <column name="ApplyToRegularEmployees" type="boolean" required="true"/>
+         <column name="ApplyToPermanentEmployees" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="ScheduleGroup">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="Season">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="SeasonPeriod">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="SeasonID" type="int" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="SeasonID"/>
+            <column name="StartDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="SeasonID" table="Season" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="ShareWithSchedule" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EmployeeID" type="int" required="true"/>
+         <column name="DayNo" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="StartTime" type="time" required="true"/>
+         <column name="EndTime" type="time" required="true"/>
+         <column name="JobclassID" type="int" required="true"/>
+         <column name="AssignmentID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="EmployeeID"/>
+            <column name="DayNo"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="EmployeeID" table="Employee" column="ID" type="cascade"/>
+         <relation src="JobclassID" table="Assignment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="ShiftCategory">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Code" type="varchar" length="1" required="true"/>
+         <column name="TrainingShiftCategoryID" type="int"/>
+         <column name="IncludeInProductivity" type="boolean" required="true"/>
+         <column name="TrainingShift" type="boolean" required="true"/>
+         <column name="ContractShift" type="boolean" required="true" default="false"/>
+         <column name="AutoSyncScheduledHours" type="boolean" required="true"/>
+         <column name="AutoCalculateCosts" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="TrainingShiftCategoryID" table="ShiftCategory" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="StandardSet">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="KBISetID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Password" type="varchar" length="100"/>
+         <column name="GenerateProjectedHours" type="boolean" required="true" default="true"/>
+         <column name="GenerateStandardHours" type="boolean" required="true" default="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="KBISetID" table="KBISet" column="ID" type="enforce"/>
+      </relations>
+   </table>
+
+   <table name="TAESCalculationLog" noExport="true">
+      <columns>
+         <column name="CorrelationId" type="varchar" length="100"/>
+         <column name="CreatedDateTime" type="datetime"/>
+         <column name="KBIID" type="int"/>
+         <column name="StatDate" type="date"/>
+         <column name="CalculationData" type="varchar" length="250"/>
+      </columns>
+   </table>
+
+   <table name="TempFlowPattern" data="true" exportDataColumn="StatDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="FlowPatternID" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="KBIID"/>
+            <column name="StatDate"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="FlowPatternID" table="FlowPattern" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="Unit">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="SingularName" type="varchar" length="50" required="true"/>
+         <column name="Symbol" type="varchar" length="5" required="true"/>
+         <column name="Comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="Name"/>
+         </unique>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="SingularName"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="PropertyPlannerSettings">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="PeriodLength" type="int"/>
+         <column name="MinShift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="MaxShift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="RoundingThresholdBelowOne" type="decimal" length="9" scale="2"/>
+         <column name="RoundingThresholdAboveOne" type="decimal" length="9" scale="2"/>
+         <column name="MealBreakAfter" type="decimal" length="9" scale="2"/>
+         <column name="MealBreakLength" type="decimal" length="9" scale="2"/>
+         <column name="NonMealBreakEvery" type="decimal" length="9" scale="2"/>
+         <column name="NonMealBreakLength" type="decimal" length="9" scale="2"/>
+         <column name="GenerateLongShifts" type="boolean"/>
+         <column name="LimitShiftToMaxShift" type="boolean"/>
+         <column name="TruncateMaxCoverage" type="boolean"/>
+         <column name="DefaultNonFlowedDistributionMethod" type="enum" length="1" enumType="DefaultNonFlowedDistributionMethodEnum"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="PropertyID"/>
+            <column name="StandardSetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentPlannerSettings">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="StandardType" type="enum" length="1" enumType="StandardTypeEnum"/>
+         <column name="PeriodLength" type="int"/>
+         <column name="MinShift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="MaxShift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="RoundingThresholdBelowOne" type="decimal" length="9" scale="2"/>
+         <column name="RoundingThresholdAboveOne" type="decimal" length="9" scale="2"/>
+         <column name="MealBreakAfter" type="decimal" length="9" scale="2"/>
+         <column name="MealBreakLength" type="decimal" length="9" scale="2"/>
+         <column name="NonMealBreakEvery" type="decimal" length="9" scale="2"/>
+         <column name="NonMealBreakLength" type="decimal" length="9" scale="2"/>
+         <column name="GenerateLongShifts" type="boolean" default="null"/>
+         <column name="LimitShiftToMaxShift" type="boolean" default="null"/>
+         <column name="TruncateMaxCoverage" type="boolean" default="null"/>
+         <column name="DefaultNonFlowedDistributionMethod" type="enum" length="1" enumType="DefaultNonFlowedDistributionMethodEnum"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentEffectiveDate">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="StartDate" type="date" required="true"/>
+         <column name="EndDate" type="date" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="StartDate"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="AssignmentMinMaxCoverage">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+
+         <!-- comma separated integers, in 5 minute periods starting at midnight -->
+         <!-- "1:2,1:2,1:2  BOTH MIN and MAX set-->
+         <!-- "1:0,1:0,1:0 MIN but no MAX -->
+         <!-- "0:2,0:2,0:2 MAX but no MIN -->
+         <column name="StaffValues" type="memo" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+      </relations>
+      <triggers>
+         <update databaseType="mssql">
+            <![CDATA[
+            if UPDATE(StaffValues)
+            begin
+            declare @MinMaxCoverageID int
+            declare @StaffValues varchar(MAX)
+
+            declare periodMinMax cursor for select cast(dateadd(mi,(ElementPosition - 1)*5,'01-01-00 00:00:00') as time), ElementValue1, ElementValue2
+            from
+            dbo.SplitStringPairs('0:8,0:8,0:8,0:8,0:8,0:8,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,0:0,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,1:1,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,2:2,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8,0:8',
+            ',', ':') where ElementValue1 > 0 or ElementValue2 > 0
+            declare sv cursor for select ID, StaffValues from inserted
+            open sv
+            fetch next from sv into @MinMaxCoverageID, @StaffValues
+            while @@FETCH_STATUS = 0
+            BEGIN
+            declare @time time
+            declare @firstTime time
+            declare @lastTime time
+            declare @min int
+            declare @max int
+            declare @lastMin int
+            declare @lastMax int
+            delete from AssignmentMinMaxCoverageValues where MinMaxCoverageID = @MinMaxCoverageID
+
+            open periodMinMax
+            fetch next from periodMinMax into @lastTime, @lastMin, @lastMax
+            set @firstTime = @lastTime
+            while @@FETCH_STATUS = 0
+            BEGIN
+            fetch next from periodMinMax into @time, @min, @max
+            if @min != @lastMin or @max != @lastMax
+            BEGIN
+            insert Into AssignmentMinMaxCoverageValues (MinMaxCoverageID, StartPeriod, EndPeriod, MinValue, MaxValue) values (@MinMaxCoverageID,
+            @firstTime, @lastTime, @lastMin, @lastMax)
+            set @firstTime = @time
+            END
+            set @lastTime = @time
+            set @lastMin = @min
+            set @lastMax = @max
+            END
+            insert Into AssignmentMinMaxCoverageValues (MinMaxCoverageID, StartPeriod, EndPeriod, MinValue, MaxValue) values (@MinMaxCoverageID,
+            @firstTime, @lastTime, @lastMin, @lastMax)
+            close periodMinMax
+            fetch next from sv into @MinMaxCoverageID, @StaffValues
+            END
+            deallocate periodMinMax
+            close sv
+            deallocate sv
+            end
+            ]]>
+         </update>
+      </triggers>
+   </table>
+
+   <table name="AssignmentMinMaxCoverageValues">
+      <columns>
+         <column name="MinMaxCoverageID" type="int" required="true"/>
+         <column name="StartPeriod" type="time" required="true"/>
+         <column name="EndPeriod" type="time" required="true"/>
+         <column name="MinValue" type="int" required="true"/>
+         <column name="MaxValue" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="MinMaxCoverageID"/>
+            <column name="StartPeriod"/>
+         </primary>
+      </keys>
+      <relations>
+         <relation src="MinMaxCoverageID" table="AssignmentMinMaxCoverage" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="ShiftRelatedStandard">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="AssignmentShiftID" type="int" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="WorkType" type="enum" length="1" enumType="WorkTypeEnum" required="true"/>
+         <column name="Units" type="enum" length="2" enumType="UnitsEnum" required="true"/>
+         <column name="DistributionMethod" type="enum" length="1" enumType="DistributionMethodEnum" required="true"/>
+         <column name="NonFlowedDistributionMethod" type="enum" length="1" enumType="NonFlowedDistributionMethodEnum"/>
+         <column name="FlowPlanID" type="int"/>
+         <column name="IgnoreRetention" type="boolean" required="true"/>
+         <column name="EarliestWorkStartTime" type="time"/>
+         <column name="LatestWorkEndTime" type="time"/>
+         <column name="Name" type="varchar" length="50"/>
+         <column name="SuppressValue" type="int" required="true" minValue="0" default="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="AssignmentShiftID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="AssignmentShiftID" table="AssignmentShift" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="FlowPlanID" table="FlowPlan" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="ShiftRelatedRange">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="ShiftRelatedStandardID" type="int" required="true"/>
+         <column name="FromVolume" type="int" required="true" minValue="0"/>
+         <column name="ToVolume" type="int" required="true" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="ShiftRelatedStandardID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="ShiftRelatedStandardID" table="ShiftRelatedStandard" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="ShiftRelatedStandardValue">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="ShiftRelatedRangeID" type="int" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="Value" type="decimal" length="19" scale="4" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="ShiftRelatedRangeID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="ShiftRelatedRangeID" table="ShiftRelatedRange" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="ShiftRelatedStandardEnvironment">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+      </columns>
+
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="EnvironmentID"/>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="SpreadStandard">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="AssignmentShiftID" type="int" required="true"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="SpreadStandardType" type="enum" length="2" enumType="SpreadStandardTypeEnum" required="true" default="'F'"/>
+         <column name="Units" type="enum" length="2" enumType="UnitsEnum"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="AssignmentShiftID"/>
+            <column name="KBIID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="AssignmentShiftID" table="AssignmentShift" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="SpreadStandardRange">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="SpreadStandardID" type="int" required="true"/>
+         <column name="FromVolume" type="int" required="true" minValue="0"/>
+         <column name="ToVolume" type="int" required="true" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="SpreadStandardID"/>
+            <column name="FromVolume"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="SpreadStandardID" table="SpreadStandard" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="SpreadStandardValue">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="SpreadStandardRangeID" type="int" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <!-- comma separated integers, in 5 minute periods starting at midnight -->
+         <column name="SpreadValues" type="memo" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="SpreadStandardRangeID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="SpreadStandardRangeID" table="SpreadStandardRange" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="DynamicSpreadStandard">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="SpreadStandardRangeID" type="int" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="Value" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="SpreadStandardRangeID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="SpreadStandardRangeID" table="SpreadStandardRange" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="DynamicSpreadValue">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="Type" type="enum" length="1" required="true" enumType="ValueTypeEnum"/>
+         <column name="KBIID" type="int" required="true"/>
+         <column name="StatDate" type="date" required="true"/>
+         <column name="PeriodNo" type="int" required="true"/>
+         <column name="Value" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="Type"/>
+            <column name="KBIID"/>
+            <column name="StatDate"/>
+            <column name="PeriodNo"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="SpreadStandardEnvironment">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+      </columns>
+
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="EnvironmentID"/>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="SalariedStandard">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="AssignmentShiftID" type="int" required="true"/>
+         <column name="SalaryMode" type="enum" length="1" enumType="SalaryModeEnum" required="true"/>
+         <column name="HoursPerWeek" type="decimal" length="9" scale="2"/>
+         <column name="VacationHoursPerYear" type="decimal" length="9" scale="2"/>
+         <column name="HoursPerYear" type="decimal" length="9" scale="2"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="AssignmentShiftID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="AssignmentShiftID" table="AssignmentShift" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="RecurringTaskStandard">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="AssignmentID" type="int" required="true"/>
+         <column name="StandardSetID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="InitialDate" type="date" required="true"/>
+         <column name="FrequencyType" type="enum" length="1" enumType="FrequencyTypeEnum" required="true"/>
+
+         <!-- type == DAILY -->
+         <column name="DailyInterval" type="int"/>
+
+         <!-- type == WEEKLY -->
+         <column name="WeeklyInterval" type="int"/>
+         <column name="WeeklyDaysOfWeek" type="varchar" length="25"/>
+         <!-- int ??? -->
+
+         <!-- type == MONTHLY -->
+         <!--
+         D = Day n of every n months
+         W = nth week of every n months
+         -->
+         <column name="MonthlyIntervalType" type="enum" length="1" enumType="MonthlyIntervalEnum"/>
+
+         <!-- Day N of Month (1-31) -->
+         <column name="MonthlyDayOfMonth" type="int"/>
+
+         <!-- The 2nd Tuesday of Month -->
+         <!-- 1st, 2nd, 3rd, 4th, last -->
+         <column name="MonthlyEveryNthWeek" type="int" minValue="1" maxValue="5"/>
+         <column name="MonthlyDayOfWeek" type="int" minValue="1" maxValue="7"/>
+         <!-- 1=Sunday ... 7=Saturday -->
+
+         <column name="MonthlySelectedMonths" type="varchar" length="50"/>
+         <!-- 1,3,12 where 1=Jan and 12=Dec -->
+
+         <!--
+         S - During Shift
+         O - Single Occurrence
+         M - Multiple Occurrences at Intervals
+         -->
+         <column name="OccurrenceType" type="enum" length="1" enumType="OccurrenceEnum"/>
+
+         <column name="OccursDuringShiftID" type="int"/>
+
+         <!-- Single occurrence time of day -->
+         <column name="OccursAtTime" type="time"/>
+
+         <!-- Hours between interval -->
+         <column name="OccursEveryNHours" type="decimal" length="9" scale="2"/>
+         <!-- Time of day to start recurrence -->
+         <column name="OccursStartingAtTime" type="time"/>
+         <!-- Time of day to end recurrence -->
+         <column name="OccursEndingAtTime" type="time"/>
+
+         <!-- FIXED or VARIABLE -->
+         <column name="DurationType" type="enum" length="1" enumType="DurationTypeEnum"/>
+         <column name="FixedHours" type="decimal" length="9" scale="2"/>
+         <column name="KBIID" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="AssignmentID"/>
+            <column name="StandardSetID"/>
+            <column name="Name"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="StandardSetID" table="StandardSet" column="ID" type="cascade" disableUsageChecking="true"/>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="OccursDuringShiftID" table="AssignmentShift" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="RecurringVariableWork">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="RecurringTaskStandardID" type="int" required="true"/>
+         <column name="FromVolume" type="int" required="true" minValue="0"/>
+         <column name="ToVolume" type="int" required="true" minValue="0"/>
+         <column name="BaseHours" type="decimal" length="9" scale="2"/>
+         <column name="AdditionalHours" type="decimal" length="9" scale="2"/>
+         <column name="PerNumberUnits" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="RecurringTaskStandardID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="RecurringTaskStandardID" table="RecurringTaskStandard" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="TaskStandardDetail">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="ShiftRelatedStandardID" type="int" required="true"/>
+         <column name="Name" type="varchar" length="50" required="true"/>
+         <column name="Description" type="memo" required="true"/>
+         <column name="NumberOfItems" type="int" required="true"/>
+         <column name="ReasonableExpectancy" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="ShiftRelatedStandardID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="ShiftRelatedStandardID" table="ShiftRelatedStandard" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="TaskStandardRange">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="TaskStandardDetailID" type="int" required="true"/>
+         <column name="FromVolume" type="int" required="true" minValue="0"/>
+         <column name="ToVolume" type="int" required="true" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <index>
+            <column name="TaskStandardDetailID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="TaskStandardDetailID" table="TaskStandardDetail" column="ID" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="TaskStandardFrequency">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="TaskStandardRangeID" type="int" required="true"/>
+         <column name="EnvironmentID" type="int" required="true"/>
+         <column name="Frequency" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="ID"/>
+         </primary>
+         <unique>
+            <column name="TaskStandardRangeID"/>
+            <column name="EnvironmentID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="TaskStandardRangeID" table="TaskStandardRange" column="ID" type="cascade"/>
+         <relation src="EnvironmentID" table="Environment" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="PlannedShift" lockEscalation="disable" data="true" exportDataColumn="ShiftDate" compress="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="JobID" type="int" required="true"/>
+         <column name="ShiftType" type="enum" length="1" required="true" enumType="PlanType"/>
+         <column name="ShiftDate" type="date" required="true"/>
+         <column name="DateShiftGeneratedFrom" type="date" required="true"/>
+         <column name="StartDateTime" type="datetime" required="true"/>
+         <column name="EndDateTime" type="datetime" required="true"/>
+         <column name="Duration" type="decimal" length="9" scale="4" required="true"/>
+         <column name="Source" type="enum" length="1" required="true" enumType="ShiftSourceType"/>
+         <column name="AssignmentID" type="int"/>
+         <column name="WorkContentLogID" type="int"/>
+         <column name="ShiftCategoryID" type="int" required="true"/>
+         <column name="PlannedEventID" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="ShiftType"/>
+            <column name="JobID"/>
+            <column name="ShiftDate"/>
+            <column name="StartDateTime"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="PlannedEventID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="JobID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="setnull"/>
+         <relation src="WorkContentLogID" table="WorkContentLog" column="ID" type="cascade"/>
+         <relation src="ShiftCategoryID" table="ShiftCategory" column="ID" type="cascade"/>
+         <relation src="PlannedEventID" table="PlannedEvent" column="ID" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="PlannedShiftWorkContent" data="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PlannedShiftID" type="int" required="true"/>
+         <column name="WorkContentID" type="int" required="true"/>
+         <column name="WorkStart" type="datetime" required="true"/>
+         <column name="WorkEnd" type="datetime" required="true"/>
+         <column name="WorkHours" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PlannedShiftID"/>
+            <column name="WorkContentID"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="WorkContentID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PlannedShiftID" table="PlannedShift" column="ID" type="cascade"/>
+         <relation src="WorkContentID" table="WorkContent" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="PlannedShiftWeightingCalculator" data="true" compress="true" noExport="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="CalculatorType" type="enum" length="1" required="true" enumType="PlannedShiftWeightingCalculatorType"/>
+         <column name="OverrideMasterWeightingFactor" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+      </keys>
+   </table>
+
+   <table name="WorkContent" data="true" compress="true" exportDataColumn="EarliestStartDateTime">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="JobID" type="int" required="true"/>
+         <column name="AssignmentID" type="int"/>
+         <column name="WorkContentType" type="enum" length="1" required="true" enumType="WorkContentType"/>
+         <column name="ShiftType" type="enum" length="1" required="true" enumType="PlanType"/>
+         <column name="ShiftDate" type="date" required="true"/>
+         <column name="WorkContentLogID" type="int"/>
+
+         <!-- window -->
+         <!-- should these 2 columns be required? -->
+         <column name="EarliestStartDateTime" type="datetime"/>
+         <column name="LatestEndDateTime" type="datetime"/>
+
+         <column name="PreferredStartDateTime" type="datetime"/>
+
+         <!-- for EL work, these might be null? -->
+         <column name="CalculatedStartDateTime" type="datetime"/>
+         <column name="CalculatedEndDateTime" type="datetime"/>
+
+         <column name="CalculatedHours" type="decimal" length="9" scale="2" required="true"/>
+         <column name="AdjustedHours" type="decimal" length="9" scale="2" required="true"/>
+
+         <column name="Locked" type="boolean" required="true"/>
+
+         <!-- only one of these is used at one time -->
+         <column name="TaskStandardID" type="int"/>
+         <column name="SetupTaskStandardID" type="int"/>
+         <column name="TearDownTaskStandardID" type="int"/>
+
+         <!-- potentially used iff TaskStandardID is used -->
+         <column name="LinkedTaskStandardID" type="int"/>
+
+         <column name="Description" type="varchar" length="100"/>
+         <column name="MinNumberEmployees" type="int"/>
+         <column name="MinSkillLevel" type="int"/>
+         <column name="DistributedToDateTime" type="datetime"/>
+         <column name="CalculatedPriority" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="JobID"/>
+            <column name="EarliestStartDateTime"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="JobID"/>
+            <column name="WorkContentType"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="JobID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="WorkContentLogID" table="WorkContentLog" column="ID" type="cascade"/>
+         <relation src="TaskStandardID" table="TaskStandard" column="ID" type="cascade"/>
+         <relation src="SetupTaskStandardID" table="SetupTaskStandard" column="ID" type="cascade"/>
+         <relation src="TearDownTaskStandardID" table="TearDownTaskStandard" column="ID" type="cascade"/>
+         <relation src="LinkedTaskStandardID" table="TaskStandard" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="WorkContentDetail" data="true" compress="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="WorkContentID" type="int" required="true"/>
+         <column name="WorkContentDetailType" type="enum" length="1" required="true" enumType="WorkContentDetailType"/>
+         <column name="TotalHours" type="decimal" length="9" scale="2" required="true"/>
+         <column name="KBIID" type="int"/>
+         <column name="ResourceID" type="int"/>
+         <column name="Notes" type="memo"/>
+         <column name="TaskStandardID" type="int" required="false"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="WorkContentID"/>
+            <column name="WorkContentDetailType"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="WorkContentID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="WorkContentID" table="WorkContent" column="ID" type="cascade"/>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="ResourceID" table="Resource" column="ID" type="cascade"/>
+         <relation src="TaskStandardID" table="TaskStandard" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="WorkContentLog" noExport="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="PropertyID" type="int" required="true"/>
+         <column name="JobID" type="int" required="true"/>
+         <column name="AssignmentID" type="int"/>
+         <column name="AssignmentShiftID" type="int" required="true"/>
+         <column name="PlanType" type="enum" length="1" required="true" enumType="PlanType"/>
+         <column name="ShiftDate" type="date" required="true"/>
+         <column name="MinShift" type="decimal" length="9" scale="2" required="true"/>
+         <column name="MaxShift" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="PropertyID"/>
+            <column name="JobID"/>
+            <column name="ID"/>
+         </unique>
+         <index>
+            <column name="JobID"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="JobID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="PropertyID" table="Property" column="ID" type="cascade"/>
+         <relation src="AssignmentID" table="Assignment" column="ID" type="cascade"/>
+         <relation src="AssignmentShiftID" table="AssignmentShift" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="WorkContentLogArray" noExport="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="WorkContentLogID" type="int" required="true"/>
+         <column name="ArrayType" type="enum" length="7" required="true" enumType="WorkContentLogArrayType"/>
+         <column name="ArrayData" type="memo" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="WorkContentLogID"/>
+            <column name="ArrayType"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="WorkContentLogID" table="WorkContentLog" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="WorkContentLogDetail" noExport="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="WorkContentLogID" type="int" required="true"/>
+         <column name="KBIID" type="int"/>
+         <column name="KBIValue" type="int"/>
+         <column name="WorkType" type="enum" length="1" enumType="WorkTypeEnum"/>
+         <column name="Units" type="enum" length="2" enumType="UnitsEnum"/>
+         <column name="SuppressValue" type="int"/>
+         <column name="FromVolume" type="int"/>
+         <column name="ToVolume" type="int"/>
+         <column name="StandardValue" type="decimal" length="9" scale="2"/>
+         <column name="WorkInMinutes" type="decimal" length="9" scale="2"/>
+         <column name="Formula" type="varchar" length="200"/>
+         <column name="DistributionMethod" type="enum" length="1" enumType="DistributionMethodEnum"/>
+         <column name="NonFlowedDistributionMethod" type="enum" length="1" enumType="NonFlowedDistributionMethodEnum"/>
+         <column name="FlowPatternID" type="int"/>
+         <column name="FlowPatternActualDataUsed" type="boolean"/>
+         <column name="FlowPatternIdUsedForActualData" type="int"/>
+         <column name="IgnoreRetention" type="boolean"/>
+         <column name="EarliestWorkStartTime" type="time"/>
+         <column name="LatestWorkEndTime" type="time"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="WorkContentLogID"/>
+            <column name="KBIID"/>
+            <column name="ID"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="WorkContentLogID" table="WorkContentLog" column="ID" type="cascade"/>
+         <relation src="KBIID" table="KBI" column="ID" type="cascade"/>
+         <relation src="FlowPatternID" table="FlowPattern" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="WorkContentLogDetailArray" noExport="true">
+      <columns>
+         <column name="ID" type="sequence" required="true"/>
+         <column name="WorkContentLogDetailID" type="int" required="true"/>
+         <column name="ArrayType" type="enum" length="1" required="true" enumType="WorkContentLogDetailArrayType"/>
+         <column name="ArrayData" type="memo" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="ID"/>
+         </primary>
+         <unique cluster="true">
+            <column name="WorkContentLogDetailID"/>
+            <column name="ArrayType"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="WorkContentLogDetailID" table="WorkContentLogDetail" column="ID" type="cascade"/>
+      </relations>
+   </table>
+
+   <enum name="SalaryModeType">
+      <value name="WEEKLY" code="W"/>
+      <value name="MONTHLY" code="M"/>
+   </enum>
+
+   <enum name="OperationType">
+      <value name="PLUS" code="+"/>
+      <value name="MINUS" code="-"/>
+      <value name="NONE" code="N"/>
+   </enum>
+
+   <enum name="AllocationType">
+      <value name="NONE" code="N"/>
+      <value name="FIXED" code="F"/>
+      <value name="VARIABLE" code="V"/>
+   </enum>
+
+   <enum name="UOMType">
+      <value name="HOURS" code="H"/>
+      <value name="DOLLARS" code="D"/>
+      <value name="UNITS" code="U"/>
+      <value name="HOURS_DOLLARS" code="C"/>
+      <value name="DAYS" code="Y"/>
+      <value name="HOURS_RATE" code="R"/>
+   </enum>
+
+   <enum name="ShiftSourceType">
+      <value name="AUTO" code="A"/>
+      <value name="MANUAL" code="M"/>
+      <value name="RULE" code="R"/>
+   </enum>
+
+   <enum name="StatusReasonType">
+      <value name="V" code="V"/>
+      <value name="I" code="I"/>
+      <value name="T" code="T"/>
+   </enum>
+
+   <enum name="TimeOffStatusType">
+      <value name="PENDING" code="P"/>
+      <value name="APPROVED" code="A"/>
+      <value name="DENIED" code="D"/>
+      <value name="CANCELLED" code="C"/>
+      <value name="ALL" code="L"/>
+   </enum>
+
+   <enum name="EmployeeAvailabilityRequestStatusType">
+      <value name="PENDING" code="P"/>
+      <value name="ACKNOWLEDGED" code="A"/>
+      <value name="ALL" code="L"/>
+      <value name="REJECTED" code="R"/>
+   </enum>
+
+   <enum name="SalaryModeType">
+      <value name="WEEKLY" code="W"/>
+      <value name="MONTHLY" code="M"/>
+   </enum>
+
+   <enum name="KBIStatType">
+      <value name="TREND_ADJ_EXP_SMOOTHING" code="T"/>
+      <value name="REGRESSION" code="R"/>
+   </enum>
+
+   <enum name="EmployeeStatusType">
+      <value name="ACTIVE" code="A"/>
+      <value name="LEAVE_OF_ABSENCE" code="L"/>
+      <value name="REHIRE" code="R"/>
+      <value name="TERMINATED" code="T"/>
+      <value name="TRANSFERED" code="F"/>
+   </enum>
+
+   <enum name="EmployeeType">
+      <value name="PERMANENT" code="P"/>
+      <value name="REGULAR" code="R"/>
+      <value name="SALARIED" code="S"/>
+      <value name="SUPERVISOR" code="U"/>
+      <value name="VARIABLE" code="V"/>
+   </enum>
+
+   <enum name="SalaryDistModeType">
+      <value name="FIVE" code="5"/>
+      <value name="SEVEN" code="7"/>
+   </enum>
+
+   <enum name="UnitType">
+      <value name="HOURS" code="H"/>
+      <value name="COVERS" code="C"/>
+      <value name="REVENUE" code="R"/>
+      <value name="POINTS" code="P"/>
+   </enum>
+
+   <enum name="EmployeeAvailType">
+      <value name="AVAILABLE_TO_WORK" code="AV"/>
+      <value name="REQUIRED_OFF" code="RQ"/>
+      <value name="PREFERRED_OFF" code="PF"/>
+      <value name="SALARIED_AVAILABLE" code="SA"/>
+      <value name="SALARIED_UNAVAILABLE" code="SU"/>
+      <value name="ROTATED_OFF" code="RO"/>
+   </enum>
+
+   <enum name="EmployeePayType">
+      <value name="HOURLY" code="H"/>
+      <value name="SALARIED_NON_EXEMPT" code="N"/>
+      <value name="PIECE" code="P"/>
+      <value name="SALARIED_EXEMPT" code="S"/>
+      <value name="CONTRACT" code="C"/>
+   </enum>
+
+   <enum name="EmployeePeriodType">
+      <value name="REGULAR" code="R"/>
+      <value name="CONSTANT" code="C"/>
+   </enum>
+
+   <enum name="JobclassType">
+      <value name="NONE" code="N"/>
+      <value name="ASSIGNMENT_RELATED" code="A"/>
+      <value name="EVENT_RELATED" code="E"/>
+      <value name="KBI_RELATED" code="K"/>
+      <value name="SALARIED" code="S"/>
+   </enum>
+
+   <enum name="JCLoadShiftType">
+      <value name="BEGINNING" code="B"/>
+      <value name="MIDDLE" code="M"/>
+      <value name="END" code="E"/>
+      <value name="VARYING" code="V"/>
+   </enum>
+
+   <enum name="JCOvertimeType">
+      <value name="HOURS_PER_DAY" code="HD"/>
+      <value name="HOURS_PER_WEEK" code="HW"/>
+      <value name="HOURS_PER_7_DAYS" code="H7"/>
+      <value name="CONSECUTIVE_DAYS" code="CD"/>
+      <value name="DAYS_PER_WEEK" code="DW"/>
+      <value name="DAYS_PER_7_DAYS" code="D7"/>
+   </enum>
+
+   <enum name="JCSortOrderType">
+      <value name="HIRE_DATE" code="HD"/>
+      <value name="SKILL_DATE" code="SD"/>
+      <value name="SKILL_RANK" code="SR"/>
+      <value name="ALPHA" code="AL"/>
+      <value name="FULLTIME" code="FT"/>
+      <value name="ASSIGNMENT_RANK" code="AR"/>
+      <value name="ASSIGNMENT_ORDER" code="AO"/>
+      <value name="EMPLOYEE_TYPE" code="ET"/>
+   </enum>
+
+   <enum name="PlannedShiftSortingMethod">
+      <value name="PEAK" code="PK"/>
+      <value name="MODIFIED_PEAK" code="MP"/>
+      <value name="BY_DAY" code="DY"/>
+      <value name="CASCADE" code="CS"/>
+   </enum>
+
+   <enum name="ProjectedHoursReductionMethod">
+      <value name="FLAT" code="FL"/>
+      <value name="PERCENT" code="PR"/>
+   </enum>
+
+   <enum name="JCStandardType">
+      <value name="FLOWED_SEPARATE" code="FS"/>
+      <value name="FLOWED_NO_SEPARATE" code="FN"/>
+      <value name="SHARE_WITH" code="SW"/>
+      <value name="NON_FLOWED" code="NF"/>
+      <value name="SPREAD" code="SP"/>
+   </enum>
+
+   <enum name="JCUnitType">
+      <value name="NONE" code="NO"/>
+      <value name="HOURS_PER_UNIT" code="HU"/>
+      <value name="MINUTES_PER_UNIT" code="MU"/>
+      <value name="UNITS_PER_HOUR" code="UH"/>
+      <value name="UNITS_PER_MINUTE" code="UM"/>
+      <value name="UNITS_PER_SHIFT" code="US"/>
+   </enum>
+
+   <enum name="SchedulingMethod">
+      <value name="BY_JOB_SCHEDULE_ORDER" code="1"/>
+      <value name="BY_SENIORITY" code="2"/>
+      <value name="BY_EMPLOYEE_SET" code="3"/>
+   </enum>
+
+   <enum name="JCWorkType">
+      <value name="OPENING" code="O"/>
+      <value name="CLOSING" code="C"/>
+      <value name="DAILY" code="D"/>
+      <value name="WEEKLY" code="W"/>
+      <value name="VARIABLE" code="V"/>
+      <value name="STAFF" code="S"/>
+      <value name="YEARLY" code="Y"/>
+   </enum>
+
+   <enum name="JobclassType">
+      <value name="NONE" code="N"/>
+      <value name="ASSIGNMENT_RELATED" code="A"/>
+      <value name="EVENT_RELATED" code="E"/>
+      <value name="KBI_RELATED" code="K"/>
+      <value name="SALARIED" code="S"/>
+   </enum>
+
+   <enum name="KBIClassType">
+      <value name="AVAILABLE" code="A"/>
+      <value name="KBI" code="K"/>
+   </enum>
+
+   <enum name="KBIOperationType">
+      <value name="ADD" code="A"/>
+      <value name="SUBTRACT" code="S"/>
+      <value name="INDEPENDENT" code="I"/>
+   </enum>
+
+   <enum name="KBIType">
+      <value name="CALCULATED" code="C"/>
+      <value name="SEPARATE" code="E"/>
+      <value name="INPUT" code="I"/>
+      <value name="PERCENT_OF_BASE" code="P"/>
+      <value name="STATISTICAL" code="S"/>
+   </enum>
+
+   <enum name="MarketSegmentType">
+      <value name="CONTRACT" code="CN"/>
+      <value name="CASINO" code="CS"/>
+      <value name="GROUP" code="GR"/>
+      <value name="TRANSIENT" code="TR"/>
+      <value name="NON_REVENUE" code="NR"/>
+   </enum>
+
+   <enum name="PayPeriodType">
+      <value name="WEEKLY" code="WK"/>
+      <value name="BI_WEEKLY" code="BW"/>
+      <value name="SEMI_MONTHLY" code="SM"/>
+      <value name="MONTHLY" code="MN"/>
+   </enum>
+
+   <enum name="DateRangeType">
+      <value name="WEEKLY" code="WK"/>
+      <value name="BI_WEEKLY" code="BW"/>
+      <value name="SEMI_MONTHLY" code="SM"/>
+      <value name="MONTHLY" code="MN"/>
+   </enum>
+
+   <enum name="ScheduleModeType">
+      <value name="MONTHLY" code="M"/>
+      <value name="WEEKLY" code="W"/>
+   </enum>
+
+   <enum name="ShiftType">
+      <value name="ACTUAL" code="A"/>
+      <value name="GENERATED" code="G"/>
+      <value name="SCHEDULE" code="S"/>
+   </enum>
+
+   <enum name="StatMode">
+      <value name="ACTUAL" code="A"/>
+      <value name="FORECAST" code="F"/>
+   </enum>
+
+   <enum name="TaskType">
+      <value name="RECURRING" code="R"/>
+   </enum>
+
+   <enum name="WorkContentLogArrayType">
+      <value name="NS_TOTAL_NO_BREAK" code="NSTTLNB"/>
+      <value name="NS_BREAK" code="NSBREAK"/>
+      <value name="NS_TOTAL_W_BREAK" code="NSTTLWB"/>
+      <value name="NS_BODIES" code="NSBODYS"/>
+      <value name="NS_MIN" code="NSMINUM"/>
+      <value name="NS_MAX" code="NSMAXUM"/>
+      <value name="STAFF_TOTAL_NO_BREAK" code="STTTLNB"/>
+      <value name="NS_S_TOTAL_NO_BREAK" code="NSSTTLNB"/>
+      <value name="NS_S_BREAK" code="NSSBREAK"/>
+      <value name="NS_S_TOTAL_W_BREAKS" code="NSSTTLWB"/>
+      <value name="BODIES_INITIAL" code="BODINITL"/>
+      <value name="BODIES_MIN" code="BODMIN"/>
+      <value name="BODIES_MAX" code="BODMAX"/>
+      <value name="BODIES_FINAL" code="BODFINAL"/>
+   </enum>
+
+   <enum name="WorkContentLogDetailArrayType">
+      <value name="FLOW_PERCENTS" code="F"/>
+      <value name="MINUTES" code="M"/>
+      <value name="MINUTES_WITH_RETENTION" code="R"/>
+   </enum>
+
+   <enum name="StandardTypeEnum">
+      <value name="NONE" code="N"/>
+      <value name="SHIFT_RELATED" code="H"/>
+      <value name="EVENT_RELATED" code="E"/>
+      <value name="KBI_RELATED" code="K"/>
+      <value name="SALARIED" code="S"/>
+   </enum>
+
+   <enum name="DistributionMethodEnum">
+      <value name="FLOWED" code="F"/>
+      <value name="FILL_GAPS" code="G"/>
+      <value name="NON_FLOWED" code="N"/>
+      <value name="OPENING" code="O"/>
+      <value name="CLOSING" code="C"/>
+      <value name="SHARE_WITH" code="H"/>
+   </enum>
+
+   <enum name="DefaultNonFlowedDistributionMethodEnum">
+      <value name="BEGINNING" code="B"/>
+      <value name="MIDDLE" code="M"/>
+      <value name="END" code="E"/>
+      <value name="EVEN" code="V"/>
+   </enum>
+
+   <enum name="NonFlowedDistributionMethodEnum">
+      <value name="BEGINNING" code="B"/>
+      <value name="MIDDLE" code="M"/>
+      <value name="END" code="E"/>
+      <value name="EVEN" code="V"/>
+      <value name="VARYING" code="Y"/>
+   </enum>
+
+   <enum name="WorkTypeEnum">
+      <value name="DAILY" code="D"/>
+      <value name="WEEKLY" code="W"/>
+      <value name="VARIABLE" code="V"/>
+      <value name="RECURRING_TASK" code="R"/>
+      <value name="STAFF" code="S"/>
+      <value name="SHARE_WITH" code="H"/>
+      <value name="TASK" code="T"/>
+   </enum>
+
+   <enum name="UnitsEnum">
+      <value name="HOURS" code="HR"/>
+      <value name="MINUTES" code="MN"/>
+      <value name="HOURS_PER_UNIT" code="HU"/>
+      <value name="MINUTES_PER_UNIT" code="MU"/>
+      <value name="UNITS_PER_HOUR" code="UH"/>
+      <value name="UNITS_PER_MINUTE" code="UM"/>
+      <value name="UNITS_PER_SHIFT" code="US"/>
+      <value name="UNITS_PER_PERSON" code="UP"/>
+   </enum>
+
+   <enum name="ValueTypeEnum">
+      <value name="FORECAST" code="F"/>
+      <value name="ACTUALS" code="A"/>
+   </enum>
+
+   <enum name="SpreadStandardTypeEnum">
+      <value name="FIXED" code="F"/>
+      <value name="DYNAMIC" code="D"/>
+   </enum>
+
+   <enum name="SalaryModeEnum">
+      <value name="MONTHLY" code="M"/>
+      <value name="WEEKLY" code="W"/>
+   </enum>
+
+   <enum name="FrequencyTypeEnum">
+      <value name="DAILY" code="D"/>
+      <value name="WEEKLY" code="W"/>
+      <value name="MONTHLY" code="M"/>
+   </enum>
+
+   <enum name="MonthlyIntervalEnum">
+      <value name="DAY_N_OF_EVERY_MONTH" code="D"/>
+      <value name="NTH_DAY_OF_EVERY_N_MONTHS" code="N"/>
+   </enum>
+
+   <enum name="OccurrenceEnum">
+      <value name="DURING_SHIFT" code="S"/>
+      <value name="SINGLE_OCCURRENCE" code="O"/>
+      <value name="MULTIPLE_OCCURRENCES" code="M"/>
+   </enum>
+
+   <enum name="DurationTypeEnum">
+      <value name="FIXED" code="F"/>
+      <value name="VARIABLE" code="V"/>
+   </enum>
+
+   <enum name="PlanType">
+      <value name="FORECAST" code="F"/>
+      <value name="ORIGINAL" code="O"/>
+      <value name="STANDARD" code="S"/>
+      <value name="GENERATED" code="G"/>
+   </enum>
+
+   <enum name="WorkContentType">
+      <value name="EVENT_RELATED" code="E"/>
+      <value name="NON_EVENT_RELATED" code="N"/>
+      <value name="MULTI_EVENT_RELATED" code="M"/>
+      <value name="EVENT_SETUP" code="U"/>
+      <value name="EVENT_TEAR_DOWN" code="D"/>
+      <value name="MANUAL_TASK" code="A"/>
+   </enum>
+
+   <enum name="WorkContentDetailType">
+      <value name="NORMAL_TASK" code="T"/>
+      <value name="SETUP_TASK" code="U"/>
+      <value name="TEAR_DOWN_TASK" code="D"/>
+   </enum>
+
+   <enum name="PlannedShiftWeightingCalculatorType">
+      <value name="ROOM_PRIORITY" code="RP"/>
+      <value name="CONSTRAINED_WORK" code="CW"/>
+      <value name="PREFERRED_START" code="PS"/>
+      <value name="SHIFT_WEIGHTING" code="SW"/>
+      <value name="SHIFT_OVERLAP" code="SO"/>
+      <value name="TASK_PRIORITY" code="TP"/>
+      <value name="WORK_DURATION" code="WD"/>
+   </enum>
+</database>
