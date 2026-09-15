@@ -1,0 +1,11 @@
+[package]
+name = "planner"
+version = "1.0.0"
+edition = "2024"
+
+[dependencies]
+joda_rs = "0.2.0"
+date_range_rs = "0.2.0"
+rstest = "0.26.1"
+uuid = { version = "1.18.0", features = ["v4", "v7"] }
+derive_builder = "0.20.2"

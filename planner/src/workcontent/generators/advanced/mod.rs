@@ -1,0 +1,33 @@
+#[cfg(test)]
+mod acceptance;
+pub mod advanced;
+pub mod break_calculator;
+pub mod distribution_aggregator;
+pub mod distributors;
+pub mod distribution_item;
+pub mod distribution_item_list_creator;
+pub mod distribution_item_tracker;
+pub mod existing_planned_shift_matcher;
+#[cfg(test)]
+pub mod fixtures;
+pub mod generator_parameters;
+pub mod kbi_related_results;
+pub mod min_max_adjuster;
+pub mod min_max_coverage;
+pub mod minutes_to_bodies;
+pub mod non_staff_standards;
+pub mod pattern_conversion;
+pub mod planned_shift_creator;
+pub mod planned_shift_record_creator;
+pub mod providers;
+pub mod recurring_standards;
+pub mod shift_related_standards;
+pub mod spread_standards;
+pub mod staff_standards;
+pub mod standards_processor_for_shift;
+pub mod spread_values_conversion;
+pub mod standards_processor;
+pub mod spreaders;
+pub mod work_content_record_creator;
+pub mod work_content_tracker;
+pub mod work_total_minutes;
