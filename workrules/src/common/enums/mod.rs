@@ -29,6 +29,7 @@ pub mod pay_period_type;
 pub mod punch_source;
 pub mod punch_type;
 pub mod schedule_lockout_level;
+pub mod schedule_mode;
 pub mod shift_adjust_source;
 pub mod shift_adjust_type;
 pub mod shift_error_type;

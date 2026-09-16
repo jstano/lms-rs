@@ -189,10 +189,14 @@ pub trait EmployeeShiftPort {
     /// of one calculation disagree about what a double-time hour is. See the
     /// finding in `PARITY_AUDIT.md`.
     ///
-    /// # A third column is computed and thrown away
+    /// # Its two callers disagree about the third column
     ///
-    /// The query also selects a `dtHours` sum. The rule reads `result[0]` and
-    /// `result[1]` only, so it never leaves the DAO. Not carried here.
+    /// The query also selects a `dtHours` sum — `= 3 ... hd.hours`.
+    /// `RollingXWeeksOTHrsRuleImpl` reads `result[0]` and `result[1]` only and
+    /// throws it away; `ContractOTHrsRuleImpl` reads all three, adding
+    /// `dtHours` to the same running total as `otHours`. So one caller counts
+    /// double time as overtime already paid and the other does not, off the
+    /// same query. All three columns are carried.
     ///
     /// `None` where Java's `result[0]` is null — an empty row set, which makes
     /// all three `SUM`s null together, so Java's separate per-element checks
@@ -213,6 +217,14 @@ pub struct NetAndOtHours {
     pub net_hours: f64,
     /// Summed `hours` of the overtime bucket.
     pub ot_hours: f64,
+    /// Summed `hours` of the double-time bucket — the query's third column.
+    ///
+    /// `RollingXWeeksOTHrsRuleImpl` selects it and never reads it, which is how
+    /// this port first came across; `ContractOTHrsRuleImpl` **does** read it,
+    /// adding it to the same running total as the overtime column. So the
+    /// column is carried after all, and the two callers disagree about whether
+    /// double time counts as overtime already paid.
+    pub dt_hours: f64,
 }
 
 /// The minimum wage in force for a job on a date.

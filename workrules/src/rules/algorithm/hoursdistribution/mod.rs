@@ -32,14 +32,13 @@
 //!
 //! # Rules ported so far
 //!
-//! Eleven of nineteen: [`reg_hrs_only`], [`holiday_dt_hrs`],
+//! Seventeen of nineteen: [`reg_hrs_only`], [`holiday_dt_hrs`],
 //! [`weekly_ot_sec_job_hrs`], [`weekly_ot_hrs`], [`pay_period_ot_hrs`],
 //! [`scheduled_shift_ot`], [`california_extended_ot_hrs`],
 //! [`rolling_x_weeks_ot_hrs`], [`daily_weekly_6th_ot_7th_dt_non_consec`],
-//! [`per_month_ot_hrs`] and [`california_ot_hrs`]. The rest in size order,
+//! [`per_month_ot_hrs`], [`california_ot_hrs`], [`twenty_four_hour_ot`] and
+//! [`contract_ot_hrs`] [`daily_weekly_7th_dt_hrs`] [`california_ext_special_job_ot_hrs`] [`min_hrs_for_full_time_ot`] and [`dly_wkly_off_consec_ot_min_break`]. The rest in size order,
 //! smallest first, which is the porting order the audit settled on:
-//! `TwentyFourHourOT`, `ContractOTHrs`, `DailyWeekly7thDTHrs`,
-//! `CaliforniaExtSpecialJobOTHrs`, `MinHrsForFullTimeOT`,
 //! `DlyWklyOffConsecOTMinBreak`, `DailyWeekly6thOT7thDTHrs`,
 //! `DlyWklyConsecOTMinBreakSpanningMidnight`.
 //!
@@ -48,21 +47,27 @@
 //! second, and reads the same
 //! [`EarningTypePaySet`](crate::rules::types::earning_type_pay_set) parameter.
 
+pub mod california_ext_special_job_ot_hrs;
 pub mod california_extended_ot_hrs;
 pub mod california_ot_hrs;
 pub mod config;
 pub mod consecutive_days_calculator;
+pub mod contract_ot_hrs;
 pub mod daily_accumulator;
 pub mod daily_data;
 pub mod daily_weekly_6th_ot_7th_dt_non_consec;
+pub mod daily_weekly_7th_dt_hrs;
+pub mod dly_wkly_off_consec_ot_min_break;
 pub mod earning_mapper;
 pub mod holiday_dt_hrs;
+pub mod min_hrs_for_full_time_ot;
 pub mod pay_period_ot_hrs;
 pub mod per_month_ot_hrs;
 pub mod prior_days_calculator;
 pub mod reg_hrs_only;
 pub mod rolling_x_weeks_ot_hrs;
 pub mod scheduled_shift_ot;
+pub mod twenty_four_hour_ot;
 pub mod weekly_accumulator;
 pub mod weekly_ot_hrs;
 pub mod weekly_ot_sec_job_hrs;
@@ -105,8 +110,11 @@ pub trait HoursDistributionRule {
 ///
 /// A marker interface in Java — `RuleUtils.getContractHours` walks a rule set
 /// looking for one with `instanceof` and asks it, so the engine can price a
-/// contract without knowing which rule defines it. `PerMonthOTHrs` is the
-/// first implementation.
+/// contract without knowing which rule defines it.
+///
+/// [`per_month_ot_hrs`] is its **only** implementation, in Java as here.
+/// [`contract_ot_hrs`] does not implement it despite the name: it keeps its
+/// contract to itself and answers nobody about it.
 pub trait ContractHrsRule: HoursDistributionRule {
     /// The period the contract covers. `getContractPeriod()`.
     fn contract_period(&self) -> crate::common::enums::pay_period_type::PayPeriodType;

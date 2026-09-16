@@ -35,12 +35,12 @@ see "Test backing" below for why.
 | 1 | `punchvalidation` — 4 of 4 rules | **done** |
 | 3 | `hoursdistribution` — `TimeCard` surface | **done** |
 | 3 | `hoursdistribution` — the six shared helpers | **done** |
-| 3 | `hoursdistribution` — 11 of 19 rules | **in progress** — see below |
+| 3 | `hoursdistribution` — 17 of 19 rules | **in progress** — see below |
 | 1+ | the other 29 families | not started |
 
 ## Where the work stands
 
-**1,028 tests, 211 of them transcribed Java assertions.** Clippy clean,
+**1,197 tests, 315 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -55,7 +55,7 @@ something does.**
 ### `hoursdistribution` — where to pick up
 
 Done: the `TimeCard` surface, all six shared helpers, all four DAO ports the
-family needs (plus `MinWagePort`, divergence 38), and **11 of 19 rules**.
+family needs (plus `MinWagePort`, divergence 38), and **17 of 19 rules**.
 
 | Ported | Java spec cases |
 |---|---:|
@@ -70,38 +70,42 @@ family needs (plus `MinWagePort`, divergence 38), and **11 of 19 rules**.
 | `DailyWeekly6thDayOT7thDayDTNonConsec` | 3/3 |
 | `PerMonthOTHrs` | 5/5 |
 | `CaliforniaOTHrs` | 6/6 |
+| `TwentyFourHourOT` | 31/31, plus its config's 7 |
+| `ContractOTHrs` | 6/6 |
+| `DailyWeekly7thDTHrs` | 7/7 |
+| `CaliforniaExtSpecialJobOTHrs` | 9/9 |
+| `MinHrsForFullTimeOT` | 18/19 — see below |
+| `DlyWklyOffConsecOTMinBreak` | 16/16, three rows unreconciled — see below |
 
-**Every ported rule passed its Groovy spec on the first run.**
-`CaliforniaExtendedOTHrs` is the one that matters most for confidence: its
-twelve-case spec exercises both accumulators and `PriorDaysCalculator` end to
-end, so the helper layer is validated against Java rather than only against a
-reading of it.
+**Sixteen of the seventeen passed their whole Groovy spec on the first run.**
+The exception is `DlyWklyOffConsecOTMinBreak`, whose last case asserts three
+values its own fixture cannot produce; see the finding under "Rules". Every
+other discrepancy found while porting has been a transcription slip on this
+side, caught by the test and corrected against the Java.
 
-`CaliforniaOTHrs` was billed here as "the only user of the shared `DailyData`",
-which undersold it: it is also the **first rule in the tree to write earnings**,
-and brought `EarningTypePaySet`, a mutable earnings accessor on `TimeCard` and
-`EmployeeEarning`'s money recomputation with it. Anything reached for by the
-remaining rules should be measured the same way before it is scheduled.
+`CaliforniaExtendedOTHrs` and `TwentyFourHourOT` are the two that matter most
+for confidence. The first exercises both shared accumulators and
+`PriorDaysCalculator` end to end across twelve cases; the second is the family's
+largest spec — 27 methods, 31 executions — and pins 24-hour-window arithmetic no
+amount of reading the source settles.
 
-**Remaining eight, in the size order this port has been following** — smallest
-first, because the large ones are variants that build on the accumulators:
+**Remaining two**, the last and largest of the family:
 
-1. `TwentyFourHourOT` (284) — **next**. Reads the FLSA map, like `WeeklyOTHrs`.
-2. `ContractOTHrs` (324) — the second `ContractHrsRule`, and the only writer of
-   `CalcDataSetStat` (three of the five constants).
-3. `DailyWeekly7thDTHrs` (366)
-4. `CaliforniaExtSpecialJobOTHrs` (414) — **declares its own inner `DailyData`**
-   with a different constructor; do not port it against the shared one. Its
-   config also extends `HoursDistributionRuleWithPayMappingsConfig`, so
-   [`EarningTypePaySet`] is already there for it.
-5. `MinHrsForFullTimeOT` (430) — the only user of `EarningMapper` and
-   `ConsecutiveDaysCalculator`; also reads `BOTH_CONSECUTIVE_AND_WEEKLY_OT` into
-   a field of its own.
-6. `DlyWklyOffConsecOTMinBreak` (439)
-7. `DailyWeekly6thOT7thDTHrs` (451)
-8. `DlyWklyConsecOTMinBreakSpanningMidnight` (456)
+1. `DailyWeekly6thOT7thDTHrs` (451 lines, spec 316) — **next**. No finding
+   recorded against it yet; nobody has read it closely.
+2. `DlyWklyConsecOTMinBreakSpanningMidnight` (456 lines, spec 842, 12 cases) —
+   the sibling of `DlyWklyOffConsecOTMinBreak`, and the place to settle that
+   rule's three unreconciled rows. Its config declares `CONSEC_DAY_HRS_LIMIT`, a
+   consecutive-day **hours** limit no other rule in the family has, which is
+   what makes a copied test case detectable.
 
-[`EarningTypePaySet`]: rules/types/earning_type_pay_set.rs
+**Measure before scheduling.** The one-line descriptions this file used to carry
+were wrong or badly short four times out of six: `CaliforniaOTHrs` turned out to
+write earnings and brought `EarningTypePaySet` with it; `TwentyFourHourOT`
+brought `ShiftUtil.getNetHoursInRange`; `ContractOTHrs` was described as a
+`ContractHrsRule`, which it is not, and brought the contract calculators;
+`CaliforniaExtSpecialJobOTHrs` shadows three shared types, not one. Read the
+Java before estimating.
 
 `ShiftDifferenceOTRuleImpl` exists as a twentieth `*RuleImpl` but has no
 catalogue entry; it is deferred with the rules.
@@ -121,7 +125,7 @@ resolves anywhere in the file.
 | 19–20 | Wave 1 — punchvalidation |
 | 21–27 | The `TimeCard` surface |
 | 28–32 | The shared helpers |
-| 33–44 | Rules |
+| 33–50 | Rules |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -203,7 +207,7 @@ see divergence 38's `MinWagePort`.
 week, and `FlsaData` for the two `getFlsaDataMap` call sites. Both are now
 settled — see below.
 
-## Rules — 11 of 19
+## Rules — 17 of 19
 
 | Rust | Java | Ported cases |
 |---|---|---:|
@@ -218,8 +222,21 @@ settled — see below.
 | `…/daily_weekly_6th_ot_7th_dt_non_consec.rs` | `DailyWeekly6thDayOT7thDayDTNonConsecRuleImpl` | **3/3** |
 | `…/per_month_ot_hrs.rs` | `PerMonthOTHrsRuleImpl` | **5/5** |
 | `…/california_ot_hrs.rs` | `CaliforniaOTHrsRuleImpl` | **6/6** |
+| `…/twenty_four_hour_ot.rs` | `TwentyFourHourOTRuleImpl` | **31/31** |
+| `…/contract_ot_hrs.rs` | `ContractOTHrsRuleImpl` | **6/6** |
+| `…/daily_weekly_7th_dt_hrs.rs` | `DailyWeekly7thDTHrsRuleImpl` | **7/7** |
+| `…/california_ext_special_job_ot_hrs.rs` | `CaliforniaExtSpecialJobOTHrsRuleImpl` | **9/9** |
+| `…/min_hrs_for_full_time_ot.rs` | `MinHrsForFullTimeOTRuleImpl` | **18/19** |
+| `…/dly_wkly_off_consec_ot_min_break.rs` | `DlyWklyOffConsecOTMinBreakRuleImpl` | **16/16** |
+| `entity/employee_shift.rs` — `is_adjustment_only_shift` | the same | — |
+| `common/json_ids.rs` — `ids_from_json` | `JSONUtils.getIdsFromJSON` | — |
+| `…/daily_data.rs` — `build_daily_data_map` | the `dailyDataProducer` two rules declare identically | — |
+| `common/contract.rs` | `labor.contract` — the interface, factory and three calculators | — |
+| `common/enums/schedule_mode.rs` | `ScheduleMode` | — |
+| `entity/time_card.rs` — `pay_period_type`, `schedule_mode` | `Property`'s two getters | — |
 | `…/mod.rs` — `ContractHrsRule` | `ContractHrsRuleImpl` | — |
-| `…/config.rs` | `HoursDistributionRuleConfig` + the eleven rules' configs | — |
+| `…/config.rs` | `HoursDistributionRuleConfig` + the seventeen rules' configs | **7**, from `TwentyFourHourOTRuleConfigTest` |
+| `entity/employee_shift.rs` — `net_hours_in_range` | `ShiftUtil.getNetHoursInRange` and its four helpers | — |
 | `rules/types/earning_type_pay_set.rs` | `EarningTypePaySet` | — |
 | `rules/types/earning_type_pay_map.rs` | `EarningTypePayMap` | — |
 | `entity/time_card.rs` — `earnings_mut`, `earning_is_not_salaried_exempt` | the live `getEarnings()` list, `…IsNotSalariedExemptForEarning` | — |
@@ -256,6 +273,415 @@ rewrites, so it arrives `&mut` and reads go through the index primitives.
   `original_hours` equal to `hours`, which is right for a fresh regular row and
   wrong here, so the factory builds the struct field by field. Pinned by
   `a_premium_distribution_has_zero_original_hours`.
+
+- **`DlyWklyOffConsecOTMinBreak` adds two ideas nothing else in the family
+  has**: overtime for working a day you were **not scheduled**, and overtime for
+  not getting a long enough **break between two shifts**. The break rule finds
+  the latest shift on the whole card ending before this one starts, and pays
+  `min(minTimeBetweenShifts - gap, the shift's own regular hours)` — `max`ed
+  with the ordinary daily figure, so it tops up rather than replaces.
+
+  A split shift has to be told apart from a rest violation, and the test is
+  awkward: a gap on **one date** is exempt only while it stays *under*
+  `dailyShiftSplitLimit`. A five-hour gap on one day is neither a split shift
+  nor a rest, and is paid.
+
+- **The day's earning hours are written into the distribution's own hours.**
+
+  ```java
+  distribution.setHours(roundHours((distribution.getHours() + dailyData.getEarningHours()) - premiumHours - dtHours));
+  ```
+
+  A seven-hour shift on a day carrying a two-hour configured earning comes out
+  with an eight-hour regular row. No earning row is ever created or changed —
+  this rule reads earnings and writes only distributions. And because the write
+  is behind `premiumHours > 0`, the fold happens **only on days that pay a
+  premium**; under the limit the same earning leaves the row alone. Both pinned.
+
+- **`premiumHours` is decremented before the row is reduced.**
+  `addDistributions` does `premiumHours -= dtHours` inside the double-time
+  branch, and the `setHours` line below reads the decremented local — so the
+  regular row loses the double time once, not twice. The caller's copy is
+  untouched, so the accumulators still see the whole figure. Easy to get wrong;
+  a hand-check of the spec's `combine all rule scenarios` is what caught it here.
+
+- **Double time is recomputed from the day's total every time and never netted
+  off.** `calculateDT` is `max(hours - dailyDTLimit, 0)` — unrounded, with no
+  `addDoubleTime` on the accumulator at all. A second distribution on a day
+  already past the limit writes a second, overlapping double-time row.
+
+- **The daily data map is built a day wider than it is read.**
+  `dailyDataProducer` runs `[workWeek.start - 1, workWeek.end]`; the loop asks
+  only for dates in the week. The extra day is built and discarded.
+
+- **Three rows of its last case do not reconcile, and the imports say why.**
+  `when both consec and weekly OT is checked…` is `combine all rule scenarios`
+  with its first shift moved from 20:00–00:00 to 17:45–21:45 — which changes the
+  break gap from exactly one hour to 3.25 and the shortfall from 4 to 3.75 —
+  but with the expectations left as they were. A third row, at the fifth
+  consecutive day, does not follow from that either: `isDuringOTConsecDays()`
+  holds there, so `computeWeeklyOT` returns zero whatever the flag says.
+
+  The case imports three of its four parameter constants from
+  `DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig` — the **sibling rule's**
+  config — including a `CONSEC_DAY_HRS_LIMIT` this rule never reads. It looks
+  copied from that rule's spec. The transcription asserts what this rule
+  produces and labels the three rows; **it has not been confirmed against a Java
+  run**, and the sibling's spec is the place to settle it.
+
+- **Two rules define "adjustment-only shift" differently.**
+  `EmployeeShift.isAdjustmentOnlyShift()` is
+  `punches.isEmpty() && !workedAdjustmentsEmpty()`, which this rule uses to skip
+  the break rule. `TwentyFourHourOTRuleImpl.isShiftAdjustmentOnly` is
+  `!hasErrors() && !hasBothTimes()`. A shift with no punches and no adjustment
+  answers differently to each.
+
+- **A fourth spelling of "this week only".** `THIS_WEEK_ONLY` is `thisWeekOnly`
+  here, against `consecDaysInWeek` elsewhere — a different key for the same
+  idea, alongside the `dailyOTLimit`/`dailyOtLimit` pair already recorded.
+
+- **`MinHrsForFullTimeOT` pays *double time* to part-timers and overtime to
+  everyone else**, and decides which from the **whole week's** hours, computed
+  up front. `eligibilityLimit >= totalWeeklyHours` — so a part-timer's Monday is
+  paid differently depending on whether they pick up a shift on Saturday. Every
+  chunk of hours, distribution or earning, runs the same three-rung ladder:
+  consecutive days, then part time, then the daily and weekly limits.
+
+- **`maxDTPaid` is a weekly budget that overtime spends too.** Every premium
+  hour the rule writes — consecutive-day overtime and daily or weekly overtime
+  alike — is added to `premiumHoursAllocated`, which is what
+  `calculateUnallocatedDT` measures against. So overtime paid on a consecutive
+  day reduces the double time available later in the week; the spec has a case
+  named for it.
+
+- **`bothConsecutiveAndWeeklyOt` does something here.**
+  `CaliforniaExtendedOTHrs` reads the same key and hands it to an accumulator
+  field nothing reads (already recorded). This rule uses it to pick between two
+  weekly formulas: set, `min(workedHours - limit, currentChunkHours)`, which
+  **ignores what has already been allocated** and so pays an hour again that
+  consecutive-day overtime already paid; clear,
+  `max(0, workedHours - limit - otHoursAllocated)`. The spec's last two cases
+  are the two sides, and the second calls the unset behaviour "legacy".
+
+- **Two keys differ from the rest of the family only by letter case.** This rule
+  reads `dailyOTLimit` and `weeklyOTLimit` from
+  `HoursDistributionConfigConstants`, where five other rules read `dailyOtLimit`
+  and `weeklyOtLimit`. A property copying a parameter from one rule to another
+  gets the default and no warning. Ported as `DAILY_OT_LIMIT_PROP_CAPS` and
+  `WEEKLY_OT_LIMIT_PROP_CAPS` so the two cannot be confused in Rust.
+
+- **A shift is processed once per distribution it has on the day.**
+  `dailyShiftMap` flat-maps shifts to distributions, groups by **distribution
+  date**, and maps back to the shift — so a shift with two distributions dated
+  the same day appears in that day's list twice and its whole `computeShiftHours`
+  runs twice, counting its earnings twice and walking its distributions twice.
+  Reproduced; pinned by
+  `a_shift_with_two_distributions_on_one_day_is_processed_twice`.
+
+- **One branch cannot be taken.** The distribution stream filters
+  `isOpenForEditingOn`, and the first arm of the branch that follows is
+  `distributionIsPremium(d) && !isOpenForEditingOn(d.getDate())`. Dead. Not
+  ported.
+
+- **It does not filter salaried-exempt shifts**, where every other rule in the
+  family does — `getShiftsWithDistributionsForPeriod` is used raw. Its two
+  helpers *do* filter: `EarningMapper` drops exempt earnings and
+  `ConsecutiveDaysCalculator` drops exempt shifts. So one rule applies the test
+  to its earnings and its day counter but not to its hours.
+
+- **Four of its nineteen cases assert nothing.** They put their checks inside a
+  `(0..N).each { … }` closure, and Spock applies implicit assertions only to
+  top-level expressions in a `then:` block — so `dist.size() == 1` and the
+  `assertListHasCorrectHoursDistribution` call are evaluated and discarded.
+  Seventh spec-weakness in the family and the first of this shape; the
+  transcriptions assert them for real.
+
+  A nineteenth case, `work rule should always call the fix map method`, is a
+  mock-interaction test on `ruleConfig.fixMap`. `fixed()` is called
+  unconditionally here and there is nothing to observe, so it is the one case
+  not transcribed — hence 18 of 19.
+
+- **`CaliforniaExtSpecialJobOTHrs` does not choose between its two sets of
+  limits — it *averages* them, weighted by hours.** Nothing else in the family
+  does this. `HourLimits` walks the whole work week before anything is paid,
+  picking the special limits for a distribution whose day is a configured
+  special day of week **and** whose shift's job is in the configured list, and
+  accumulating `hours × limit` against `hours`. The weekly limit the accumulator
+  runs on is `roundHours(totalWeeklyLimits / totalWeeklyHours)`; each day's two
+  limits are the same quotient over that day's hours.
+
+  So a week that mixes a 35-hour-week special job with ordinary work gets a
+  limit strictly between the two. The spec pins it at **38.83** for 14 special
+  hours in a 59.86-hour week — and note the limit is computed from the **whole**
+  week, so a Sunday shift changes what Monday is paid.
+
+- **Dividing by zero is reachable in Java and silent.** A day with no shifts
+  gives `0/0` = `NaN` for both daily limits, and a week with none gives `NaN`
+  for the weekly limit. Every later comparison against `NaN` is false, so
+  nothing is written — which is also the outcome here, because such a day has no
+  distributions to walk. The port answers `0.0`; see divergence 48.
+
+- **It declares its own `DailyData` *and* its own pair of accumulators**, making
+  it the only rule to shadow three of the shared types at once. The `DailyData`
+  is `(date, shifts, specialDay)` with **no earnings**, which is what the
+  warning on the shared struct has been about since it was ported. Its
+  `WeeklyAccumulator` takes a fourth constructor argument seeding the counter,
+  and rounds in `computeWeeklyOT` where the shared one does not; its
+  `DailyAccumulator` returns zero double time unless `payDT`.
+
+- **`specDaysOfWeek` and `specJobs` are read by the *throwing* JSON parser.**
+  `JSONUtils.getIdsFromJSON` declares `throws JSONException` and this rule calls
+  it without a catch, so a corrupt list aborts the calculation — where the same
+  mistake in `holidayTypes`, read through `getIdsListForKey`, silently selects
+  nothing. That makes **three** spellings of one operation in the tree:
+  `id_list` swallows, `ids_from_json` panics, `EarningTypePaySet::from_json_string`
+  panics. All three are faithful.
+
+  The day numbers are **Sunday-based**, not ISO — compared against
+  `DateUtil.translateDOWFromISO(date.getDayOfWeek())`. Mixing the two
+  conventions shifts the whole rule by one day, silently; pinned by
+  `the_special_days_are_sunday_based_not_iso`.
+
+- **`employeeJobStatusIsNotSalariedExemptForEarning` is declared and never
+  used** — the rule reads no earnings at all. Fourth dead member in the family,
+  after `setBothConsecutiveAndWeeklyOt`, `PayPeriodOTHrs`'s unused DAO and
+  `CaliforniaOTHrs`'s `payLevelMap`.
+
+- **Its spec mocks `PriorDaysCalculator`, not the DAO under it.** Every other
+  transcription in the family stubs `EmployeeShiftConsecutiveDaysDAO`, because
+  that is what the Groovy mocks; here the Groovy mocks the calculator itself to
+  answer 4. The calculator is ported rather than stubbed, so the transcription
+  stubs the DAO at **3** and lets the real calculator add the 11-21 shift it
+  finds between the dataset start date and the week. Noted on the stub.
+
+- **`DailyWeekly7thDTHrs` shadows *both* shared accumulators**, the third rule
+  in the family to do so after `CaliforniaExtSpecialJobOTHrs`'s inner
+  `DailyData` and `DailyWeekly6thDayOT7thDayDTNonConsec`'s inner pair. Its
+  inner classes take the shared names and differ in four ways:
+
+  | | the shared class | this rule's inner class |
+  |---|---|---|
+  | `WeeklyAccumulator(…)` | `(weeklyLimit, consecDayLimit, maxConsecDays)` | `(weeklyLimit)` alone |
+  | the consecutive-day test | `counter >= consecDayLimit` | `counter == 7`, **exactly** |
+  | `computeWeeklyOT` | two formulas behind a flag, **unrounded** | one formula, **rounded**, zero on the seventh day |
+  | daily double time | always computed | zero unless `payDailyDT`, or it is the seventh day |
+
+  Ported private to the rule as `WeekTotals` and `DayTotals`. Its inner
+  `DailyData`, by contrast, is a field-for-field copy of the shared one and uses
+  it directly.
+
+- **On the seventh consecutive day the double-time row takes the whole day and
+  no overtime row is written at all.** Weekly overtime is forced to zero, daily
+  overtime becomes `hours - overtime` and daily double time becomes
+  `hours - doubleTime` — so `shiftDT` equals `shiftOT`, `premiumHours -
+  doubleTime` is zero, and the overtime branch is never taken. All seven spec
+  cases assert the same `(0, 0, 8.5)` for that day whatever else they change.
+
+  The test is `== 7`, not `>= 7`. Unreachable past seven inside a seven-day
+  week, but a longer period handed in as a work week would silently stop paying
+  it.
+
+- **An earning that already carries a premium level is booked as premium before
+  it is counted.** `computeEarningHours` reads the pay level out of the pay set
+  and adds the hours to the day's overtime (level 1 or 2) and double time
+  (level 2) *before* `addHours`. `CaliforniaOTHrs` reads the same pay set and
+  does none of this — it treats every configured earning as regular hours. One
+  parameter, two meanings.
+
+- **`payDailyDT` is not `payDT`.** A fifth distinct spelling in the family
+  (`payDailyDT`), and it gates only the ordinary daily double-time limit:
+  the seventh day pays double time whether it is set or not. The two California
+  rules' `payDT` gates the premium split itself, which this rule does not have —
+  `addDistributions` here branches on `doubleTime > 0` alone.
+
+- **The `dailyDataProducer` is written out twice in Java, identically**, once in
+  `CaliforniaOTHrsRuleImpl` and once here — same filter, same partition, same
+  `ShiftStartTimeComparator` ordering. Ported once as
+  `daily_data::build_daily_data_map` and called from both, so there is no second
+  place for them to drift. `CaliforniaExtSpecialJobOTHrsRuleImpl` builds a
+  different shape and does not use it.
+
+- **Correction: `ContractOTHrs` is not a `ContractHrsRule`.** This file
+  previously described it as "the second `ContractHrsRuleImpl`". It is not —
+  `ContractOTHrsRuleImpl implements HoursDistributionRuleImpl`, and
+  `PerMonthOTHrsRuleImpl` is that interface's **only** implementor, so
+  `RuleUtils.getContractHours` still resolves to exactly one rule by
+  `instanceof`. The claim was inferred from the name. Nothing was built on it,
+  but it is the second scoping claim here to turn out wrong when the rule was
+  actually read, so measure before scheduling.
+
+- **`ContractOTHrs` pays overtime past a *contracted* number of hours**, not a
+  statutory one: the property sets weekly contract hours and a
+  `ContractCalculator` scales them to the pay period. Three calculators behind a
+  factory keyed on the property's pay period type and schedule mode, ported to
+  one enum in `common/contract.rs` the way divergence 3 collapsed the rounding
+  strategies.
+
+  **A weekly schedule pins the contract to one week.** The factory's first test
+  is `scheduleMode == WEEKLY && payPeriodType != WEEKLY`, which selects the
+  calculator that ignores the period and returns the weekly figure unchanged —
+  so a property that schedules weekly but pays monthly contracts for one week's
+  hours a period, not a month's. Reproduced.
+
+  The two real calculators round at **different precisions through different
+  rules**: `WeekBasedContractCalculator` at two places, which carries the
+  epsilon nudge, and `DaysInPeriodContractCalculator` at zero, which is plain
+  half-to-even. The `TDouble` finding in Wave 0 is why those are not the same
+  operation, and `round_to` keeps them apart.
+
+- **It is the only rule that writes `CalcDataSetStat`** — three of the five
+  constants, one triple per pay period the week touches, keyed by period start.
+  That part of the old description was right.
+
+- **Its two seeding paths disagree on all three counts.** Same split as
+  `RollingXWeeksOTHrs` — the card inside the dataset, the DAOs outside it — and
+  the same class of divergence:
+
+  | | off the card | from the DAO |
+  |---|---|---|
+  | net hours | `hours` of **every** distribution, premium rows included | `originalHours` where type = 1 |
+  | overtime | `hours` of the overtime **and** double-time buckets | `hours` where type = 2, **plus** type = 3 |
+  | earnings | always folded in | only in `TA` mode |
+
+  The card path counting premium rows into net hours is the sharp one: an hour
+  already paid as overtime is counted a second time toward the contract.
+
+- **The DAO's third column is read after all.** `PARITY_AUDIT` recorded under
+  `RollingXWeeksOTHrs` that `getNetAndOTHoursForPeriod` "also selects a third
+  `dtHours` column that the rule never reads", and `NetAndOtHours` carried two
+  fields on that basis. True of that rule; **false of this one**, which reads
+  all three and adds `dtHours` to the same running total as `otHours`. So one
+  caller counts double time as overtime already paid and the other does not, off
+  one query. The port now carries `dt_hours` and says so. Pinned by
+  `the_dao_path_counts_double_time_as_overtime_already_paid`.
+
+- **Its seeding window is inverted for the first week of every period**, exactly
+  as `PerMonthOTHrs`'s is: `shiftPeriod` runs `[payPeriodStart,
+  workWeek.getStartDate() - 1]`, which is backwards whenever the week starts on
+  or before the period. The card path's filters then match nothing. Fourth
+  inverted-range case in the family. The Java spec's earnings case **depends** on
+  it — its shift loop contributes nothing and the earning is the whole seed.
+  Pinned by `the_seeding_window_is_inverted_for_a_week_starting_the_period`.
+
+- **A worked holiday is paid whole at double time, and still counts toward the
+  contract.** The branch moves every hour of the row to double time and zeroes
+  the row, consulting no limit — but first adds the original hours to the period
+  total and the paid hours to the period's overtime. So a holiday both fills the
+  contract and is paid on top of it, which is not what the spec case's title
+  ("do not count toward the contract hours") says; its own asserted period total
+  of 17 includes the holiday's five.
+
+  The branch is guarded on `hours > 0`, so a row already at zero falls through
+  to the overtime branch instead — a second pass over a calculated holiday
+  behaves differently from the first. Pinned.
+
+- **The holiday calendar is the *shift's* property here.**
+  `shift.getJob().getProperty()`, where `HolidayDTHrs` reads
+  `distribution.getPropertyID()`. Two rules in one family, two answers for a
+  multi-property employee — and this file already records the `HolidayDTHrs`
+  side as deliberate.
+
+- **`isEligibleForOT` resolves the home job before testing `homeDeptOnly`**, so
+  an employee with no home job status on the shift's date throws even when the
+  flag is off and the home job is irrelevant. See divergence 46.
+
+- **Its distribution sort is ascending where `TwentyFourHourOT`'s is
+  descending.** Both sort the shift's **live** list in place; this one ascending
+  by date, which is what makes a midnight-spanning shift fill its contract from
+  the earlier day first. Third in-place sort in the family. The shift list
+  itself is sorted on a copy.
+
+- **Three of the six spec cases assert almost nothing, and two of them assert
+  something false.** Their `any {}` predicates are four bare comparisons on
+  consecutive lines with no `&&`, so only the last is the closure's return value
+  — the same shape as `RollingXWeeksOTHrs`'s, and the sixth spec-weakness of
+  this kind in the family. Two of the discarded lines assert
+  `originalHours == 10` on a row they also call overtime, and a factory-built
+  premium row carries **zero** original hours. Joined with `&&` those cases
+  would fail. The transcriptions assert the whole row, with the value the
+  factory actually writes.
+
+- **`TwentyFourHourOT` measures against a rolling 24-hour work day, not a
+  calendar day.** The window opens at the employee's first clock-in on a date
+  and runs twenty-four hours, so a shift early the next morning can fall inside
+  yesterday's window and push it over the limit. It is the only rule in the
+  family whose day is not a date, and the only one that needs
+  `ShiftUtil.getNetHoursInRange` — punch-pair intervals intersected with a
+  window — where every sibling reads hours off distributions.
+
+- **A spanning shift is visited twice and paid on the second visit.**
+  `getShiftsForWorkDay` walks the work day's own date and then appends the
+  **next** date's shifts that start strictly inside the window. Those carry
+  `currentDayShift == false`: they bank overtime into `otAccumulator` and write
+  nothing. The following work day reaches the same shift with the flag true,
+  adds to what was banked, and writes the total. That is why the accumulator is
+  keyed by shift and survives across days, and why `weeklyHrsAccumulated` only
+  ever advances on the current-day visit — otherwise the shift would count
+  toward the week twice.
+
+- **The two "already accounted for" counters are updated asymmetrically.**
+  `workDayOTAccountedFor` advances inside the work-day helper, as soon as the
+  figure is computed; `weeklyOTAccountedFor` advances in the caller, and by the
+  **capped** `min(otAccumulator, shift.getNetHours())` rather than by the weekly
+  figure. So weekly overtime is only booked as paid to the extent a shift could
+  actually absorb it, while work-day overtime is booked whether or not it lands.
+
+- **The rate gate switches off work-day overtime only.** `overRateThreshold`
+  compares the FLSA regular rate for the week, or the employee's last home job
+  status rate, against `rateThreshold` — whose default is 99,999, so the gate is
+  off unless a property turns it on. When on, the work-day measure returns zero
+  and the weekly measure is untouched: a highly paid employee still earns
+  overtime past forty hours. Both spec rows of the case named for this gate have
+  it **off** — one because 8.50 is not over 8.0, the other because the mocked
+  `FlsaData` answers zero — so the branch the case is named for is never taken.
+
+- **Adjustment-only shifts count for the week and not for the day.**
+  `isShiftAdjustmentOnly` is `!hasErrors() && !hasBothTimes()`, so a shift with
+  no punched times is excluded from the work-day measure while its distributions
+  still feed the week. Four spec cases turn on it. They also sort to **midnight**
+  through `ShiftStartTimeComparator`, ahead of anything with a start time, which
+  a fifth case is named for.
+
+- **`createAndDistributeOT` sorts the shift's own distribution list in place.**
+  `Collections.sort(shift.getHoursDistributions(), reverseOrder(comparing(getDate)))`
+  reorders the **live** list, latest date first, whether or not any overtime is
+  paid. Second case of this in the family after `RollingXWeeksOTHrs`'s, and the
+  reordering is load-bearing here rather than incidental: overtime is then spent
+  against the latest date first, which is what makes a midnight-spanning shift
+  pay out of its second day before its first. Pinned by
+  `the_shifts_own_distribution_list_is_left_sorted_latest_date_first`.
+
+- **`Optional.of(...).filter(shiftsAreNotEmpty)` can never fail.**
+  `getShiftsGroupedByDate` builds one entry per date of the work week, empty
+  list or not, so the map is non-empty for any non-empty range however few
+  shifts the card holds. The guard is dead and is not ported. The same shape
+  makes `endDateIsDifferentAndHasShifts` — which tests the map's **key set** —
+  really ask only whether the next day is still inside the work week, and its
+  other half, `!start.equals(end)`, is never false for two datetimes
+  twenty-four hours apart.
+
+- **`ShiftUtil.getWorkedDateTimeRangesFromShift` pairs punches positionally and
+  sorts the shift's live punch list to do it.** Indices 0 and 1, 2 and 3, and so
+  on in `PunchTimeComparator` order — not by punch type, exactly as `getBreaks`
+  does it, which is how a break splits one shift into two worked intervals. An
+  odd number of punches throws; see divergence 45.
+
+- **`TwentyFourHourOTRuleImplTest` is the family's largest and best spec** — 27
+  methods, four of them tabled, 31 executions, and the only one that pins
+  arithmetic no amount of reading the source settles. All transcribed, all
+  passing on the first run. Its config has a spec too,
+  `TwentyFourHourOTRuleConfigTest`, the first in the family; its
+  `testGetDefaultValues` and six `testValidateProperties` rows are transcribed
+  beside the other configs, and its `testGetProperties` case is the l2fprod UI
+  half that `config.rs` does not port.
+
+- **`A shift without punches should not get daily OT` cannot reach its gate.**
+  The shift is dated the day before the work week, so `getShiftsForPeriod` drops
+  it before anything looks at the punches. Fifth case of this kind in the family,
+  after the two in `ScheduledShiftOTRuleImplTest` and the two weak
+  `CaliforniaOTHrs` ones. Transcribed as written, with a second assertion beside
+  it that puts the punchless shift inside the week so the case exercises what it
+  claims to.
 
 - **`CaliforniaOTHrs` cannot pay weekly overtime under its own defaults.** It
   never calls `weeklyAccumulator.setOriginalHours(...)`, where the extended
@@ -786,6 +1212,69 @@ rewrites, so it arrives `&mut` and reads go through the index primitives.
     Malformed pay-set JSON is the opposite call and **does** panic, matching
     `RuleParams::int_at` (divergence 9): that is a corrupt parameter rather than
     a coherent one with a gap in it. Both spellings are documented on the type.
+
+45. **An odd number of punches drops the unpaired one rather than throwing.**
+    `ShiftUtil.getWorkedDateTimeRangesFromShift` steps its loop by two and reads
+    `get(i + 1)` unguarded, so a shift that is still clocked in throws
+    `IndexOutOfBoundsException` out of `TwentyFourHourOT`. The trailing punch is
+    dropped here, so such a shift contributes the time it has closed. Divergences
+    20, 32 and 37's reading again.
+
+    `ShiftUtil.getBreaks` has the same positional pairing and guards it by
+    refusing shifts with three punches or fewer, which is why that one was
+    portable as written; this entry point has no such guard.
+
+46. **The home job is resolved only when `homeDeptOnly` is set.**
+    `ContractOTHrsRuleImpl.isEligibleForOT` assigns
+    `employee.getHomeEmployeeJobStatus(shiftDate).getJob()` on its own line,
+    before the `!homeDeptOnly ||` short-circuit that is the only thing reading
+    it — so an employee with no home job status on that date throws even when
+    the flag is off. The lookup is made conditional here. That is divergence
+    39's reading: an absent record establishes nothing, so with the flag off the
+    shift is calculated normally, and with it on the department match cannot be
+    shown and the shift is excluded.
+
+47. **Pay period accumulators are seeded up front rather than lazily.** Java
+    creates each one the first time a distribution in that period is reached,
+    interleaving seeding with writing. Seeding reads only earnings — which this
+    rule never writes — and distributions dated strictly **before** the work
+    week, while every write is guarded on `workWeek.containsDate`. The two
+    windows are disjoint, so hoisting is behaviour-identical, and it lets
+    `execute` hold `&mut` for the write loop without reading the card back
+    through it. `setContractHours` runs on every Java call rather than only on
+    creation, and is the same value each time for a given period.
+
+48. **A weighted limit over zero hours is `0.0`, not `NaN`.**
+    `CaliforniaExtSpecialJobOTHrsRuleImpl`'s `HourLimits` divides
+    `totalLimits / totalHours` unguarded, so a day or a week with no hours
+    yields `NaN` in Java. Nothing is written either way — every comparison
+    against `NaN` is false, and a day with no hours has no distributions to walk
+    — so the two agree on the only reachable path. `0.0` is a value a reader can
+    follow, and it keeps a `NaN` from escaping into an accumulator if the helper
+    is ever called from somewhere new.
+
+49. **One `dailyDataProducer`, not two.** `CaliforniaOTHrsRuleImpl` and
+    `DailyWeekly7thDTHrsRuleImpl` each declare the producer as a private field,
+    and the two are byte-identical — the same earning filter, the same
+    partition on whether an earning names a shift, the same
+    `ShiftStartTimeComparator` ordering. Ported once as
+    `daily_data::build_daily_data_map` and called from both, so there is no
+    second place for them to drift.
+
+    `CaliforniaExtSpecialJobOTHrsRuleImpl` and
+    `DlyWklyOffConsecOTMinBreakRuleImpl` each build a **different** shape and
+    keep their own; only these two share.
+
+50. **The schedule list is read for emptiness, not for its contents.**
+    `DlyWklyOffConsecOTMinBreakRuleImpl`'s `DailyData` holds the day's scheduled
+    shifts, and the only question anything asks of them is
+    `scheduledShifts.isEmpty()` — `shouldPayUnscheduledOTOnDay`. So the port
+    keeps a `bool` rather than a list of positions, which sidesteps the question
+    of whether an index means a position in `shifts()` or in `schedules()`.
+
+    **When to revisit:** if a rule ever needs the scheduled shifts themselves,
+    give `TimeCard` a `schedule_indices_with_distributions_for_period` beside
+    the shift one rather than widening this.
 
 ## The shared helpers — done
 

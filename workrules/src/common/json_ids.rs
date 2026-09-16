@@ -51,6 +51,32 @@ pub fn id_list(value: &str) -> Vec<i32> {
     ids
 }
 
+/// Parse `"[1,2,3]"`, refusing malformed input. `getIdsFromJSON(String)`.
+///
+/// # Panics
+///
+/// If the value is not a JSON array of integers. Java declares this one
+/// `throws JSONException` and `CaliforniaExtSpecialJobOTHrsRuleImpl` calls it
+/// without a catch, so a corrupt `specDaysOfWeek` or `specJobs` parameter
+/// aborts the calculation. That is the third spelling of this operation in the
+/// tree: [`id_list`] swallows the error and configures the rule with nothing,
+/// `EarningTypePaySet::from_json_string` panics, and so does this. All three
+/// are faithful to their Java.
+///
+/// [`id_list`]: crate::common::json_ids::id_list
+pub fn ids_from_json(value: &str) -> Vec<i32> {
+    let parsed: Vec<serde_json::Value> = serde_json::from_str(value)
+        .unwrap_or_else(|_| panic!("rule parameter is not a JSON array: {value:?}"));
+
+    parsed
+        .iter()
+        .map(|element| {
+            element_as_int(element)
+                .unwrap_or_else(|| panic!("JSON array element is not an integer: {element}"))
+        })
+        .collect()
+}
+
 /// `JSONArray.getInt(i)`'s coercions: a number truncated toward zero, or a
 /// string that parses as one.
 fn element_as_int(element: &serde_json::Value) -> Option<i32> {
@@ -107,6 +133,24 @@ mod tests {
         // built list never escapes.
         assert_eq!(id_list("[1,{},3]"), Vec::<i32>::new());
         assert_eq!(id_list("[1,null,3]"), Vec::<i32>::new());
+    }
+
+    #[test]
+    fn the_unchecked_parser_panics_where_the_checked_one_returns_empty() {
+        assert_eq!(ids_from_json("[1,2,3]"), vec![1, 2, 3]);
+        assert_eq!(ids_from_json("[]"), Vec::<i32>::new());
+    }
+
+    #[test]
+    #[should_panic(expected = "not a JSON array")]
+    fn the_unchecked_parser_rejects_malformed_json() {
+        let _ = ids_from_json("not json");
+    }
+
+    #[test]
+    #[should_panic(expected = "not an integer")]
+    fn the_unchecked_parser_rejects_a_bad_element() {
+        let _ = ids_from_json("[1,{},3]");
     }
 
     #[test]

@@ -43,6 +43,7 @@ use crate::common::numbers::{round_hours, round_raw_hours};
 use crate::entity::employee_shift_punch::EmployeeShiftPunch;
 use crate::entity::hours_distribution::HoursDistribution;
 use date_range_rs::DateRange;
+use date_range_rs::datetimerange::date_time_range::DateTimeRange;
 use joda_rs::LocalDate;
 use joda_rs::LocalDateTime;
 use std::cmp::Ordering;
@@ -117,6 +118,51 @@ impl EmployeeShift {
     pub fn with_times(mut self, start: Option<LocalDateTime>, end: Option<LocalDateTime>) -> Self {
         self.start_date_time = start;
         self.end_date_time = end;
+        self
+    }
+
+    /// Mark the shift as carrying worked adjustments rather than punches.
+    ///
+    /// The adjustments entity is not ported; `workedAdjustmentsEmpty()` is a
+    /// `bool` field here, so this is how a test builds the adjustment-only
+    /// shape [`is_adjustment_only_shift`](Self::is_adjustment_only_shift) tests
+    /// for.
+    #[must_use]
+    pub fn with_worked_adjustments(mut self) -> Self {
+        self.worked_adjustments_empty = false;
+        self
+    }
+
+    /// Hours recorded as an adjustment with no punches behind them.
+    /// `isAdjustmentOnlyShift()`.
+    ///
+    /// Java is `punches.isEmpty() && !workedAdjustmentsEmpty()`. Note this is
+    /// **not** `TwentyFourHourOTRuleImpl`'s `isShiftAdjustmentOnly`, which asks
+    /// `!hasErrors() && !hasBothTimes()` — two rules, two definitions of the
+    /// same phrase, and a shift with no punches but no adjustment either
+    /// answers differently to each.
+    pub fn is_adjustment_only_shift(&self) -> bool {
+        self.punches.is_empty() && !self.worked_adjustments_empty
+    }
+
+    /// Set the job. `setJob()`.
+    #[must_use]
+    pub fn with_job_id(mut self, job_id: i32) -> Self {
+        self.job_id = job_id;
+        self
+    }
+
+    /// Set whether this is an actual or a scheduled shift. `setShiftType()`.
+    #[must_use]
+    pub fn with_shift_type(mut self, shift_type: ShiftType) -> Self {
+        self.shift_type = shift_type;
+        self
+    }
+
+    /// Add a punch, as `shift.punches << punch` does in the Groovy tables.
+    #[must_use]
+    pub fn with_punch(mut self, punch: EmployeeShiftPunch) -> Self {
+        self.punches.push(punch);
         self
     }
 
@@ -328,6 +374,80 @@ impl EmployeeShift {
         let mut order: Vec<usize> = (0..self.punches.len()).collect();
         order.sort_by(|a, b| compare_punch_times(&self.punches[*a], &self.punches[*b]));
         order
+    }
+
+    /// Net hours worked inside a window, with the shift's adjustment applied.
+    /// `ShiftUtil.getNetHoursInRange`.
+    ///
+    /// The shift's punches are paired into worked ranges, the adjustment hours
+    /// are added to or taken off the **end** of that list, and what overlaps
+    /// `range` is summed. `TwentyFourHourOTRuleImpl` is the caller: it measures
+    /// a shift against a rolling 24-hour work day, which no field on the shift
+    /// can answer.
+    ///
+    /// Zero when the shift does not overlap the window, and zero when it has no
+    /// start or end time — Java dereferences both unguarded in
+    /// `shiftOverlapsDateTimeRange`, and an adjustment-only shift has neither.
+    pub fn net_hours_in_range(&self, range: &DateTimeRange) -> f64 {
+        if !self.overlaps_date_time_range(range) {
+            return 0.0;
+        }
+
+        self.altered_worked_date_time_ranges()
+            .iter()
+            .map(|worked| range.overlap_duration(worked).fractional_hours())
+            .sum()
+    }
+
+    /// `shiftOverlapsDateTimeRange`.
+    fn overlaps_date_time_range(&self, range: &DateTimeRange) -> bool {
+        match (self.start_date_time, self.end_date_time) {
+            (Some(start), Some(end)) => start <= range.end() && end >= range.start(),
+            _ => false,
+        }
+    }
+
+    /// `getAlteredWorkedDateTimeRangesForShiftWithAdjustments`.
+    ///
+    /// A positive adjustment lengthens the last worked range; a negative one
+    /// eats back from the end, dropping whole ranges until it is spent. Exactly
+    /// zero takes the negative branch, whose loop does not run.
+    fn altered_worked_date_time_ranges(&self) -> Vec<DateTimeRange> {
+        let mut ranges = self.worked_date_time_ranges();
+
+        if self.adj_hours > 0.0 {
+            alter_last_punch_time(&mut ranges, self.adj_hours);
+        } else {
+            alter_punches_from_end(&mut ranges, self.adj_hours);
+        }
+
+        ranges
+    }
+
+    /// `getWorkedDateTimeRangesFromShift` — punches paired **positionally** in
+    /// `PunchTimeComparator` order, 0 with 1, 2 with 3, and so on.
+    ///
+    /// Not by punch type, exactly as `ShiftUtil.getBreaks` does it. Java sorts
+    /// the shift's live punch list in place here; sorting indices says the same
+    /// thing without the side effect.
+    ///
+    /// **Divergence:** an odd number of punches throws
+    /// `IndexOutOfBoundsException` in Java, because the loop steps by two and
+    /// reads `get(i + 1)` unguarded. The unpaired trailing punch is dropped
+    /// here — a shift that is still clocked in contributes the time it has
+    /// closed rather than failing the calculation, which is the reading
+    /// divergences 20, 32 and 37 took.
+    fn worked_date_time_ranges(&self) -> Vec<DateTimeRange> {
+        let order = self.punch_order();
+
+        order
+            .chunks_exact(2)
+            .filter_map(|pair| {
+                let start = self.punches[pair[0]].rounded_time()?;
+                let end = self.punches[pair[1]].rounded_time()?;
+                Some(DateTimeRange::of(start, end))
+            })
+            .collect()
     }
 
     /// The errors as last saved. `getErrors()`.
@@ -545,6 +665,52 @@ impl EmployeeShift {
 /// spans with.
 fn duration_in_seconds(start: LocalDateTime, end: LocalDateTime) -> i32 {
     (end.epoch_seconds() - start.epoch_seconds()) as i32
+}
+
+/// `alterLastPunchTime` — move the end of the last worked range by `adj_hours`.
+///
+/// Java removes the range by value, so with two worked ranges equal to each
+/// other it removes the **first** of them and appends the altered one at the
+/// end, reordering the list. Reproduced; nothing downstream reads the order,
+/// since the caller only sums overlaps.
+fn alter_last_punch_time(ranges: &mut Vec<DateTimeRange>, adj_hours: f64) {
+    let Some(last) = ranges.last().cloned() else {
+        return;
+    };
+
+    // `(int)(adjHours * SECONDS_PER_HOUR)` truncates toward zero.
+    let seconds = (adj_hours * 3600.0) as i64;
+    let altered = DateTimeRange::of(last.start(), last.end().plus_seconds(seconds));
+
+    if let Some(first_equal) = ranges.iter().position(|range| *range == last) {
+        ranges.remove(first_equal);
+    }
+    ranges.push(altered);
+}
+
+/// `alterPunchesFromEnd` — spend a negative adjustment backwards through the
+/// worked ranges, dropping whole ranges until what is left fits inside one.
+///
+/// Java's `get(size - 1)` throws once the list empties, which happens when the
+/// adjustment is more negative than every worked range put together; the loop
+/// stops instead.
+fn alter_punches_from_end(ranges: &mut Vec<DateTimeRange>, mut adj_hours: f64) {
+    while adj_hours < 0.0 {
+        let Some(last) = ranges.last().cloned() else {
+            return;
+        };
+        let last_duration = last.duration().fractional_hours();
+
+        if last_duration > adj_hours.abs() {
+            alter_last_punch_time(ranges, adj_hours);
+            adj_hours = 0.0;
+        } else {
+            if let Some(first_equal) = ranges.iter().position(|range| *range == last) {
+                ranges.remove(first_equal);
+            }
+            adj_hours += last_duration;
+        }
+    }
 }
 
 /// Order two punches the way `PunchTimeComparator` does.

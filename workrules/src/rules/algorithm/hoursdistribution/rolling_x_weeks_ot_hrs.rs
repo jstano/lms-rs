@@ -402,6 +402,7 @@ mod tests {
         RollingXWeeksOTHrsRule::new(PriorWeeks(Some(NetAndOtHours {
             net_hours: 999.0,
             ot_hours: 0.0,
+            dt_hours: 0.0,
         })))
         .execute(&mut card, &work_week(), &item("40.0", "2"));
 
@@ -423,6 +424,7 @@ mod tests {
         RollingXWeeksOTHrsRule::new(PriorWeeks(Some(NetAndOtHours {
             net_hours: 30.0,
             ot_hours: 0.0,
+            dt_hours: 0.0,
         })))
         .execute(&mut card, &work_week(), &item("40.0", "3"));
 
@@ -457,6 +459,7 @@ mod tests {
         RollingXWeeksOTHrsRule::new(PriorWeeks(Some(NetAndOtHours {
             net_hours: 45.0,
             ot_hours: 5.0,
+            dt_hours: 0.0,
         })))
         .execute(&mut card, &work_week(), &item("40.0", "3"));
 
@@ -623,6 +626,7 @@ mod java_parity_tests {
         RollingXWeeksOTHrsRule::new(super::tests::PriorWeeks(Some(NetAndOtHours {
             net_hours: 16.0,
             ot_hours: 0.0,
+            dt_hours: 0.0,
         })))
         .execute(&mut card, &work_week(), &item("25", "3"));
 

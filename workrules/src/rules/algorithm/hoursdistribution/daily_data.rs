@@ -26,7 +26,10 @@
 //! [`shifts_mut`](crate::entity::time_card::TimeCard::shifts_mut) when it is
 //! ready to write.
 
+use crate::entity::time_card::TimeCard;
+use date_range_rs::DateRange;
 use joda_rs::LocalDate;
+use std::collections::{HashMap, HashSet};
 
 /// One shift and the earnings attached to it.
 /// `TTuples.TTuple2<EmployeeShift, List<EmployeeEarning>>`.
@@ -98,6 +101,92 @@ impl DailyData {
     pub fn was_worked(&self) -> bool {
         !self.shifts.is_empty()
     }
+}
+
+/// `dailyDataProducer` — the week split into days, each with its standalone
+/// earnings and its shifts with theirs.
+///
+/// Divergence 49: Java writes this producer out twice, identically, as a
+/// private field of `CaliforniaOTHrsRuleImpl` and of
+/// `DailyWeekly7thDTHrsRuleImpl` — the same filter, the same partition, the
+/// same `ShiftStartTimeComparator` ordering. The two copies are byte-identical,
+/// so one function serves both and there is no second place for them to drift
+/// apart. `CaliforniaExtSpecialJobOTHrsRuleImpl` builds a **different** shape
+/// and does not use this.
+///
+/// The earnings are partitioned on whether they name a shift, so an earning
+/// reaches the arithmetic through exactly one of the two paths. That is what
+/// the Java spec's `an earning is not processed twice` turns on.
+pub fn build_daily_data_map(
+    time_card: &dyn TimeCard,
+    work_week: &DateRange,
+    configured_earning_type_ids: &HashSet<i32>,
+) -> HashMap<LocalDate, DailyData> {
+    // The index form of `getEarningsForPeriod`, filtered by
+    // `earningIsIncludedInRegularTypes.and(employeeJobStatusIsNotSalariedExemptForEarning)`.
+    // Java dereferences the job status unguarded; divergence 32 settled that a
+    // missing one excludes the record.
+    let mut standalone: HashMap<LocalDate, Vec<usize>> = HashMap::new();
+    let mut by_shift: HashMap<i32, Vec<usize>> = HashMap::new();
+
+    for (index, earning) in time_card.earnings().iter().enumerate() {
+        if !work_week.contains_date(earning.earning_date())
+            || !configured_earning_type_ids.contains(&earning.earning_type_id())
+            || !time_card.earning_is_not_salaried_exempt(earning)
+        {
+            continue;
+        }
+
+        match earning.shift_id() {
+            Some(shift_id) => by_shift.entry(shift_id).or_default().push(index),
+            None => standalone
+                .entry(earning.earning_date())
+                .or_default()
+                .push(index),
+        }
+    }
+
+    work_week
+        .dates()
+        .into_iter()
+        .map(|date| {
+            let shifts = build_shifts_for_date(time_card, date, &by_shift);
+            let data = DailyData::new(
+                date,
+                standalone.get(&date).cloned().unwrap_or_default(),
+                shifts,
+            );
+            (date, data)
+        })
+        .collect()
+}
+
+/// `buildShiftForDateMap` — the day's non-exempt shifts in start-time order,
+/// each paired with the earnings attached to it.
+///
+/// A shift appears under **every** date it has a distribution for, so an
+/// overnight shift is visited once per day it spans — and so are its earnings.
+fn build_shifts_for_date(
+    time_card: &dyn TimeCard,
+    date: LocalDate,
+    by_shift: &HashMap<i32, Vec<usize>>,
+) -> Vec<ShiftWithEarnings> {
+    let single_day = DateRange::new(date, date);
+
+    let mut indices = time_card.shift_indices_with_distributions_for_period(&single_day);
+    indices.retain(|&index| time_card.shift_is_not_salaried_exempt(&time_card.shifts()[index]));
+    // `ShiftStartTimeComparator`, which calls two shifts on the same date with
+    // no start time equal — so ties keep the card's own order, and the sort
+    // has to be stable.
+    indices.sort_by_key(|&index| time_card.shifts()[index].start_time_for_ordering());
+
+    indices
+        .into_iter()
+        .map(|index| {
+            let shift_id = time_card.shifts()[index].id();
+            ShiftWithEarnings::new(index, by_shift.get(&shift_id).cloned().unwrap_or_default())
+        })
+        .collect()
 }
 
 #[cfg(test)]

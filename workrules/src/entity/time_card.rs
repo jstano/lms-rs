@@ -82,6 +82,8 @@
 //! `DateRange::contains_date` exactly.
 
 use crate::common::enums::employee_calculation_mode::EmployeeCalculationMode;
+use crate::common::enums::pay_period_type::PayPeriodType;
+use crate::common::enums::schedule_mode::ScheduleMode;
 use crate::entity::calc_data_set_stat::CalcDataSetStat;
 use crate::entity::employee::Employee;
 use crate::entity::employee_earning::EmployeeEarning;
@@ -206,6 +208,18 @@ pub trait TimeCard {
     /// [`pay_period_containing`](Self::pay_period_containing) can walk from it
     /// to any other period.
     fn current_pay_period(&self) -> &DateRange;
+
+    /// How often the property's pay period closes.
+    /// `employee.getProperty().getPayPeriodType()`.
+    ///
+    /// Here for the same reason as [`current_pay_period`](Self::current_pay_period):
+    /// `Property` is reached by id in this port, and the two values only exist
+    /// to pick a [`ContractCalculator`](crate::common::contract::ContractCalculator).
+    fn pay_period_type(&self) -> PayPeriodType;
+
+    /// Whether the property schedules weekly or monthly.
+    /// `employee.getProperty().getScheduleMode()`.
+    fn schedule_mode(&self) -> ScheduleMode;
 
     // ---- identity ----------------------------------------------------------
 
@@ -570,6 +584,8 @@ pub struct TimeCardData {
     dataset_start_date: LocalDate,
     calculation_start_date: LocalDate,
     current_pay_period: DateRange,
+    pay_period_type: PayPeriodType,
+    schedule_mode: ScheduleMode,
 }
 
 impl Default for TimeCardData {
@@ -597,6 +613,10 @@ impl Default for TimeCardData {
             calculation_mode: EmployeeCalculationMode::Ta,
             dataset_start_date: LocalDate::of(1900, 1, 1),
             calculation_start_date: LocalDate::of(1900, 1, 1),
+            // `PayPeriodType` has no "unset"; weekly with a weekly schedule is
+            // the shape the punch families' fixtures already assume.
+            pay_period_type: PayPeriodType::Weekly,
+            schedule_mode: ScheduleMode::Weekly,
             current_pay_period: DateRange::new(
                 LocalDate::of(1900, 1, 1),
                 LocalDate::of(1900, 1, 14),
@@ -675,6 +695,19 @@ impl TimeCardData {
     pub fn with_calculation_start_date(mut self, date: LocalDate) -> Self {
         self.calculation_start_date = date;
         self.dataset_start_date = date.minus_days(10);
+        self
+    }
+
+    /// Set the property's pay period type and schedule mode, which together
+    /// pick a contract calculator.
+    #[must_use]
+    pub fn with_contract_periods(
+        mut self,
+        pay_period_type: PayPeriodType,
+        schedule_mode: ScheduleMode,
+    ) -> Self {
+        self.pay_period_type = pay_period_type;
+        self.schedule_mode = schedule_mode;
         self
     }
 
@@ -765,6 +798,14 @@ impl TimeCard for TimeCardData {
 
     fn calculation_start_date(&self) -> LocalDate {
         self.calculation_start_date
+    }
+
+    fn pay_period_type(&self) -> PayPeriodType {
+        self.pay_period_type
+    }
+
+    fn schedule_mode(&self) -> ScheduleMode {
+        self.schedule_mode
     }
 
     fn current_pay_period(&self) -> &DateRange {

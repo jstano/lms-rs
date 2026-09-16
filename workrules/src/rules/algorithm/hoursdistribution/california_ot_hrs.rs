@@ -101,16 +101,14 @@ use crate::rules::algorithm::hoursdistribution::config::{
     PAY_DT_PROP, PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT, WEEKLY_LIMIT_PROP,
 };
 use crate::rules::algorithm::hoursdistribution::daily_accumulator::DailyAccumulator;
-use crate::rules::algorithm::hoursdistribution::daily_data::{DailyData, ShiftWithEarnings};
+use crate::rules::algorithm::hoursdistribution::daily_data::build_daily_data_map;
 use crate::rules::algorithm::hoursdistribution::weekly_accumulator::WeeklyAccumulator;
 use crate::rules::algorithm::utility::hours_distribution_factory::create_premium_distribution;
 use crate::rules::ports::EmployeeEarningPort;
 use crate::rules::rule_config::RuleConfig;
 use crate::rules::types::earning_type_pay_set::EarningTypePaySet;
 use date_range_rs::DateRange;
-use joda_rs::LocalDate;
 use std::cell::RefCell;
-use std::collections::HashMap;
 
 /// Consecutive days worked before the daily limits change.
 /// `CaliforniaOTHrsRuleImpl.consecDaysLimit`, a `final` field.
@@ -197,7 +195,8 @@ impl<P: EmployeeEarningPort> HoursDistributionRule for CaliforniaOTHrsRule<P> {
             note: rule_item.name(),
         };
 
-        let daily_data_map = generate_daily_data_map(time_card, work_week, &pay_set);
+        let daily_data_map =
+            build_daily_data_map(time_card, work_week, &pay_set.configured_earning_type_ids());
 
         let mut weekly = WeeklyAccumulator::new(weekly_limit, CONSEC_DAYS_LIMIT, MAX_CONSEC_DAYS);
         weekly.set_premium_hours_count_towards_weekly_ot(premium_hours_count_towards_weekly_ot);
@@ -372,86 +371,6 @@ impl<P: EmployeeEarningPort> CaliforniaOTHrsRule<P> {
     }
 }
 
-/// `dailyDataProducer` — the week split into days, each with its standalone
-/// earnings and its shifts with theirs.
-///
-/// The earnings are partitioned on whether they name a shift, so an earning
-/// reaches the arithmetic through exactly one of the two paths. That is what
-/// the Java spec's `an earning is not processed twice` turns on.
-fn generate_daily_data_map(
-    time_card: &dyn TimeCard,
-    work_week: &DateRange,
-    pay_set: &EarningTypePaySet,
-) -> HashMap<LocalDate, DailyData> {
-    let configured = pay_set.configured_earning_type_ids();
-
-    // The index form of `getEarningsForPeriod`, filtered by
-    // `earningIsIncludedInRegularTypes.and(employeeJobStatusIsNotSalariedExemptForEarning)`.
-    // Java dereferences the job status unguarded; divergence 32 settled that a
-    // missing one excludes the record.
-    let mut standalone: HashMap<LocalDate, Vec<usize>> = HashMap::new();
-    let mut by_shift: HashMap<i32, Vec<usize>> = HashMap::new();
-
-    for (index, earning) in time_card.earnings().iter().enumerate() {
-        if !work_week.contains_date(earning.earning_date())
-            || !configured.contains(&earning.earning_type_id())
-            || !time_card.earning_is_not_salaried_exempt(earning)
-        {
-            continue;
-        }
-
-        match earning.shift_id() {
-            Some(shift_id) => by_shift.entry(shift_id).or_default().push(index),
-            None => standalone
-                .entry(earning.earning_date())
-                .or_default()
-                .push(index),
-        }
-    }
-
-    work_week
-        .dates()
-        .into_iter()
-        .map(|date| {
-            let shifts = build_shifts_for_date(time_card, date, &by_shift);
-            let data = DailyData::new(
-                date,
-                standalone.get(&date).cloned().unwrap_or_default(),
-                shifts,
-            );
-            (date, data)
-        })
-        .collect()
-}
-
-/// `buildShiftForDateMap` — the day's non-exempt shifts in start-time order,
-/// each paired with the earnings attached to it.
-///
-/// A shift appears under **every** date it has a distribution for, so an
-/// overnight shift is visited once per day it spans — and so are its earnings.
-fn build_shifts_for_date(
-    time_card: &dyn TimeCard,
-    date: LocalDate,
-    by_shift: &HashMap<i32, Vec<usize>>,
-) -> Vec<ShiftWithEarnings> {
-    let single_day = DateRange::new(date, date);
-
-    let mut indices = time_card.shift_indices_with_distributions_for_period(&single_day);
-    indices.retain(|&index| time_card.shift_is_not_salaried_exempt(&time_card.shifts()[index]));
-    // `ShiftStartTimeComparator`, which calls two shifts on the same date with
-    // no start time equal — so ties keep the card's own order, and the sort
-    // has to be stable.
-    indices.sort_by_key(|&index| time_card.shifts()[index].start_time_for_ordering());
-
-    indices
-        .into_iter()
-        .map(|index| {
-            let shift_id = time_card.shifts()[index].id();
-            ShiftWithEarnings::new(index, by_shift.get(&shift_id).cloned().unwrap_or_default())
-        })
-        .collect()
-}
-
 /// `computeDistributionHours` — the shift's non-premium distributions dated
 /// this day, in the order the shift holds them.
 fn compute_distribution_hours(
@@ -573,6 +492,7 @@ mod tests {
     use crate::rules::params::RuleParams;
     use crate::rules::rule_class::RuleClass;
     use crate::rules::types::earning_type_pay_map::EarningTypePayMap;
+    use joda_rs::LocalDate;
 
     pub(super) const JOB: i32 = 11;
     pub(super) const REGULAR: i32 = 1;
@@ -1025,6 +945,7 @@ mod java_parity_tests {
     use crate::common::enums::shift_type::ShiftType;
     use crate::entity::employee_shift::EmployeeShift;
     use crate::entity::time_card::TimeCardData;
+    use joda_rs::LocalDate;
 
     /// `static def today = LocalDate.now()`, pinned.
     fn day(offset: i64) -> LocalDate {

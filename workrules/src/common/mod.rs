@@ -1,4 +1,5 @@
 pub mod coded_enum;
+pub mod contract;
 pub mod dates;
 pub mod enums;
 pub mod json_ids;

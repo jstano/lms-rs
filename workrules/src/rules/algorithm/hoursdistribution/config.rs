@@ -312,6 +312,359 @@ impl RuleConfig for CaliforniaOTHrsRuleConfig {
     }
 }
 
+/// Consecutive days worked at which overtime starts.
+/// `DlyWklyOffConsecOTMinBreakRuleConfig.CONSEC_DAY_OT_LIMIT`.
+pub const CONSEC_DAY_OT_LIMIT: &str = "consecDayOtLimit";
+/// The minimum rest between two shifts; work inside it is overtime.
+/// `MIN_TIME_BETWEEN_SHIFTS`.
+pub const MIN_TIME_BETWEEN_SHIFTS: &str = "minTimeBetweenShifts";
+/// The most time between two shifts on one date for them still to count as a
+/// **split shift** rather than a rest violation. `DAILY_SPLIT_SHIFT_LIMIT`,
+/// spelled `dailyShiftSplitLimit` — note the constant and the key disagree
+/// about word order.
+pub const DAILY_SPLIT_SHIFT_LIMIT: &str = "dailyShiftSplitLimit";
+/// Whether the consecutive-day count is confined to this work week.
+/// `THIS_WEEK_ONLY` — a fourth spelling of the idea
+/// [`CONSEC_DAYS_IN_WEEK`] carries elsewhere, and a different key.
+pub const THIS_WEEK_ONLY: &str = "thisWeekOnly";
+/// Whether a day with no schedule pays every hour as overtime.
+/// `OT_ON_UNSCHED_DAY`.
+pub const OT_ON_UNSCHED_DAY: &str = "otOnUnschedDay";
+
+/// `DlyWklyOffConsecOTMinBreakRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DlyWklyOffConsecOTMinBreakRuleConfig;
+
+impl RuleConfig for DlyWklyOffConsecOTMinBreakRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::DwocotMinBrHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            DAILY_OT_LIMIT_PROP => "8.0",
+            DAILY_DT_LIMIT_PROP => "12.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            CONSEC_DAY_OT_LIMIT => "6",
+            MAX_CONSEC_DAYS_PD => "999",
+            MIN_TIME_BETWEEN_SHIFTS => "7.0",
+            DAILY_SPLIT_SHIFT_LIMIT => "3.0",
+            THIS_WEEK_ONLY => "false",
+            OT_ON_UNSCHED_DAY => "true",
+            EARNING_TYPES => "[]",
+            BOTH_CONSECUTIVE_AND_WEEKLY_OT => "false",
+        }
+    }
+}
+
+/// Hours in a day before overtime starts —
+/// `HoursDistributionConfigConstants.DAILY_OT_LIMIT_PROP`, spelled
+/// **`dailyOTLimit`**.
+///
+/// # Not [`DAILY_OT_LIMIT_PROP`]
+///
+/// Five rules in this family read `dailyOtLimit`; `MinHrsForFullTimeOT` reads
+/// `dailyOTLimit`, from a different constants class, and the two differ only in
+/// the case of one letter. The same is true of [`WEEKLY_OT_LIMIT_PROP_CAPS`]
+/// against [`WEEKLY_LIMIT_PROP`]. A property that copies a parameter from one
+/// rule to the other gets the default and no warning.
+pub const DAILY_OT_LIMIT_PROP_CAPS: &str = "dailyOTLimit";
+/// Hours in a week before overtime starts. `WEEKLY_OT_LIMIT_PROP`, spelled
+/// **`weeklyOTLimit`** — see the note on [`DAILY_OT_LIMIT_PROP_CAPS`].
+pub const WEEKLY_OT_LIMIT_PROP_CAPS: &str = "weeklyOTLimit";
+/// Whether consecutive-day overtime is switched on at all.
+/// `ENABLE_CONSEC_DAY_OT_PROP`.
+pub const ENABLE_CONSEC_DAY_OT_PROP: &str = "enableConsecDayOT";
+/// The consecutive-day counter's wrap point, less one. `MAX_CONSEC_DAYS_PAID_PROP`.
+pub const MAX_CONSEC_DAYS_PAID_PROP: &str = "maxConsecDaysPaid";
+/// Weekly hours at or under which an employee counts as part time, and is paid
+/// double time instead of overtime. `PART_TIME_ELIGIBILITY_LIMIT_PROP`.
+pub const PART_TIME_ELIGIBILITY_LIMIT_PROP: &str = "partTimeEligibilityLimit";
+/// The most double time a part-time employee may be paid in a week.
+/// `MAX_DT_PAID_PROP`.
+pub const MAX_DT_PAID_PROP: &str = "maxDTPaid";
+
+/// `MinHrsForFullTimeOTRuleConfig`.
+///
+/// The rule that pays **double time to part-timers and overtime to everyone
+/// else**, so its parameters come in two halves: the ordinary daily, weekly and
+/// consecutive-day limits, and the two that define part time.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MinHrsForFullTimeOTRuleConfig;
+
+impl RuleConfig for MinHrsForFullTimeOTRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::MinHrsFullTimeOtHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            EARNING_TYPE_PAY_SET => EarningTypePaySet::new().with_premium_levels(2).to_json_string(),
+            ENABLE_CONSEC_DAY_OT_PROP => "true",
+            CONSEC_DAYS_IN_WEEK => "true",
+            CONSEC_DAY_LIMIT => "7",
+            MAX_CONSEC_DAYS_PAID_PROP => "999",
+            DAILY_OT_LIMIT_PROP_CAPS => "8.0",
+            WEEKLY_OT_LIMIT_PROP_CAPS => "40.0",
+            PART_TIME_ELIGIBILITY_LIMIT_PROP => "28.0",
+            MAX_DT_PAID_PROP => "17.5",
+            BOTH_CONSECUTIVE_AND_WEEKLY_OT => "false",
+        }
+    }
+}
+
+/// The daily overtime limit for a special job on a special day.
+/// `CaliforniaExtSpecialJobOTHrsRuleConfig.SPEC_DAILY_OT_LIMIT_PROP`.
+pub const SPEC_DAILY_OT_LIMIT_PROP: &str = "specDailyOtLimit";
+/// The daily double-time limit for a special job on a special day.
+pub const SPEC_DAILY_DT_LIMIT_PROP: &str = "specDailyDtLimit";
+/// The weekly limit for a special job on a special day.
+pub const SPEC_WEEKLY_LIMIT_PROP: &str = "specWeeklyOtLimit";
+/// Which days of the week are special, as a JSON array of **Sunday-based** day
+/// numbers. `SPEC_DOW_PROP`.
+///
+/// Read through [`ids_from_json`](crate::common::json_ids::ids_from_json), not
+/// the swallowing parser, and compared against
+/// [`translate_dow_from_iso`](crate::common::dates::translate_dow_from_iso) of
+/// the date's ISO day.
+pub const SPEC_DOW_PROP: &str = "specDaysOfWeek";
+/// Which jobs are special, as a JSON array of `Assignment` ids. `SPEC_JOBS_PROP`.
+pub const SPEC_JOBS_PROP: &str = "specJobs";
+
+/// `CaliforniaExtSpecialJobOTHrsRuleConfig`.
+///
+/// Twelve parameters — the six ordinary limits and gates, plus a parallel set
+/// of three limits for a "special job on a special day" and the two lists that
+/// say which those are.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CaliforniaExtSpecialJobOTHrsRuleConfig;
+
+impl RuleConfig for CaliforniaExtSpecialJobOTHrsRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::CaExtSpJobHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            PAY_DT_PROP => "true",
+            DAILY_OT_LIMIT_PROP => "8.0",
+            DAILY_DT_LIMIT_PROP => "12.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            CONSEC_DAY_LIMIT => "7",
+            CONSEC_DAYS_IN_WEEK => "true",
+            SPEC_DAILY_OT_LIMIT_PROP => "8.0",
+            SPEC_DAILY_DT_LIMIT_PROP => "12.0",
+            SPEC_WEEKLY_LIMIT_PROP => "40.0",
+            SPEC_DOW_PROP => "[]",
+            SPEC_JOBS_PROP => "[]",
+            MAX_CONSEC_DAYS_PD => "999",
+        }
+    }
+
+    /// `validateProperties` — the same three limit constraints as the other
+    /// California configs, twice over, plus the two consecutive-day bounds.
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut results = ValidationResults::new();
+
+        let mut limits = |ot_key: &str, dt_key: &str, weekly_key: &str, label: &str| {
+            let daily_ot = params.double_at(ot_key);
+            let daily_dt = params.double_at(dt_key);
+
+            if daily_ot >= daily_dt {
+                results.push(format!(
+                    "The {label} Daily DT Limit must be greater than the {label} Daily OT Limit"
+                ));
+            }
+            if daily_ot <= 0.0 {
+                results.push(format!(
+                    "The {label} Daily OT Limit must be greater than zero"
+                ));
+            }
+            if params.double_at(weekly_key) <= daily_dt {
+                results.push(format!(
+                    "The {label} Weekly OT Limit must be greater than the {label} Daily DT Limit"
+                ));
+            }
+        };
+
+        limits(
+            DAILY_OT_LIMIT_PROP,
+            DAILY_DT_LIMIT_PROP,
+            WEEKLY_LIMIT_PROP,
+            "default",
+        );
+        limits(
+            SPEC_DAILY_OT_LIMIT_PROP,
+            SPEC_DAILY_DT_LIMIT_PROP,
+            SPEC_WEEKLY_LIMIT_PROP,
+            "special",
+        );
+
+        if params.int_at(CONSEC_DAY_LIMIT) < 0 {
+            results.push("The Consecutive Day Limit cannot be less than zero".to_string());
+        }
+        if params.int_at(MAX_CONSEC_DAYS_PD) <= 0 {
+            results.push("The Max Consecutive Days must be greater than zero".to_string());
+        }
+
+        results
+    }
+}
+
+/// Whether double time is paid for hours past the daily double-time limit on
+/// an ordinary day. `DailyWeekly7thDTHrsRuleConfig.PAY_DAILY_DT`.
+///
+/// Spelled `payDailyDT`, and **not** the same key as [`PAY_DT_PROP`]
+/// (`payDT`), which the two California rules read. It gates only the ordinary
+/// daily limit: the seventh consecutive day pays double time either way.
+pub const PAY_DAILY_DT: &str = "payDailyDT";
+
+/// `DailyWeekly7thDTHrsRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DailyWeekly7thDTHrsRuleConfig;
+
+impl RuleConfig for DailyWeekly7thDTHrsRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::Dw7dtHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            EARNING_TYPE_PAY_SET => EarningTypePaySet::new().with_premium_levels(2).to_json_string(),
+            DAILY_OT_LIMIT_PROP => "8.0",
+            DAILY_DT_LIMIT_PROP => "12.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            PAY_DAILY_DT => "true",
+        }
+    }
+
+    /// The same three constraints `CaliforniaOTHrsRuleConfig` expresses.
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut results = ValidationResults::new();
+
+        let daily_ot = params.double_at(DAILY_OT_LIMIT_PROP);
+        let daily_dt = params.double_at(DAILY_DT_LIMIT_PROP);
+
+        if daily_ot >= daily_dt {
+            results.push(
+                "The Daily DT Limit property must be greater than the Daily OT Limit property"
+                    .to_string(),
+            );
+        }
+        if daily_ot <= 0.0 {
+            results.push("The Daily OT Limit property must be greater than zero".to_string());
+        }
+        if params.double_at(WEEKLY_LIMIT_PROP) <= daily_dt {
+            results.push(
+                "The Weekly OT Limit property must be greater than the Daily DT Limit property"
+                    .to_string(),
+            );
+        }
+
+        results
+    }
+}
+
+/// The property's weekly contracted hours, which a
+/// [`ContractCalculator`](crate::common::contract::ContractCalculator) scales
+/// to one pay period. `ContractOTHrsRuleConfig.WEEKLY_CONTRACT_HOURS`.
+pub const WEEKLY_CONTRACT_HOURS: &str = "weeklyContractHours";
+
+/// `ContractOTHrsRuleConfig`.
+///
+/// It shares three of its four keys with `PerMonthOTHrsRuleConfig`
+/// (`homeDeptOnly`, `earningTypes`) and `HolidayDTHrsRuleConfig`
+/// (`holidayTypes`) — the same spellings, read the same way.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ContractOTHrsRuleConfig;
+
+impl RuleConfig for ContractOTHrsRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::ContractOtHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            HOME_DEPT_ONLY => "false",
+            EARNING_TYPES => "[]",
+            WEEKLY_CONTRACT_HOURS => "39.0",
+            HOLIDAY_TYPES_PROP => "[]",
+        }
+    }
+
+    /// `validateProperties` — one constraint, and it allows zero.
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut results = ValidationResults::new();
+
+        if params.double_at(WEEKLY_CONTRACT_HOURS) < 0.0 {
+            results.push("Weekly Contract Hours: res_gteZeroRuleValidation".to_string());
+        }
+
+        results
+    }
+}
+
+/// Hours worked inside a rolling 24-hour work day before overtime starts.
+/// `TwentyFourHourOTRuleConfig.EMPLOYEE_WORK_DAY_LIMIT_PROP`, spelled
+/// `twentyFourHourOtLimit`.
+pub const EMPLOYEE_WORK_DAY_LIMIT_PROP: &str = "twentyFourHourOtLimit";
+
+/// The hourly rate above which an employee stops earning work-day overtime.
+/// `RATE_THRESHOLD_PROP`.
+pub const RATE_THRESHOLD_PROP: &str = "rateThreshold";
+
+/// Whether the rate compared against the threshold is the FLSA regular rate
+/// rather than the employee's home job rate. `USE_FLSA_REGULAR_RATE_PROP` —
+/// note the capitalised spelling, `useFLSARegularRate`.
+pub const USE_FLSA_REGULAR_RATE_PROP: &str = "useFLSARegularRate";
+
+/// `TwentyFourHourOTRuleConfig`.
+///
+/// The threshold defaults to 99,999, which is to say the rate gate is off
+/// unless a property turns it on.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TwentyFourHourOTRuleConfig;
+
+impl RuleConfig for TwentyFourHourOTRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::TwentyFourHourHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            EMPLOYEE_WORK_DAY_LIMIT_PROP => "8.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            RATE_THRESHOLD_PROP => "99999.0",
+            USE_FLSA_REGULAR_RATE_PROP => "false",
+        }
+    }
+
+    /// `validateProperties`: the work-day limit above zero, the weekly limit
+    /// strictly above the work-day limit, and the rate threshold not negative.
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut results = ValidationResults::new();
+
+        let work_day_limit = params.double_at(EMPLOYEE_WORK_DAY_LIMIT_PROP);
+
+        if work_day_limit <= 0.0 {
+            results.push(
+                "The Twenty Four Hour OT Limit property must be greater than zero".to_string(),
+            );
+        }
+        if params.double_at(WEEKLY_LIMIT_PROP) <= work_day_limit {
+            results.push(
+                "The Weekly OT Limit property must be greater than the Twenty Four Hour OT Limit property"
+                    .to_string(),
+            );
+        }
+        if params.double_at(RATE_THRESHOLD_PROP) < 0.0 {
+            results.push("The Rate Threshold property cannot be less than zero".to_string());
+        }
+
+        results
+    }
+}
+
 /// The shortest shift eligible for scheduled-shift overtime, in hours.
 /// `ScheduledShiftOTRuleConfig.MIN_SHIFT_LENGTH_PROP`.
 pub const MIN_SHIFT_LENGTH_PROP: &str = "minShiftLength";
@@ -451,6 +804,7 @@ impl RuleConfig for WeeklyOTSecJobHrsRuleConfig {
 mod tests {
     use super::*;
     use crate::common::json_ids::ids_for_key;
+    use rstest::rstest;
 
     #[test]
     fn the_regular_hours_only_config_has_no_parameters() {
@@ -628,6 +982,73 @@ mod tests {
                 .validate(&weekly_below_daily_dt)
                 .len(),
             1
+        );
+    }
+
+    #[test]
+    fn the_contract_config_defaults_to_thirty_nine_weekly_hours() {
+        let defaults = ContractOTHrsRuleConfig.default_values();
+
+        assert_eq!(defaults.double_at(WEEKLY_CONTRACT_HOURS), 39.0);
+        assert!(!defaults.bool_at(HOME_DEPT_ONLY));
+        assert!(ids_for_key(EARNING_TYPES, &defaults).is_empty());
+        assert!(ids_for_key(HOLIDAY_TYPES_PROP, &defaults).is_empty());
+    }
+
+    #[test]
+    fn the_contract_hours_may_be_zero_but_not_negative() {
+        let with_hours = |hours: &str| {
+            let mut params = ContractOTHrsRuleConfig.default_values();
+            params.set(WEEKLY_CONTRACT_HOURS, hours);
+            ContractOTHrsRuleConfig.validate(&params)
+        };
+
+        assert!(with_hours("39.0").is_empty());
+        assert!(
+            with_hours("0.0").is_empty(),
+            "the test is `< 0`, not `<= 0`"
+        );
+        assert_eq!(with_hours("-1.0").len(), 1);
+    }
+
+    /// `TwentyFourHourOTRuleConfigTest.groovy`'s `testGetDefaultValues`.
+    #[test]
+    fn test_get_default_values() {
+        let defaults = TwentyFourHourOTRuleConfig.default_values();
+
+        assert_eq!(defaults.get(EMPLOYEE_WORK_DAY_LIMIT_PROP), Some("8.0"));
+        assert_eq!(defaults.get(WEEKLY_LIMIT_PROP), Some("40.0"));
+        assert_eq!(defaults.get(RATE_THRESHOLD_PROP), Some("99999.0"));
+        assert_eq!(defaults.get(USE_FLSA_REGULAR_RATE_PROP), Some("false"));
+    }
+
+    /// The same spec's `testValidateProperties`, all six rows. Its
+    /// `testGetProperties` case is the l2fprod UI half, which this module does
+    /// not port; `testRuleClass` and `testName` are covered by the catalogue.
+    #[rstest]
+    #[case("8", "40", "0", false, "no errors")]
+    #[case("0", "40", "0", true, "twenty four hour limit is zero")]
+    #[case("-1", "40", "0", true, "twenty four hour limit is less than zero")]
+    #[case("8", "8", "0", true, "weekly limit is equal to the 24 hour limit")]
+    #[case("8", "7", "0", true, "weekly limit is less than the 24 hour limit")]
+    #[case("8", "40", "-1", true, "rate threshold less than zero")]
+    fn test_validate_properties(
+        #[case] work_day_limit: &str,
+        #[case] weekly_limit: &str,
+        #[case] rate_threshold: &str,
+        #[case] has_errors: bool,
+        #[case] scenario: &str,
+    ) {
+        let params = rule_params! {
+            EMPLOYEE_WORK_DAY_LIMIT_PROP => work_day_limit,
+            WEEKLY_LIMIT_PROP => weekly_limit,
+            RATE_THRESHOLD_PROP => rate_threshold,
+        };
+
+        assert_eq!(
+            !TwentyFourHourOTRuleConfig.validate(&params).is_empty(),
+            has_errors,
+            "{scenario}"
         );
     }
 
