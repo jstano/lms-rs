@@ -4,3 +4,9 @@ version = "1.0.0"
 edition = "2024"
 
 [dependencies]
+joda_rs = "0.2.0"
+date_range_rs = "0.2.0"
+serde_json = "1.0"
+
+[dev-dependencies]
+rstest = "0.26.1"

@@ -1142,6 +1142,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "workrules"
+version = "1.0.0"
+dependencies = [
+ "date_range_rs",
+ "joda_rs",
+ "rstest",
+ "serde_json",
+]
+
+[[package]]
 name = "wyz"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

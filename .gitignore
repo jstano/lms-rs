@@ -6,3 +6,10 @@ target
 build
 out
 !.gitkeep
+
+# Java ground truth: `taps` is a symlink to an external checkout, and the two
+# java/ directories are convenience copies of it (workrules/java/ has known
+# drift — see workrules/src/PARITY_AUDIT.md).
+taps
+planner/java/
+workrules/java/
