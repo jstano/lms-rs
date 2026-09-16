@@ -10,8 +10,16 @@
 //! [`EarningSource::Rule`](crate::common::enums::earning_source::EarningSource::Rule)
 //! and records the rule item that made it, which is how later rules tell their
 //! own output apart from hand-entered or imported earnings.
+//!
+//! # The money is recomputed on every write
+//!
+//! `setHours`, `setRate` and `setDollars` each end in
+//! `calcAndSetTotalDollars()`, so `totalDollars` is never stale — the same
+//! shape as `HoursDistribution.setHours` recomputing `totalCosts`. Only
+//! `setTotalDollars` writes the field on its own.
 
 use crate::common::enums::earning_source::EarningSource;
+use crate::common::numbers::round_display_currency;
 use joda_rs::LocalDate;
 
 /// An amount owed to an employee. `EmployeeEarning`.
@@ -73,6 +81,17 @@ impl EmployeeEarning {
         self.rule_item_id = Some(rule_item_id);
         self.shift_id = shift_id;
         self.source = EarningSource::Rule;
+        self
+    }
+
+    /// Attach the earning to a shift. `setShift()`.
+    ///
+    /// An earning may stand on its own — a holiday or a bonus — or hang off the
+    /// shift that produced it. `CaliforniaOTHrsRuleImpl` partitions the card's
+    /// earnings on exactly this, so that each one reaches its arithmetic once.
+    #[must_use]
+    pub fn with_shift(mut self, shift_id: i32) -> Self {
+        self.shift_id = Some(shift_id);
         self
     }
 
@@ -146,19 +165,36 @@ impl EmployeeEarning {
         &self.note
     }
 
-    /// `setHours()`.
+    /// `setHours()`, which recomputes the total.
     pub fn set_hours(&mut self, hours: f64) {
         self.hours = hours;
+        self.calc_and_set_total_dollars();
     }
 
-    /// `setRate()`.
+    /// `setRate()`, which recomputes the total.
     pub fn set_rate(&mut self, rate: f64) {
         self.rate = rate;
+        self.calc_and_set_total_dollars();
     }
 
-    /// `setDollars()`.
+    /// `setDollars()`, which recomputes the total.
     pub fn set_dollars(&mut self, dollars: f64) {
         self.dollars = dollars;
+        self.calc_and_set_total_dollars();
+    }
+
+    /// `calcAndSetTotalDollars()`.
+    ///
+    /// ```java
+    /// setTotalDollars(TDouble.roundDisplayCurrency(TDouble.roundDisplayCurrency(hours * rate) + dollars));
+    /// ```
+    ///
+    /// Note the inner rounding: the hourly part is taken to cents *before* the
+    /// flat dollars are added, so the two halves cannot compound a half-cent
+    /// between them.
+    pub fn calc_and_set_total_dollars(&mut self) {
+        self.total_dollars =
+            round_display_currency(round_display_currency(self.hours * self.rate) + self.dollars);
     }
 
     /// `setTotalDollars()`.
@@ -241,7 +277,38 @@ mod tests {
 
         assert_eq!(e.hours(), 4.0);
         assert_eq!(e.dollars(), 80.0);
-        assert_eq!(e.total_dollars(), 80.0);
+        assert_eq!(
+            e.total_dollars(),
+            80.0,
+            "the explicit write wins, as it is last"
+        );
         assert_eq!(e.note(), "adjusted");
+    }
+
+    #[test]
+    fn writing_hours_rate_or_dollars_recomputes_the_total() {
+        let mut e = earning();
+        assert_eq!(e.total_dollars(), 0.0, "new() does not compute it");
+
+        e.set_hours(4.0);
+        assert_eq!(e.total_dollars(), 50.0, "4 * 12.50");
+
+        e.set_rate(20.0);
+        assert_eq!(e.total_dollars(), 80.0);
+
+        e.set_dollars(5.0);
+        assert_eq!(e.total_dollars(), 85.0);
+    }
+
+    #[test]
+    fn the_hourly_part_is_rounded_to_cents_before_the_dollars_are_added() {
+        // roundDisplayCurrency(roundDisplayCurrency(hours * rate) + dollars):
+        // 3 * 0.125 is 0.375, which becomes 0.38 and not 0.375 + 0.004.
+        let mut e = earning();
+        e.set_rate(0.125);
+        e.set_hours(3.0);
+        e.set_dollars(0.004);
+
+        assert_eq!(e.total_dollars(), 0.38);
     }
 }

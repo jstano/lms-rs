@@ -28,6 +28,7 @@ use crate::rule_params;
 use crate::rules::params::RuleParams;
 use crate::rules::rule_class::RuleClass;
 use crate::rules::rule_config::{RuleConfig, ValidationResults};
+use crate::rules::types::earning_type_pay_set::EarningTypePaySet;
 
 /// Which holiday types pay double time. `HolidayDTHrsRuleConfig.HOLIDAY_TYPES_PROP`.
 ///
@@ -234,6 +235,80 @@ impl RuleConfig for CaliforniaExtendedOTHrsRuleConfig {
             // Put twice in Java; this is the one that wins.
             PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT => "true",
         }
+    }
+}
+
+/// Which earning types a rule treats as regular, and what it pays their
+/// premium hours against.
+/// `HoursDistributionRuleWithPayMappingsConfig.EARNING_TYPE_PAY_SET`.
+///
+/// An [`EarningTypePaySet`] serialized as JSON. The intermediate base seeds it
+/// with an **empty** pay set carrying only the concrete config's
+/// `getPremiumLevels()`, so a rule that filters earnings through it touches
+/// none of them until a property configures one.
+///
+/// [`EarningTypePaySet`]: crate::rules::types::earning_type_pay_set::EarningTypePaySet
+pub const EARNING_TYPE_PAY_SET: &str = "earningTypePaySet";
+
+/// `CaliforniaOTHrsRuleConfig`.
+///
+/// The first ported config to extend
+/// `HoursDistributionRuleWithPayMappingsConfig`, whose one contribution is
+/// [`EARNING_TYPE_PAY_SET`] defaulted from `getPremiumLevels()` — `2` here,
+/// overtime and double time.
+///
+/// # Its consecutive-day limits are not parameters
+///
+/// `CaliforniaExtendedOTHrsRuleConfig` above exposes `consecDayLimit` and
+/// `maxConsecDaysPd`; this one does not. `CaliforniaOTHrsRuleImpl` hardcodes
+/// them as `final` fields — 7 and 36500 — so there is nothing to configure and
+/// no key to declare.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct CaliforniaOTHrsRuleConfig;
+
+impl RuleConfig for CaliforniaOTHrsRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::CaliforniaHdr
+    }
+
+    /// Java's order, the inherited pay set first. No key is put twice here,
+    /// unlike the extended config above.
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            EARNING_TYPE_PAY_SET => EarningTypePaySet::new().with_premium_levels(2).to_json_string(),
+            PAY_DT_PROP => "true",
+            DAILY_OT_LIMIT_PROP => "8.0",
+            DAILY_DT_LIMIT_PROP => "12.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT => "true",
+        }
+    }
+
+    /// `validateProperties` — the three limits must nest.
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut results = ValidationResults::new();
+
+        let daily_ot = params.double_at(DAILY_OT_LIMIT_PROP);
+        let daily_dt = params.double_at(DAILY_DT_LIMIT_PROP);
+        let weekly = params.double_at(WEEKLY_LIMIT_PROP);
+
+        if daily_ot >= daily_dt {
+            results.push(
+                "The Daily OT Limit property must be less than the Daily DT Limit property"
+                    .to_string(),
+            );
+        }
+        if daily_ot <= 0.0 {
+            results.push("The Daily OT Limit property must be greater than zero".to_string());
+        }
+        if weekly <= daily_dt {
+            results.push(
+                "The Weekly OT Limit property must be greater than the Daily DT Limit property"
+                    .to_string(),
+            );
+        }
+
+        results
     }
 }
 
@@ -483,6 +558,77 @@ mod tests {
         assert_eq!(defaults.int_at(CONSEC_DAY_LIMIT), 7);
         assert_eq!(defaults.int_at(MAX_CONSEC_DAYS_PD), 999);
         assert!(!defaults.bool_at(CONVERT_ALL_OT_TO_DT));
+    }
+
+    #[test]
+    fn the_plain_california_config_shares_the_same_limits() {
+        let defaults = CaliforniaOTHrsRuleConfig.default_values();
+
+        assert_eq!(defaults.double_at(DAILY_OT_LIMIT_PROP), 8.0);
+        assert_eq!(defaults.double_at(DAILY_DT_LIMIT_PROP), 12.0);
+        assert_eq!(defaults.double_at(WEEKLY_LIMIT_PROP), 40.0);
+        assert!(defaults.bool_at(PAY_DT_PROP));
+        assert!(defaults.bool_at(PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT));
+    }
+
+    #[test]
+    fn it_declares_no_consecutive_day_parameters() {
+        // CaliforniaOTHrsRuleImpl hardcodes 7 and 36500 as final fields, so
+        // unlike the extended config there is nothing to configure.
+        let defaults = CaliforniaOTHrsRuleConfig.default_values();
+
+        assert!(!defaults.contains(CONSEC_DAY_LIMIT));
+        assert!(!defaults.contains(MAX_CONSEC_DAYS_PD));
+        assert!(!defaults.contains(CONSEC_DAYS_IN_WEEK));
+    }
+
+    #[test]
+    fn its_pay_set_defaults_to_two_premium_levels_and_no_mappings() {
+        // The one thing HoursDistributionRuleWithPayMappingsConfig contributes.
+        // An empty mapping set is what silences the rule's earnings half.
+        let defaults = CaliforniaOTHrsRuleConfig.default_values();
+        let pay_set =
+            EarningTypePaySet::from_json_string(defaults.get(EARNING_TYPE_PAY_SET).unwrap());
+
+        assert_eq!(pay_set.premium_levels(), 2);
+        assert!(pay_set.configured_earning_type_ids().is_empty());
+    }
+
+    #[test]
+    fn the_california_limits_must_nest() {
+        let valid = CaliforniaOTHrsRuleConfig.default_values();
+        assert!(CaliforniaOTHrsRuleConfig.validate(&valid).is_empty());
+
+        let mut daily_ot_above_dt = CaliforniaOTHrsRuleConfig.default_values();
+        daily_ot_above_dt.set(DAILY_OT_LIMIT_PROP, "16.0");
+        assert_eq!(
+            CaliforniaOTHrsRuleConfig.validate(&daily_ot_above_dt).len(),
+            1
+        );
+
+        let mut daily_ot_at_zero = CaliforniaOTHrsRuleConfig.default_values();
+        daily_ot_at_zero.set(DAILY_OT_LIMIT_PROP, "0.0");
+        assert_eq!(
+            CaliforniaOTHrsRuleConfig.validate(&daily_ot_at_zero).len(),
+            1,
+            "zero is still below the twelve-hour double-time limit"
+        );
+
+        // One parameter can trip more than one constraint: both limits at zero
+        // is not above zero *and* not below the double-time limit.
+        let mut both_at_zero = CaliforniaOTHrsRuleConfig.default_values();
+        both_at_zero.set(DAILY_OT_LIMIT_PROP, "0.0");
+        both_at_zero.set(DAILY_DT_LIMIT_PROP, "0.0");
+        assert_eq!(CaliforniaOTHrsRuleConfig.validate(&both_at_zero).len(), 2);
+
+        let mut weekly_below_daily_dt = CaliforniaOTHrsRuleConfig.default_values();
+        weekly_below_daily_dt.set(WEEKLY_LIMIT_PROP, "12.0");
+        assert_eq!(
+            CaliforniaOTHrsRuleConfig
+                .validate(&weekly_below_daily_dt)
+                .len(),
+            1
+        );
     }
 
     #[test]

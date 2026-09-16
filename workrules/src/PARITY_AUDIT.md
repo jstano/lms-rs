@@ -35,13 +35,13 @@ see "Test backing" below for why.
 | 1 | `punchvalidation` — 4 of 4 rules | **done** |
 | 3 | `hoursdistribution` — `TimeCard` surface | **done** |
 | 3 | `hoursdistribution` — the six shared helpers | **done** |
-| 3 | `hoursdistribution` — 10 of 19 rules | **in progress** — see below |
+| 3 | `hoursdistribution` — 11 of 19 rules | **in progress** — see below |
 | 1+ | the other 29 families | not started |
 
 ## Where the work stands
 
-**987 tests, 205 of them transcribed Java assertions.** Clippy clean, `cargo fmt`
-clean.
+**1,028 tests, 211 of them transcribed Java assertions.** Clippy clean,
+`cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
 config machinery, resolution, dispatch, eleven entities, and both
@@ -55,7 +55,7 @@ something does.**
 ### `hoursdistribution` — where to pick up
 
 Done: the `TimeCard` surface, all six shared helpers, all four DAO ports the
-family needs (plus `MinWagePort`, divergence 38), and **10 of 19 rules**.
+family needs (plus `MinWagePort`, divergence 38), and **11 of 19 rules**.
 
 | Ported | Java spec cases |
 |---|---:|
@@ -69,6 +69,7 @@ family needs (plus `MinWagePort`, divergence 38), and **10 of 19 rules**.
 | `RollingXWeeksOTHrs` | 3/3 |
 | `DailyWeekly6thDayOT7thDayDTNonConsec` | 3/3 |
 | `PerMonthOTHrs` | 5/5 |
+| `CaliforniaOTHrs` | 6/6 |
 
 **Every ported rule passed its Groovy spec on the first run.**
 `CaliforniaExtendedOTHrs` is the one that matters most for confidence: its
@@ -76,25 +77,31 @@ twelve-case spec exercises both accumulators and `PriorDaysCalculator` end to
 end, so the helper layer is validated against Java rather than only against a
 reading of it.
 
-**Remaining nine, in the size order this port has been following** — smallest
+`CaliforniaOTHrs` was billed here as "the only user of the shared `DailyData`",
+which undersold it: it is also the **first rule in the tree to write earnings**,
+and brought `EarningTypePaySet`, a mutable earnings accessor on `TimeCard` and
+`EmployeeEarning`'s money recomputation with it. Anything reached for by the
+remaining rules should be measured the same way before it is scheduled.
+
+**Remaining eight, in the size order this port has been following** — smallest
 first, because the large ones are variants that build on the accumulators:
 
-1. `CaliforniaOTHrs` (254 lines) — **next**. The only user of the shared
-   [`DailyData`], so that helper finally gets exercised. Uses
-   `WeeklyAccumulator.updateConsecutiveDays(DailyData)`, the middle overload
-   that does *not* wrap at the modifier.
-2. `TwentyFourHourOT` (284) — reads the FLSA map, like `WeeklyOTHrs`.
-3. `ContractOTHrs` (324) — the second `ContractHrsRule`, and the only writer of
+1. `TwentyFourHourOT` (284) — **next**. Reads the FLSA map, like `WeeklyOTHrs`.
+2. `ContractOTHrs` (324) — the second `ContractHrsRule`, and the only writer of
    `CalcDataSetStat` (three of the five constants).
-4. `DailyWeekly7thDTHrs` (366)
-5. `CaliforniaExtSpecialJobOTHrs` (414) — **declares its own inner `DailyData`**
-   with a different constructor; do not port it against the shared one.
-6. `MinHrsForFullTimeOT` (430) — the only user of `EarningMapper` and
+3. `DailyWeekly7thDTHrs` (366)
+4. `CaliforniaExtSpecialJobOTHrs` (414) — **declares its own inner `DailyData`**
+   with a different constructor; do not port it against the shared one. Its
+   config also extends `HoursDistributionRuleWithPayMappingsConfig`, so
+   [`EarningTypePaySet`] is already there for it.
+5. `MinHrsForFullTimeOT` (430) — the only user of `EarningMapper` and
    `ConsecutiveDaysCalculator`; also reads `BOTH_CONSECUTIVE_AND_WEEKLY_OT` into
    a field of its own.
-7. `DlyWklyOffConsecOTMinBreak` (439)
-8. `DailyWeekly6thOT7thDTHrs` (451)
-9. `DlyWklyConsecOTMinBreakSpanningMidnight` (456)
+6. `DlyWklyOffConsecOTMinBreak` (439)
+7. `DailyWeekly6thOT7thDTHrs` (451)
+8. `DlyWklyConsecOTMinBreakSpanningMidnight` (456)
+
+[`EarningTypePaySet`]: rules/types/earning_type_pay_set.rs
 
 `ShiftDifferenceOTRuleImpl` exists as a twentieth `*RuleImpl` but has no
 catalogue entry; it is deferred with the rules.
@@ -114,7 +121,7 @@ resolves anywhere in the file.
 | 19–20 | Wave 1 — punchvalidation |
 | 21–27 | The `TimeCard` surface |
 | 28–32 | The shared helpers |
-| 33–41 | Rules |
+| 33–44 | Rules |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -196,7 +203,7 @@ see divergence 38's `MinWagePort`.
 week, and `FlsaData` for the two `getFlsaDataMap` call sites. Both are now
 settled — see below.
 
-## Rules — 10 of 19
+## Rules — 11 of 19
 
 | Rust | Java | Ported cases |
 |---|---|---:|
@@ -210,8 +217,13 @@ settled — see below.
 | `…/rolling_x_weeks_ot_hrs.rs` | `RollingXWeeksOTHrsRuleImpl` | **3/3** |
 | `…/daily_weekly_6th_ot_7th_dt_non_consec.rs` | `DailyWeekly6thDayOT7thDayDTNonConsecRuleImpl` | **3/3** |
 | `…/per_month_ot_hrs.rs` | `PerMonthOTHrsRuleImpl` | **5/5** |
+| `…/california_ot_hrs.rs` | `CaliforniaOTHrsRuleImpl` | **6/6** |
 | `…/mod.rs` — `ContractHrsRule` | `ContractHrsRuleImpl` | — |
-| `…/config.rs` | `HoursDistributionRuleConfig` + the ten rules' configs | — |
+| `…/config.rs` | `HoursDistributionRuleConfig` + the eleven rules' configs | — |
+| `rules/types/earning_type_pay_set.rs` | `EarningTypePaySet` | — |
+| `rules/types/earning_type_pay_map.rs` | `EarningTypePayMap` | — |
+| `entity/time_card.rs` — `earnings_mut`, `earning_is_not_salaried_exempt` | the live `getEarnings()` list, `…IsNotSalariedExemptForEarning` | — |
+| `entity/employee_earning.rs` — `calc_and_set_total_dollars`, `with_shift` | the same | — |
 | `rules/ports.rs` — `EmployeeShiftPort::net_and_ot_hours_for_period` | `getNetAndOTHoursForPeriod` | — |
 | `rules/ports.rs` — `MinWagePort` | `Employee.getMinWage`'s entity walk | — |
 | `algorithm/utility/hours_distribution_factory.rs` | `HoursDistributionFactory` | — |
@@ -244,6 +256,90 @@ rewrites, so it arrives `&mut` and reads go through the index primitives.
   `original_hours` equal to `hours`, which is right for a fresh regular row and
   wrong here, so the factory builds the struct field by field. Pinned by
   `a_premium_distribution_has_zero_original_hours`.
+
+- **`CaliforniaOTHrs` cannot pay weekly overtime under its own defaults.** It
+  never calls `weeklyAccumulator.setOriginalHours(...)`, where the extended
+  sibling calls it before every `computeWeeklyOT`. So `originalHours` stays at
+  zero, and the formula `premiumHoursCountTowardsWeeklyOT` selects —
+  `min(hours - weeklyLimit, originalHours)` — can only return zero. That flag's
+  default is `"true"`. A property gets weekly overtime out of this rule only by
+  setting it `false`, which switches to `hours - weeklyLimit - weeklyOT`. The
+  Groovy agrees: its one weekly case sets the flag explicitly and would assert
+  nothing without it. Pinned both ways by
+  `the_weekly_limit_pays_nothing_under_the_default_formula`. Daily overtime and
+  double time are unaffected.
+
+  This is the same accumulator and the same flag as divergence-free
+  `CaliforniaExtendedOTHrs`, which *does* call the setter — so the two
+  California rules read the identical parameter and get opposite behaviour from
+  it. Neither the config nor the spec says so.
+
+- **Its consecutive-day limits are `final` fields, not parameters, and prior
+  weeks are not seeded.** `consecDaysLimit = 7` and `maxConsecDays = 36500` are
+  hardcoded, so `CaliforniaOTHrsRuleConfig` declares no key for either — where
+  the extended config exposes both. And it calls
+  `updateConsecutiveDays(DailyData)`, the middle overload, which resets on an
+  unworked day and increments otherwise but **never wraps at the modifier**; so
+  `maxConsecDays` only ever feeds a modifier nothing consults. There is no
+  `PriorDaysCalculator` call either, so the counter starts at zero on every
+  `execute` and the seventh-day rule fires only for seven days worked inside the
+  work week. Pinned by `prior_weeks_do_not_seed_the_consecutive_day_counter`.
+
+- **The earnings half of a rule is opt-in, and silent by default.** Only
+  earnings whose type appears in the `earningTypePaySet` parameter are
+  considered, and `HoursDistributionRuleWithPayMappingsConfig` defaults that to
+  a pay set with **no mappings at all** — only `premiumLevels`. So a property
+  that has not configured one gets the distribution half of `CaliforniaOTHrs`
+  and none of the earning half, with nothing anywhere reporting it. The Groovy
+  supplies a pay set in every case, so the default path is untested in Java.
+
+- **A premium earning is paid by adding three rows, not by editing one.** The
+  source earning is left exactly as it was; the rule writes a **negative earning
+  at the original type** cancelling the premium hours, then the premium hours
+  back at the overtime and double-time types. The same instinct as
+  `HolidayDTHrs` zeroing its regular row rather than removing it — the reader
+  can still see where the hours came from — and the same carve-out arithmetic:
+  the double-time row takes `shiftDT` and the overtime row the remainder.
+
+- **An earning reaches the arithmetic through exactly one of two paths.**
+  `dailyDataProducer` partitions the week's earnings on `getShift() != null`:
+  the ones naming a shift are processed with that shift, the rest as the day's
+  standalone earnings. That partition is the whole content of the spec case
+  `an earning is not processed twice`. Note the consequence for an overnight
+  shift, which appears under every date it distributes into: **its earnings are
+  processed once per day it spans**, since they hang off the shift rather than
+  off a date.
+
+- **`getPremiumEarningTypeID` returns `0` for an unmapped regular type**, and
+  the Java caller hands that straight to `earningTypeDAO.findByID(0)`, which
+  finds nothing — so the premium earning is created against **no earning type at
+  all** rather than not created. Reproduced. Its other failure throws; see
+  divergence 44.
+
+- **`payLevelMap` is assigned in `initParameters` and never read.** The third
+  dead field in the family, after `setBothConsecutiveAndWeeklyOt`'s and
+  `PayPeriodOTHrsRuleImpl`'s unused `EmployeeShiftDAO`. Ported as
+  `EarningTypePaySet::pay_level_map` because it is the type's API rather than
+  the rule's, and noted as dead on both.
+
+- **`EmployeeEarning`'s setters recompute `totalDollars`, and the port was not
+  doing it.** `setHours`, `setRate` and `setDollars` each end in
+  `calcAndSetTotalDollars()` —
+  `roundDisplayCurrency(roundDisplayCurrency(hours * rate) + dollars)`, with the
+  hourly part taken to cents *before* the flat dollars are added. The same shape
+  as `HoursDistribution.setHours` recomputing `totalCosts`, which this file
+  already recorded as settled; the earning entity had been ported before
+  anything wrote to it, so the callback was missing. Fixed and pinned.
+
+- **`CaliforniaOTHrsRuleImplSpec` is weaker than it looks in two of its six
+  cases.** `spanning shifts hours in the previous period are not counted to the
+  ot threshold` and `an earning is not processed twice` assert only
+  `hoursDistributions.size()` and `earnings.size()`. The first is load-bearing
+  in a way its author may not have intended: its week totals **exactly** forty
+  hours against a forty-hour limit, so it passes only because
+  `hours - weeklyLimit` is strict. Both transcriptions assert the hours beside
+  the counts. Fourth spec-weakness of this kind in the family. The file is also
+  named `…Test.groovy` while the class inside it is `…Spec`.
 
 - **`HolidayDTHrs` zeroes the regular row rather than removing it.** The shift
   ends up holding both — a zero-hour regular distribution and a full double-time
@@ -652,6 +748,45 @@ rewrites, so it arrives `&mut` and reads go through the index primitives.
     turns out to build a `ScheduleCalcDataSet` in `TA` mode, split the struct
     in two rather than widening this.
 
+42. **A rule-written earning's note is the rule item's name alone.** Java writes
+    `ruleItem.getRuleSet().getName() + " - " + ruleItem.getName()`. `RuleItem`
+    here carries only `rule_set_id` — `RuleSet` owns its items and not the
+    reverse — so the set's name is not reachable from the rule. Nothing in the
+    rules tree reads a note back; it is display text on a pay register.
+
+    Rejected: denormalizing the set name onto `RuleItem`, which changes a
+    constructor every ported rule's tests already call, and widening
+    `HoursDistributionRule::execute` to take the owning `RuleSet`, which changes
+    the trait for all 19 rules to carry one string.
+
+    **When to revisit:** if anything parses a note, or if a second write site
+    needs the set name, put the name on `RuleItem` rather than spreading the
+    divergence.
+
+43. **`earningTypeDAO.findByID` is not called when creating an earning.** Java
+    looks the `EarningType` entity up purely to hand it to
+    `newEarning.setEarningType(...)`. `EmployeeEarning` here holds
+    `earning_type_id: i32`, so the id that
+    `EarningTypePaySet::premium_earning_type_id` already returned is written
+    straight through and the round trip has no work to do. `EarningTypePort`
+    stays defined for the callers that want the entity.
+
+    This is why `CaliforniaOTHrsRule` takes one port where Java autowires two.
+
+44. **A premium level past the configured list is `0`, not a throw.**
+    `getPremiumEarningTypeID` indexes
+    `payMap.getPremiumEarningTypeIDs().get(premiumLevel)` directly, so a pay map
+    that configures overtime and not double time throws
+    `IndexOutOfBoundsException` the first time anybody works past the
+    double-time limit — a live configuration failing on some days and not
+    others. Returning `0` makes it behave like the unmapped-type case Java
+    already returns `0` for, which is divergence 20, 32 and 37's call again.
+    Pinned by `a_level_past_the_configured_premiums_is_zero_not_a_panic`.
+
+    Malformed pay-set JSON is the opposite call and **does** panic, matching
+    `RuleParams::int_at` (divergence 9): that is a corrupt parameter rather than
+    a coherent one with a gap in it. Both spellings are documented on the type.
+
 ## The shared helpers — done
 
 | Rust | Java | Used by |
@@ -679,6 +814,13 @@ All passed on the first run of their helper. The two accumulators and
 `DailyData` have no Java spec of their own; they are covered only indirectly,
 through the rule specs that have not been ported yet, so their tests here were
 written against the Java source by reading it.
+
+**`DailyData` now has a caller.** It was ported ahead of its only user and sat
+unconstructed until `CaliforniaOTHrs`; that rule's six transcribed cases are the
+first Java-backed evidence that the struct and
+`update_consecutive_days_for_day` are right. `DailyData::was_worked` reading the
+shifts and not the earnings is exercised by
+`an_earning_only_day_breaks_the_consecutive_day_run`.
 
 Two adjustments to the transcriptions, neither touching what is asserted. The
 Groovy drives the dataset start date through a mocked `PayGroup` —
@@ -811,6 +953,8 @@ reads.
 | `entity/time_card.rs` — `TimeCard` trait | `timecard.TimeCard` | all 22 methods the family calls, plus what the same `default` block gives free |
 | `entity/time_card.rs` — `TimeCardData` | `ActualsTimeCard` + `ScheduleCalcDataSet` | one struct; see divergence 23 |
 | `entity/time_card.rs` — `ShiftToDistribution` | `timecard.ShiftToDistribution` | borrows rather than owning |
+| `entity/time_card.rs` — `earnings_mut` | the live list `getEarnings()` hands out | added with `CaliforniaOTHrs`, the first rule to write earnings; divergence 22's shape |
+| `entity/time_card.rs` — `earning_is_not_salaried_exempt` | `…IsNotSalariedExemptForEarning` | the earning-shaped twin of `shift_is_not_salaried_exempt`; divergence 32 |
 | `entity/flsa_data.rs` | `calcshift.flsacalculations.FlsaData` | the value only; see divergence 25 |
 | `entity/calc_data_set_stat.rs` | `calcshift.CalcDataSetStat` | 5 constants, no codes |
 | `HoursDistribution::{falls_within_period, is_of_type}` | the static `Predicate` factories | |

@@ -11,3 +11,4 @@ pub mod rule_config;
 pub mod rule_type;
 pub mod rule_utils;
 pub mod runner;
+pub mod types;

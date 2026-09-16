@@ -20,7 +20,7 @@
 //! |---|---|---|
 //! | [`daily_accumulator`] | `DailyAccumulator` | 8 rules |
 //! | [`weekly_accumulator`] | `WeeklyAccumulator` | 9 rules |
-//! | [`daily_data`] | `DailyData` | `CaliforniaOTHrsRuleImpl` |
+//! | [`daily_data`] | `DailyData` | [`california_ot_hrs`], its only user |
 //! | [`earning_mapper`] | `EarningMapper` | `MinHrsForFullTimeOTRuleImpl` |
 //! | [`consecutive_days_calculator`] | `ConsecutiveDaysCalculator` | `MinHrsForFullTimeOTRuleImpl` |
 //! | [`prior_days_calculator`] | `PriorDaysCalculator` | 5 rules |
@@ -32,18 +32,24 @@
 //!
 //! # Rules ported so far
 //!
-//! Ten of nineteen: [`reg_hrs_only`], [`holiday_dt_hrs`],
+//! Eleven of nineteen: [`reg_hrs_only`], [`holiday_dt_hrs`],
 //! [`weekly_ot_sec_job_hrs`], [`weekly_ot_hrs`], [`pay_period_ot_hrs`],
-//! [`scheduled_shift_ot`], [`california_extended_ot_hrs`] and
-//! [`rolling_x_weeks_ot_hrs`] and
-//! [`daily_weekly_6th_ot_7th_dt_non_consec`]. The rest in size order, smallest
-//! first, which is the porting order the audit settled on: `PerMonthOTHrs`, `CaliforniaOTHrs`,
+//! [`scheduled_shift_ot`], [`california_extended_ot_hrs`],
+//! [`rolling_x_weeks_ot_hrs`], [`daily_weekly_6th_ot_7th_dt_non_consec`],
+//! [`per_month_ot_hrs`] and [`california_ot_hrs`]. The rest in size order,
+//! smallest first, which is the porting order the audit settled on:
 //! `TwentyFourHourOT`, `ContractOTHrs`, `DailyWeekly7thDTHrs`,
 //! `CaliforniaExtSpecialJobOTHrs`, `MinHrsForFullTimeOT`,
 //! `DlyWklyOffConsecOTMinBreak`, `DailyWeekly6thOT7thDTHrs`,
 //! `DlyWklyConsecOTMinBreakSpanningMidnight`.
+//!
+//! [`california_ot_hrs`] is the only one so far that writes **earnings** as
+//! well as hours distributions; `CaliforniaExtSpecialJobOTHrs` will be the
+//! second, and reads the same
+//! [`EarningTypePaySet`](crate::rules::types::earning_type_pay_set) parameter.
 
 pub mod california_extended_ot_hrs;
+pub mod california_ot_hrs;
 pub mod config;
 pub mod consecutive_days_calculator;
 pub mod daily_accumulator;

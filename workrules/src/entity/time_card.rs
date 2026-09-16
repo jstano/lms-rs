@@ -148,6 +148,16 @@ pub trait TimeCard {
     /// The employee's earnings. `getEarnings()`.
     fn earnings(&self) -> &[EmployeeEarning];
 
+    /// The earnings, for a rule that is adding to them.
+    ///
+    /// Java hands out the live list and `CaliforniaOTHrsRuleImpl` calls
+    /// `timeCard.getEarnings().add(newEarning)` on it, the same shape as
+    /// [`stat_map_mut`](Self::stat_map_mut). Appending never invalidates a
+    /// position a rule already holds, so the index forms of divergence 22 stay
+    /// valid across a write — and an earning a rule creates is never revisited
+    /// by the pass that created it.
+    fn earnings_mut(&mut self) -> &mut Vec<EmployeeEarning>;
+
     /// The buckets hours may be distributed into — regular, overtime, double
     /// time and whatever else the property configured.
     /// `getHoursDistributionTypes()`.
@@ -317,6 +327,20 @@ pub trait TimeCard {
     /// A shift with no job status answers `false`; divergence 32.
     fn shift_is_not_salaried_exempt(&self, shift: &EmployeeShift) -> bool {
         self.employee_job_status_for_shift(shift)
+            .is_some_and(|status| status.pay_type().is_not_salaried_exempt())
+    }
+
+    /// The same question of an earning, against its job on its earning date.
+    ///
+    /// `CaliforniaOTHrsRuleImpl` applies both spellings side by side —
+    /// `employeeJobStatusIsNotSalariedExemptForShift` and
+    /// `…ForEarning` — differing only in which date and job they read. An
+    /// earning with no job status answers `false`; divergence 32 again.
+    fn earning_is_not_salaried_exempt(&self, earning: &EmployeeEarning) -> bool {
+        self.employee()
+            .and_then(|employee| {
+                employee.employee_job_status(earning.job_id(), earning.earning_date())
+            })
             .is_some_and(|status| status.pay_type().is_not_salaried_exempt())
     }
 
@@ -705,6 +729,10 @@ impl TimeCard for TimeCardData {
 
     fn earnings(&self) -> &[EmployeeEarning] {
         &self.earnings
+    }
+
+    fn earnings_mut(&mut self) -> &mut Vec<EmployeeEarning> {
+        &mut self.earnings
     }
 
     fn hours_distribution_types(&self) -> &[HoursDistributionType] {
