@@ -312,8 +312,101 @@ impl RuleConfig for CaliforniaOTHrsRuleConfig {
     }
 }
 
+/// Hours across the consecutive-day run before overtime starts.
+/// `DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig.CONSEC_DAY_HRS_LIMIT`.
+///
+/// The only **hours**-based consecutive-day limit in the family; every other
+/// rule counts days alone. `DlyWklyOffConsecOTMinBreak`'s spec sets this key
+/// and that rule never reads it — see the finding on its last case.
+pub const CONSEC_DAY_HRS_LIMIT: &str = "consecDayHrsLimit";
+/// Whether a minimum-break violation pays the **whole** shift rather than the
+/// shortfall. `MIN_TIME_BETWEEN_PAY_FULL_SHIFT`.
+pub const MIN_TIME_BETWEEN_PAY_FULL_SHIFT: &str = "minTimeBetweenPayFullShift";
+
+/// `DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig`.
+///
+/// # Its `minTimeBetweenShifts` default is 10, not 7
+///
+/// `DlyWklyOffConsecOTMinBreakRuleConfig` defaults the same key to `"7.0"`.
+/// That three-hour difference is what makes the case the two specs share come
+/// out differently under each rule; see the finding under "Rules".
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig;
+
+impl RuleConfig for DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::DwcotMinBrSpanMnHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            DAILY_OT_LIMIT_PROP => "8.0",
+            DAILY_DT_LIMIT_PROP => "12.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            CONSEC_DAY_HRS_LIMIT => "40.0",
+            CONSEC_DAY_OT_LIMIT => "6",
+            MAX_CONSEC_DAYS_PD => "2",
+            MIN_TIME_BETWEEN_SHIFTS => "10.0",
+            DAILY_SPLIT_SHIFT_LIMIT => "3.0",
+            THIS_WEEK_ONLY => "false",
+            EARNING_TYPES => "[]",
+            MIN_TIME_BETWEEN_PAY_FULL_SHIFT => "false",
+            BOTH_CONSECUTIVE_AND_WEEKLY_OT => "false",
+            PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT => "true",
+        }
+    }
+}
+
+/// Consecutive days worked at which **double time** starts.
+/// `DailyWeekly6thOT7thDTHrsRuleConfig.CONSEC_DAY_DT_LIMIT`.
+pub const CONSEC_DAY_DT_LIMIT: &str = "consecDayDtLimit";
+/// Whether daily overtime is paid at all. `PAY_DAILY_OT`.
+pub const PAY_DAILY_OT: &str = "payDailyOT";
+/// Whether the sixth consecutive day also pays double time past the daily
+/// **overtime** limit. `PAY_6TH_DAY_DT`, spelled `paySixthDayDT`.
+pub const PAY_6TH_DAY_DT: &str = "paySixthDayDT";
+/// Whether earnings of the configured types count toward the consecutive-day
+/// counter. `INCLUDE_EARNING_TYPE_PAY_MAP`.
+pub const INCLUDE_EARNING_TYPE_PAY_MAP: &str = "includeEarningTypePayMap";
+/// Whether the sixth-day test counts **days worked in the week** rather than
+/// consecutive days. `OVERRIDE_CONSEC_DAY_OT`.
+pub const OVERRIDE_CONSEC_DAY_OT: &str = "overrideConsecDayOt";
+
+/// `DailyWeekly6thOT7thDTHrsRuleConfig`.
+///
+/// Fourteen parameters — the most of any config in the family.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DailyWeekly6thOT7thDTHrsRuleConfig;
+
+impl RuleConfig for DailyWeekly6thOT7thDTHrsRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::Dw6ot7dtHdr
+    }
+
+    fn default_values(&self) -> RuleParams {
+        rule_params! {
+            EARNING_TYPE_PAY_SET => EarningTypePaySet::new().with_premium_levels(2).to_json_string(),
+            DAILY_OT_LIMIT_PROP => "8.0",
+            DAILY_DT_LIMIT_PROP => "12.0",
+            WEEKLY_LIMIT_PROP => "40.0",
+            PAY_DAILY_OT => "true",
+            PAY_DAILY_DT => "true",
+            PAY_6TH_DAY_DT => "true",
+            CONSEC_DAY_OT_LIMIT => "6",
+            CONSEC_DAY_DT_LIMIT => "7",
+            CONSEC_DAYS_IN_WEEK => "true",
+            MAX_CONSEC_DAYS_PD => "999",
+            INCLUDE_EARNING_TYPE_PAY_MAP => "false",
+            OVERRIDE_CONSEC_DAY_OT => "false",
+            BOTH_CONSECUTIVE_AND_WEEKLY_OT => "false",
+            PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT => "true",
+        }
+    }
+}
+
 /// Consecutive days worked at which overtime starts.
-/// `DlyWklyOffConsecOTMinBreakRuleConfig.CONSEC_DAY_OT_LIMIT`.
+/// `DlyWklyOffConsecOTMinBreakRuleConfig.CONSEC_DAY_OT_LIMIT`, and
+/// `DailyWeekly6thOT7thDTHrsRuleConfig`'s key of the same name and spelling.
 pub const CONSEC_DAY_OT_LIMIT: &str = "consecDayOtLimit";
 /// The minimum rest between two shifts; work inside it is overtime.
 /// `MIN_TIME_BETWEEN_SHIFTS`.

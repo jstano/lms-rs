@@ -30,22 +30,38 @@
 //! calculators answer the same question differently and are **not**
 //! interchangeable — [`consecutive_days_calculator`] carries the table.
 //!
-//! # Rules ported so far
+//! # Rules — all nineteen
 //!
-//! Seventeen of nineteen: [`reg_hrs_only`], [`holiday_dt_hrs`],
-//! [`weekly_ot_sec_job_hrs`], [`weekly_ot_hrs`], [`pay_period_ot_hrs`],
-//! [`scheduled_shift_ot`], [`california_extended_ot_hrs`],
-//! [`rolling_x_weeks_ot_hrs`], [`daily_weekly_6th_ot_7th_dt_non_consec`],
-//! [`per_month_ot_hrs`], [`california_ot_hrs`], [`twenty_four_hour_ot`] and
-//! [`contract_ot_hrs`] [`daily_weekly_7th_dt_hrs`] [`california_ext_special_job_ot_hrs`] [`min_hrs_for_full_time_ot`] and [`dly_wkly_off_consec_ot_min_break`]. The rest in size order,
-//! smallest first, which is the porting order the audit settled on:
-//! `DlyWklyOffConsecOTMinBreak`, `DailyWeekly6thOT7thDTHrs`,
-//! `DlyWklyConsecOTMinBreakSpanningMidnight`.
+//! [`reg_hrs_only`], [`holiday_dt_hrs`], [`weekly_ot_sec_job_hrs`],
+//! [`weekly_ot_hrs`], [`pay_period_ot_hrs`], [`scheduled_shift_ot`],
+//! [`california_extended_ot_hrs`], [`rolling_x_weeks_ot_hrs`],
+//! [`daily_weekly_6th_ot_7th_dt_non_consec`], [`per_month_ot_hrs`],
+//! [`california_ot_hrs`], [`twenty_four_hour_ot`], [`contract_ot_hrs`],
+//! [`daily_weekly_7th_dt_hrs`], [`california_ext_special_job_ot_hrs`],
+//! [`min_hrs_for_full_time_ot`], [`dly_wkly_off_consec_ot_min_break`],
+//! [`daily_weekly_6th_ot_7th_dt_hrs`] and
+//! [`dly_wkly_consec_ot_min_break_spanning_midnight`].
 //!
-//! [`california_ot_hrs`] is the only one so far that writes **earnings** as
-//! well as hours distributions; `CaliforniaExtSpecialJobOTHrs` will be the
-//! second, and reads the same
+//! `ShiftDifferenceOTRuleImpl` is a twentieth `*RuleImpl` with no catalogue
+//! entry, and is deferred.
+//!
+//! # Four of them write earnings
+//!
+//! [`california_ot_hrs`], [`daily_weekly_7th_dt_hrs`],
+//! [`min_hrs_for_full_time_ot`] and [`daily_weekly_6th_ot_7th_dt_hrs`] rewrite
+//! [`EmployeeEarning`](crate::entity::employee_earning) rows as well as hours
+//! distributions, all through the same
 //! [`EarningTypePaySet`](crate::rules::types::earning_type_pay_set) parameter.
+//! The rest touch only distributions.
+//!
+//! # Shadowed types
+//!
+//! Four rules declare private classes that take a shared type's name and behave
+//! differently — [`daily_weekly_6th_ot_7th_dt_non_consec`],
+//! [`daily_weekly_7th_dt_hrs`], [`california_ext_special_job_ot_hrs`] (three at
+//! once) and the two `min_break` rules. Each ports them privately under names
+//! that cannot be confused with [`weekly_accumulator`], [`daily_accumulator`]
+//! or [`daily_data`]. A rule must be read against the class it actually uses.
 
 pub mod california_ext_special_job_ot_hrs;
 pub mod california_extended_ot_hrs;
@@ -55,8 +71,10 @@ pub mod consecutive_days_calculator;
 pub mod contract_ot_hrs;
 pub mod daily_accumulator;
 pub mod daily_data;
+pub mod daily_weekly_6th_ot_7th_dt_hrs;
 pub mod daily_weekly_6th_ot_7th_dt_non_consec;
 pub mod daily_weekly_7th_dt_hrs;
+pub mod dly_wkly_consec_ot_min_break_spanning_midnight;
 pub mod dly_wkly_off_consec_ot_min_break;
 pub mod earning_mapper;
 pub mod holiday_dt_hrs;

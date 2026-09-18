@@ -1,79 +1,77 @@
-//! Port of `DlyWklyOffConsecOTMinBreakRuleImpl`.
+//! Port of `DlyWklyConsecOTMinBreakSpanningMidnightRuleImpl`.
 //!
 //! Ground truth:
-//! `taps/src/java/com/unifocus/watson/server/labor/rules/algorithm/hoursdistribution/DlyWklyOffConsecOTMinBreakRuleImpl.java`.
+//! `taps/src/java/com/unifocus/watson/server/labor/rules/algorithm/hoursdistribution/DlyWklyConsecOTMinBreakSpanningMidnightRuleImpl.java`.
 //!
-//! `DWOCOT_MIN_BR_HDR`. Daily, weekly and consecutive-day overtime, plus two
-//! ideas no other rule in the family has: overtime for **working on a day you
-//! were not scheduled**, and overtime for **not getting a long enough break
-//! between two shifts**.
+//! `DWCOT_MIN_BR_SPAN_MN_HDR`. The nineteenth and last rule of the family, and
+//! the sibling of
+//! [`DlyWklyOffConsecOTMinBreak`](super::dly_wkly_off_consec_ot_min_break).
+//! Same minimum-break idea, three things different:
 //!
-//! # The minimum-break rule, and the split shift it has to tell apart
+//! 1. the break rule fires **only across midnight**;
+//! 2. consecutive-day overtime is measured in **hours**, not days;
+//! 3. there is no unscheduled-day rule, so no schedule list at all.
 //!
-//! For a shift with punches the rule finds the latest shift on the card that
-//! ends before this one starts — across the whole card, not the week — and
-//! measures the gap. If the gap is shorter than `minTimeBetweenShifts`, the
-//! shortfall is paid as overtime, capped at the shift's own regular hours:
-//!
-//! ```java
-//! Math.min(timeBetweenShifts - actualTimeBetween, sumRegularDistributions(employeeShift))
-//! ```
-//!
-//! But two shifts on the **same date** close together are a split shift, not a
-//! rest violation. `shouldAccountForMinTimeBetweenShifts` is
+//! # The break must span midnight
 //!
 //! ```java
-//! (!priorShift.getShiftDate().equals(employeeShift.getShiftDate()) || actualTimeBetween > dailySplitShiftLimit)
+//! priorShift.getEndDateTime().toLocalDate().equals(employeeShift.getStartDateTime().toLocalDate().minusDays(1))
+//!    && actualTimeBetween > dailySplitShiftLimit
 //!    && actualTimeBetween < timeBetweenShifts
 //! ```
 //!
-//! — so a gap on one date is exempt only while it stays **under**
-//! `dailyShiftSplitLimit`. A five-hour gap on one day is neither a split shift
-//! nor long enough to rest, and is paid.
+//! The sibling's first clause is `!priorShift.getShiftDate().equals(shift.getShiftDate()) || gap > splitLimit`
+//! — any pair of shifts on different **shift dates**, or a long enough gap on
+//! one. Here it is the narrower question: did the prior shift *end* on the
+//! calendar day before this one *starts*. Two shifts on one date never qualify,
+//! and neither does a gap of more than a day.
 //!
-//! The result is `max(normalDailyOT, breakOT)`, so the break rule tops up
-//! rather than replaces. An adjustment-only shift skips it entirely — there are
-//! no times to measure.
+//! `minTimeBetweenPayFullShift` then chooses what a violation costs: the
+//! shortfall, as the sibling always pays, or the **whole shift**.
 //!
-//! # `otOnUnschedDay` pays the whole day
-//!
-//! `shouldPayUnscheduledOTOnDay` is `isTACalculationMode && payOTOnUnschedDay
-//! && scheduledShifts.isEmpty()`, and it drops the daily limit exactly as the
-//! consecutive-day range does — `dailyOT = hours - overtime`. So an unscheduled
-//! day is overtime from its first hour.
-//!
-//! In schedule mode the day's "actual" shifts **are** the schedules and the
-//! schedule list is empty, which would make every day unscheduled; the
-//! `isTACalculationMode` half of the test is what stops that.
-//!
-//! # Earnings are counted but never rewritten
-//!
-//! The day's configured earning hours are added to both accumulators and to the
-//! `DailyAccumulator`'s starting overtime, so they push shifts into overtime.
-//! No earning row is ever created or changed — unlike `CaliforniaOTHrs` and its
-//! kin, this rule only writes distributions. What it does instead is stranger:
+//! # Consecutive-day overtime is hours-based
 //!
 //! ```java
-//! distribution.setHours(roundHours((distribution.getHours() + dailyData.getEarningHours()) - premiumHours - dtHours));
+//! consecDayOt = isDuringOTConsecDays()
+//!    ? hours + min(priorConsecutiveDaysHours, consecDaysHrsLimit) - consecDaysHrsLimit - overtime
+//!    : 0.0;
 //! ```
 //!
-//! **the day's earning hours are added into the distribution's own hours.** A
-//! four-hour shift on a day carrying a two-hour configured earning ends up with
-//! a six-hour regular row, less whatever premium was taken out. Reproduced;
-//! pinned by `the_days_earning_hours_are_added_into_the_distributions_hours`.
+//! So reaching the consecutive-day *count* only opens the question; what is
+//! paid is everything past `consecDayHrsLimit` **hours** across the run. This
+//! is the only rule in the family with such a limit, and it is the one thing
+//! that makes the case shared with the sibling's spec attributable — see below.
 //!
-//! # Double time is recomputed from the day's total every time
+//! `priorConsecutiveDaysHours` is seeded before the week from the days the
+//! prior-days calculator counted, and then advanced **one day late**:
 //!
-//! `calculateDT` is `max(hours - dailyDTLimit, 0)` — **unrounded**, and never
-//! reduced by double time already paid. A second distribution on a day already
-//! past the double-time limit therefore writes a second, overlapping
-//! double-time row. There is no `addDoubleTime` on this accumulator at all.
+//! ```java
+//! priorConsecutiveDaysHours = consecutiveDaysCounter == 0 ? 0 : priorConsecutiveDaysHours + currentDailyData.hoursForConsecDays();
+//! currentDailyData = dailyData;
+//! ```
 //!
-//! # The daily data map is built one day wider than it is read
+//! `currentDailyData` still holds *yesterday* when the line runs, so the total
+//! never includes the day being processed — which is what makes
+//! `hours + min(prior, limit) - limit` the right shape. And `hoursForConsecDays`
+//! reads `getHours()`, the **current** value, so a day already reduced by an
+//! earlier rule pass contributes less.
 //!
-//! `dailyDataProducer` runs over `[workWeek.start - 1, workWeek.end]`, and the
-//! main loop asks only for dates inside the week. The extra day is built and
-//! discarded.
+//! # The case this spec shares with its sibling's belongs here
+//!
+//! `when both consec and weekly OT is checked…` appears in both specs with the
+//! same eight shifts, the same four parameters and the same expectations. It is
+//! right here and wrong there, for two reasons that are both config:
+//!
+//! - `minTimeBetweenShifts` defaults to **10.0** here and `7.0` there. The
+//!   fixture's first gap is 3.25 hours, so the shortfall is `min(10 - 3.25, 4)`
+//!   = **4** — the whole shift, as asserted — where the sibling gets
+//!   `min(7 - 3.25, 4)` = 3.75.
+//! - `consecDayHrsLimit` exists only here. The case sets it to 35, and the
+//!   fifth consecutive day then pays `8 + min(28, 35) - 35` = **1** hour, as
+//!   asserted. The sibling has no such parameter and pays the whole day.
+//!
+//! The sibling's copy is recorded as unreconciled in its own module and in
+//! `PARITY_AUDIT.md`; this is the resolution.
 
 use crate::common::json_ids::ids_from_json;
 use crate::common::numbers::round_hours;
@@ -82,10 +80,11 @@ use crate::entity::rule_item::RuleItem;
 use crate::entity::time_card::TimeCard;
 use crate::rules::algorithm::hoursdistribution::HoursDistributionRule;
 use crate::rules::algorithm::hoursdistribution::config::{
-    BOTH_CONSECUTIVE_AND_WEEKLY_OT, CONSEC_DAY_OT_LIMIT, DAILY_DT_LIMIT_PROP, DAILY_OT_LIMIT_PROP,
-    DAILY_SPLIT_SHIFT_LIMIT, DlyWklyOffConsecOTMinBreakRuleConfig, EARNING_TYPES,
-    MAX_CONSEC_DAYS_PD, MIN_TIME_BETWEEN_SHIFTS, OT_ON_UNSCHED_DAY, THIS_WEEK_ONLY,
-    WEEKLY_LIMIT_PROP,
+    BOTH_CONSECUTIVE_AND_WEEKLY_OT, CONSEC_DAY_HRS_LIMIT, CONSEC_DAY_OT_LIMIT, DAILY_DT_LIMIT_PROP,
+    DAILY_OT_LIMIT_PROP, DAILY_SPLIT_SHIFT_LIMIT,
+    DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig, EARNING_TYPES, MAX_CONSEC_DAYS_PD,
+    MIN_TIME_BETWEEN_PAY_FULL_SHIFT, MIN_TIME_BETWEEN_SHIFTS,
+    PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT, THIS_WEEK_ONLY, WEEKLY_LIMIT_PROP,
 };
 use crate::rules::algorithm::hoursdistribution::prior_days_calculator::calculate_prior_consecutive_days;
 use crate::rules::algorithm::utility::hours_distribution_factory::create_premium_distribution_at_rate;
@@ -96,39 +95,55 @@ use date_range_rs::datetimerange::date_time_range::DateTimeRange;
 use joda_rs::LocalDate;
 use std::collections::HashMap;
 
-/// Daily, weekly and consecutive-day overtime, with unscheduled-day and
-/// minimum-break overtime on top. `DlyWklyOffConsecOTMinBreakRuleImpl`.
+/// Daily, weekly and hours-based consecutive-day overtime, with a
+/// midnight-spanning minimum-break rule.
+/// `DlyWklyConsecOTMinBreakSpanningMidnightRuleImpl`.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct DlyWklyOffConsecOTMinBreakRule<P: EmployeeShiftConsecutiveDaysPort> {
+pub struct DlyWklyConsecOTMinBreakSpanningMidnightRule<P: EmployeeShiftConsecutiveDaysPort> {
     consecutive_days: P,
 }
 
-impl<P: EmployeeShiftConsecutiveDaysPort> DlyWklyOffConsecOTMinBreakRule<P> {
+impl<P: EmployeeShiftConsecutiveDaysPort> DlyWklyConsecOTMinBreakSpanningMidnightRule<P> {
     /// Build the rule over the lookup that primes the consecutive-day count.
     pub fn new(consecutive_days: P) -> Self {
         Self { consecutive_days }
     }
 }
 
-/// This rule's **private** `DailyData`.
+/// This rule's **private** `DailyData` — no schedule list, unlike the
+/// sibling's.
 struct DailyData {
     actual_shifts: Vec<usize>,
-    scheduled_shifts_is_empty: bool,
     earning_hours: f64,
-    is_ta_calculation_mode: bool,
 }
 
 impl DailyData {
-    /// `shouldPayUnscheduledOTOnDay`.
-    fn should_pay_unscheduled_ot_on_day(&self, pay_ot_on_unsched_day: bool) -> bool {
-        self.is_ta_calculation_mode && pay_ot_on_unsched_day && self.scheduled_shifts_is_empty
-    }
-
-    /// `updateConsecutiveDays`'s test: a day counts if it was worked **or**
-    /// carried configured earning hours.
     fn was_worked(&self) -> bool {
         !self.actual_shifts.is_empty() || self.earning_hours > 0.0
     }
+}
+
+/// `DailyData.hoursForConsecDays` — the day's earning hours plus the **current**
+/// hours of its shifts' regular distributions dated that day.
+fn hours_for_consec_days(
+    time_card: &dyn TimeCard,
+    daily_data: &DailyData,
+    date: LocalDate,
+    regular_buckets: &[i32],
+) -> f64 {
+    let shift_hours: f64 = daily_data
+        .actual_shifts
+        .iter()
+        .flat_map(|&index| time_card.shifts()[index].hours_distributions())
+        .filter(|d| d.date() == date)
+        .filter(|d| {
+            d.hours_distribution_type_id()
+                .is_some_and(|id| regular_buckets.contains(&id))
+        })
+        .map(|d| d.hours())
+        .sum();
+
+    daily_data.earning_hours + shift_hours
 }
 
 /// This rule's **private** `WeeklyAccumulator`.
@@ -140,20 +155,29 @@ struct WeekTotals {
     consec_days_ot_limit: i32,
     consec_days_modifier: i32,
     consecutive_days_counter: i32,
-    both_consecutive_and_weekly_ot: bool,
+    prior_consecutive_days_hours: f64,
+    premium_hours_count_towards_weekly_ot: bool,
 }
 
 impl WeekTotals {
-    fn update_consecutive_days(&mut self, day_was_worked: bool) {
-        if !day_was_worked {
+    /// `updateConsecutiveDays`. `yesterdays_hours` is
+    /// `currentDailyData.hoursForConsecDays()` — the day *before* the one being
+    /// started, because Java advances the total before reassigning the field.
+    fn update_consecutive_days(&mut self, day_was_worked: bool, yesterdays_hours: f64) {
+        if day_was_worked {
+            self.consecutive_days_counter += 1;
+            if self.consecutive_days_counter % self.consec_days_modifier != 0 {
+                self.consecutive_days_counter %= self.consec_days_modifier;
+            }
+        } else {
             self.consecutive_days_counter = 0;
-            return;
         }
 
-        self.consecutive_days_counter += 1;
-        if self.consecutive_days_counter % self.consec_days_modifier != 0 {
-            self.consecutive_days_counter %= self.consec_days_modifier;
-        }
+        self.prior_consecutive_days_hours = if self.consecutive_days_counter == 0 {
+            0.0
+        } else {
+            self.prior_consecutive_days_hours + yesterdays_hours
+        };
     }
 
     fn add_hours(&mut self, add_hours: f64) {
@@ -165,13 +189,13 @@ impl WeekTotals {
     }
 
     /// `computeWeeklyOT(originalHours)` — zero inside the consecutive-day
-    /// range, where the daily rule pays the whole day instead.
+    /// range, where the hours-based rule takes over.
     fn compute_weekly_ot(&self, original_hours: f64) -> f64 {
         if self.is_during_ot_consec_days() {
             return 0.0;
         }
 
-        let pay_ot = self.both_consecutive_and_weekly_ot && self.hours > self.weekly_limit;
+        let pay_ot = self.premium_hours_count_towards_weekly_ot && self.hours > self.weekly_limit;
         let ot = if pay_ot {
             (self.hours - self.weekly_limit).min(original_hours)
         } else {
@@ -186,7 +210,8 @@ impl WeekTotals {
     }
 }
 
-/// This rule's **private** `DailyAccumulator`. It has no `addDoubleTime`.
+/// This rule's **private** `DailyAccumulator`. No `addDoubleTime`, as the
+/// sibling's has none.
 #[derive(Debug, Default)]
 struct DayTotals {
     hours: f64,
@@ -196,8 +221,6 @@ struct DayTotals {
 }
 
 impl DayTotals {
-    /// The day starts with its earning hours already counted, and with any of
-    /// them past the daily limit already booked as overtime.
     fn new(daily_ot_limit: f64, daily_dt_limit: f64, earning_hours: f64) -> Self {
         Self {
             hours: earning_hours,
@@ -215,15 +238,22 @@ impl DayTotals {
         self.overtime = round_hours(self.overtime + add_overtime);
     }
 
-    /// `calculateNormallyDistributedOT`.
-    fn normally_distributed_ot(&self, week: &WeekTotals, unscheduled_day: bool) -> f64 {
-        let daily_ot = if week.is_during_ot_consec_days() || unscheduled_day {
-            self.hours - self.overtime
+    /// `calculateNormallyDistributedOT` — the larger of the ordinary daily
+    /// figure and the hours-based consecutive-day one.
+    fn normally_distributed_ot(&self, week: &WeekTotals, consec_days_hrs_limit: f64) -> f64 {
+        let daily_ot = self.hours - self.daily_ot_limit - self.overtime;
+
+        let consec_day_ot = if week.is_during_ot_consec_days() {
+            self.hours + week.prior_consecutive_days_hours.min(consec_days_hrs_limit)
+                - consec_days_hrs_limit
+                - self.overtime
         } else {
-            self.hours - self.daily_ot_limit - self.overtime
+            0.0
         };
 
-        round_hours(daily_ot).max(0.0)
+        round_hours(daily_ot)
+            .max(round_hours(consec_day_ot))
+            .max(0.0)
     }
 
     /// `calculateDT` — unrounded, and never net of double time already paid.
@@ -236,16 +266,16 @@ impl DayTotals {
 struct BreakSettings {
     daily_split_shift_limit: f64,
     time_between_shifts: f64,
-    pay_ot_on_unsched_day: bool,
+    pay_full_shift: bool,
 }
 
 impl<P: EmployeeShiftConsecutiveDaysPort> HoursDistributionRule
-    for DlyWklyOffConsecOTMinBreakRule<P>
+    for DlyWklyConsecOTMinBreakSpanningMidnightRule<P>
 {
     fn execute(&self, time_card: &mut dyn TimeCard, work_week: &DateRange, rule_item: &RuleItem) {
         let params = rule_item
             .params()
-            .fixed(&DlyWklyOffConsecOTMinBreakRuleConfig.default_values());
+            .fixed(&DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig.default_values());
 
         let (Some(overtime_bucket), Some(double_time_bucket)) = (
             time_card.ot_hours_distribution_type_id(),
@@ -259,14 +289,16 @@ impl<P: EmployeeShiftConsecutiveDaysPort> HoursDistributionRule
         let breaks = BreakSettings {
             daily_split_shift_limit: params.double_at(DAILY_SPLIT_SHIFT_LIMIT),
             time_between_shifts: params.double_at(MIN_TIME_BETWEEN_SHIFTS),
-            pay_ot_on_unsched_day: params.bool_at(OT_ON_UNSCHED_DAY),
+            pay_full_shift: params.bool_at(MIN_TIME_BETWEEN_PAY_FULL_SHIFT),
         };
+        let consec_days_hrs_limit = params.double_at(CONSEC_DAY_HRS_LIMIT);
+        // Read into a field in Java, where nothing reads it back.
+        let _both_consecutive_and_weekly_ot = params.bool_at(BOTH_CONSECUTIVE_AND_WEEKLY_OT);
 
         let consec_days_ot_limit = params.int_at(CONSEC_DAY_OT_LIMIT);
-        let consec_days_paid_limit = params.int_at(MAX_CONSEC_DAYS_PD);
-        let consec_days_modifier = consec_days_ot_limit + consec_days_paid_limit - 1;
+        let consec_days_modifier = consec_days_ot_limit + params.int_at(MAX_CONSEC_DAYS_PD) - 1;
 
-        // Built one day wider than it is read; see the module note.
+        // Built a day wider than it is read, as the sibling's is.
         let producer_range =
             DateRange::new(work_week.start_date().minus_days(1), work_week.end_date());
         let daily_data_map = build_daily_data_map(time_card, &producer_range, &earning_type_ids);
@@ -284,49 +316,121 @@ impl<P: EmployeeShiftConsecutiveDaysPort> HoursDistributionRule
             ) as i32
         };
 
+        // The hours worked over the days the calculator counted, seeded before
+        // the week starts.
+        let consec_days_hours = if initial_consecutive_days > 0 {
+            prior_run_hours(
+                time_card,
+                work_week,
+                initial_consecutive_days,
+                &earning_type_ids,
+                &regular_buckets,
+            )
+        } else {
+            0.0
+        };
+
         let mut week = WeekTotals {
             weekly_limit: params.double_at(WEEKLY_LIMIT_PROP),
             consec_days_ot_limit,
             consec_days_modifier,
             consecutive_days_counter: initial_consecutive_days,
-            both_consecutive_and_weekly_ot: params.bool_at(BOTH_CONSECUTIVE_AND_WEEKLY_OT),
+            prior_consecutive_days_hours: consec_days_hours,
+            premium_hours_count_towards_weekly_ot: params
+                .bool_at(PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT),
             ..WeekTotals::default()
         };
 
         let daily_ot_limit = params.double_at(DAILY_OT_LIMIT_PROP);
         let daily_dt_limit = params.double_at(DAILY_DT_LIMIT_PROP);
 
+        // `currentDailyData`, which lags the loop by one day.
+        let mut yesterday: Option<LocalDate> = None;
+
         for date in work_week.dates() {
+            let yesterdays_hours = yesterday.map_or(0.0, |previous| {
+                hours_for_consec_days(
+                    time_card,
+                    &daily_data_map[&previous],
+                    previous,
+                    &regular_buckets,
+                )
+            });
+
             let daily_data = &daily_data_map[&date];
             let mut day = DayTotals::new(daily_ot_limit, daily_dt_limit, daily_data.earning_hours);
 
-            week.update_consecutive_days(daily_data.was_worked());
+            week.update_consecutive_days(daily_data.was_worked(), yesterdays_hours);
             week.add_hours(daily_data.earning_hours);
 
-            for &shift_index in &daily_data.actual_shifts {
+            for &shift_index in &daily_data_map[&date].actual_shifts.clone() {
                 compute_distribution_hours(
                     time_card,
                     &mut week,
                     &mut day,
-                    daily_data,
+                    daily_data_map[&date].earning_hours,
                     date,
                     shift_index,
                     &breaks,
+                    consec_days_hrs_limit,
                     &regular_buckets,
                     overtime_bucket,
                     double_time_bucket,
                     rule_item.id(),
                 );
             }
+
+            yesterday = Some(date);
         }
     }
 }
 
-/// `dailyDataProducer`.
+/// The hours worked across the consecutive-day run the calculator counted, over
+/// `[weekStart - consecutiveDays, weekStart - 1]`.
 ///
-/// In schedule mode the day's "actual" shifts **are** the schedules and the
-/// schedule list is empty — `instanceof ActualsTimeCard` inverted, which is
-/// divergence 41's stand-in read the other way round.
+/// Note this half reads `getHours()` of **regular** distributions by
+/// `HoursDistribution.isRegularType` — the static predicate, which tests the
+/// `REGULAR_ID` constant rather than the property's configured buckets. The
+/// in-week half goes through `getRegularHoursDistributionTypeIds()`. Two ways
+/// of asking in one rule, the same split the family has recorded before.
+fn prior_run_hours(
+    time_card: &dyn TimeCard,
+    work_week: &DateRange,
+    consecutive_days: i32,
+    earning_type_ids: &[i32],
+    regular_buckets: &[i32],
+) -> f64 {
+    let range = DateRange::new(
+        work_week
+            .start_date()
+            .minus_days(i64::from(consecutive_days)),
+        work_week.start_date().minus_days(1),
+    );
+
+    let earning_hours: f64 = time_card
+        .earnings()
+        .iter()
+        .filter(|earning| earning_type_ids.contains(&earning.earning_type_id()))
+        .filter(|earning| range.contains_date(earning.earning_date()))
+        .map(|earning| earning.hours())
+        .sum();
+
+    let shift_hours: f64 = time_card
+        .shifts()
+        .iter()
+        .flat_map(EmployeeShift::hours_distributions)
+        .filter(|d| range.contains_date(d.date()))
+        .filter(|d| {
+            d.hours_distribution_type_id()
+                .is_some_and(|id| regular_buckets.contains(&id))
+        })
+        .map(|d| d.hours())
+        .sum();
+
+    round_hours(earning_hours + shift_hours)
+}
+
+/// `dailyDataProducer`. In schedule mode the day's shifts are the schedules.
 fn build_daily_data_map(
     time_card: &dyn TimeCard,
     range: &DateRange,
@@ -340,24 +444,18 @@ fn build_daily_data_map(
         .map(|date| {
             let single_day = DateRange::new(date, date);
 
-            let sorted = |mut indices: Vec<usize>| {
-                indices.retain(|&index| {
-                    time_card.shift_is_not_salaried_exempt(&time_card.shifts()[index])
-                });
-                indices.sort_by_key(|&index| time_card.shifts()[index].start_time_for_ordering());
-                indices
-            };
-
-            let actuals = if is_ta_calculation_mode {
-                sorted(time_card.shift_indices_with_distributions_for_period(&single_day))
+            let mut shifts = if is_ta_calculation_mode {
+                time_card.shift_indices_with_distributions_for_period(&single_day)
             } else {
-                sorted(schedule_indices_for_period(time_card, &single_day))
+                (0..time_card
+                    .schedules_with_distributions_for_period(&single_day)
+                    .len())
+                    .collect()
             };
-            let scheduled_is_empty = if is_ta_calculation_mode {
-                sorted(schedule_indices_for_period(time_card, &single_day)).is_empty()
-            } else {
-                true
-            };
+            shifts.retain(|&index| {
+                time_card.shift_is_not_salaried_exempt(&time_card.shifts()[index])
+            });
+            shifts.sort_by_key(|&index| time_card.shifts()[index].start_time_for_ordering());
 
             let earning_hours = if is_ta_calculation_mode {
                 time_card
@@ -374,30 +472,11 @@ fn build_daily_data_map(
             (
                 date,
                 DailyData {
-                    actual_shifts: actuals,
-                    scheduled_shifts_is_empty: scheduled_is_empty,
+                    actual_shifts: shifts,
                     earning_hours,
-                    is_ta_calculation_mode,
                 },
             )
         })
-        .collect()
-}
-
-/// `getSchedulesWithDistributionsForPeriod`, as positions in `schedules()`.
-///
-/// Divergence 50: the only question anything asks of this list is whether it is
-/// empty, so `DailyData` keeps a `bool` and the positions here are never
-/// resolved. In schedule mode Java reads the same list through
-/// `getShiftsWithDistributionsForPeriod`, which for a `ScheduleCalcDataSet` is
-/// the schedule list (divergence 23's finding), so `shift_indices_…` is the
-/// right reader there.
-fn schedule_indices_for_period(time_card: &dyn TimeCard, period: &DateRange) -> Vec<usize> {
-    time_card
-        .schedules_with_distributions_for_period(period)
-        .into_iter()
-        .enumerate()
-        .map(|(index, _)| index)
         .collect()
 }
 
@@ -407,10 +486,11 @@ fn compute_distribution_hours(
     time_card: &mut dyn TimeCard,
     week: &mut WeekTotals,
     day: &mut DayTotals,
-    daily_data: &DailyData,
+    earning_hours: f64,
     date: LocalDate,
     shift_index: usize,
     breaks: &BreakSettings,
+    consec_days_hrs_limit: f64,
     regular_buckets: &[i32],
     overtime_bucket: i32,
     double_time_bucket: i32,
@@ -426,7 +506,6 @@ fn compute_distribution_hours(
         .map(|(index, _)| index)
         .collect();
 
-    // The prior shift is fixed for the whole shift; resolve it before writing.
     let break_ot = break_overtime(time_card, shift_index, date, breaks, regular_buckets);
 
     for distribution_index in distribution_indices {
@@ -437,8 +516,7 @@ fn compute_distribution_hours(
         day.add_hours(original_hours);
         week.add_hours(original_hours);
 
-        let unscheduled = daily_data.should_pay_unscheduled_ot_on_day(breaks.pay_ot_on_unsched_day);
-        let normal_daily_ot = day.normally_distributed_ot(week, unscheduled);
+        let normal_daily_ot = day.normally_distributed_ot(week, consec_days_hrs_limit);
         let daily_ot = match break_ot {
             Some(from_break) => normal_daily_ot.max(from_break),
             None => normal_daily_ot,
@@ -447,7 +525,6 @@ fn compute_distribution_hours(
         let premium_hours = week.compute_weekly_ot(original_hours).max(daily_ot);
         let dt_hours = day.calculate_dt();
 
-        // `addDistributions`.
         if time_card.is_open_for_editing_on(date) && premium_hours > 0.0 {
             let shift = &mut time_card.shifts_mut()[shift_index];
             let mut remaining = premium_hours;
@@ -472,14 +549,9 @@ fn compute_distribution_hours(
                 premium(remaining, overtime_bucket, shift);
             }
 
-            // The day's earning hours are folded into the row; see the module
-            // note. Note `remaining` and not `premium_hours`: Java decrements
-            // its `premiumHours` parameter by `dtHours` above, so the regular
-            // row loses the double time **once**, not twice. The caller's copy
-            // is untouched, which is why the accumulators below still see the
-            // whole figure.
+            // The day's earning hours are folded in, as the sibling does.
             let hours = shift.hours_distributions()[distribution_index].hours();
-            let reduced = round_hours((hours + daily_data.earning_hours) - remaining - dt_hours);
+            let reduced = round_hours((hours + earning_hours) - remaining - dt_hours);
             shift.hours_distributions_mut()[distribution_index].set_hours(reduced);
         }
 
@@ -489,10 +561,8 @@ fn compute_distribution_hours(
 }
 
 /// `calculateOTCausedByPriorShift`, guarded by
-/// `shouldAccountForMinTimeBetweenShifts`.
-///
-/// `None` when the rule does not apply — an adjustment-only shift, no prior
-/// shift, a split shift, or a long enough break.
+/// `shouldAccountForMinTimeBetweenShifts` — which here demands the prior shift
+/// **ended the calendar day before** this one starts.
 fn break_overtime(
     time_card: &dyn TimeCard,
     shift_index: usize,
@@ -507,8 +577,6 @@ fn break_overtime(
 
     let start = shift.start_date_time()?;
 
-    // `findPriorShift` — the latest shift on the **whole card** ending before
-    // this one starts.
     let prior = time_card
         .shifts()
         .iter()
@@ -516,18 +584,22 @@ fn break_overtime(
         .filter(|candidate| candidate.end_date_time().is_some_and(|end| end < start))
         .max_by_key(|candidate| candidate.end_date_time())?;
 
-    let actual_time_between = DateTimeRange::of(prior.end_date_time()?, start)
-        .duration()
-        .fractional_hours();
-
-    let is_split_shift_gap = prior.shift_date() == shift.shift_date()
-        && actual_time_between <= breaks.daily_split_shift_limit;
-    if is_split_shift_gap || actual_time_between >= breaks.time_between_shifts {
+    let prior_end = prior.end_date_time()?;
+    let spans_midnight = prior_end.to_local_date() == start.to_local_date().minus_days(1);
+    if !spans_midnight {
         return None;
     }
 
-    // `sumRegularDistributions` — this shift's regular hours **on this date**.
-    let regular_hours: f64 = shift
+    let actual_time_between = DateTimeRange::of(prior_end, start)
+        .duration()
+        .fractional_hours();
+    if actual_time_between <= breaks.daily_split_shift_limit
+        || actual_time_between >= breaks.time_between_shifts
+    {
+        return None;
+    }
+
+    let total_shift_hours: f64 = shift
         .hours_distributions()
         .iter()
         .filter(|d| {
@@ -538,7 +610,11 @@ fn break_overtime(
         .map(|d| d.original_hours())
         .sum();
 
-    Some((breaks.time_between_shifts - actual_time_between).min(regular_hours))
+    Some(if breaks.pay_full_shift {
+        total_shift_hours
+    } else {
+        (breaks.time_between_shifts - actual_time_between).min(total_shift_hours)
+    })
 }
 
 #[cfg(test)]
@@ -580,11 +656,10 @@ mod tests {
         }
     }
 
-    pub(super) fn rule() -> DlyWklyOffConsecOTMinBreakRule<PriorDays> {
-        DlyWklyOffConsecOTMinBreakRule::new(PriorDays(0))
+    pub(super) fn rule() -> DlyWklyConsecOTMinBreakSpanningMidnightRule<PriorDays> {
+        DlyWklyConsecOTMinBreakSpanningMidnightRule::new(PriorDays(0))
     }
 
-    /// `today`, pinned. The rule reads no day of week, so any date serves.
     pub(super) fn day(offset: i64) -> LocalDate {
         LocalDate::of(2015, 6, 1).plus_days(offset)
     }
@@ -596,7 +671,6 @@ mod tests {
             .plus_minutes(minute)
     }
 
-    /// One shift with one regular distribution on its own date.
     pub(super) fn shift(
         id: i32,
         date_offset: i64,
@@ -629,7 +703,7 @@ mod tests {
         )
     }
 
-    pub(super) fn card(shifts: Vec<EmployeeShift>, schedules: Vec<EmployeeShift>) -> TimeCardData {
+    pub(super) fn card(shifts: Vec<EmployeeShift>) -> TimeCardData {
         TimeCardData::new()
             .with_employee(Employee::new(
                 1,
@@ -647,7 +721,6 @@ mod tests {
                 )],
             ))
             .with_shifts(shifts)
-            .with_schedules(schedules)
             .with_hours_distribution_types(HoursDistributionType::system_generated())
             .with_calculation_start_date(day(0))
     }
@@ -657,15 +730,13 @@ mod tests {
         for (key, value) in params {
             rule_params.set(*key, *value);
         }
-        RuleItem::new(1, 1, "", RuleClass::DwocotMinBrHdr, rule_params)
+        RuleItem::new(1, 1, "", RuleClass::DwcotMinBrSpanMnHdr, rule_params)
     }
 
-    /// `[today]` — a one-day work week, as several cases use.
     pub(super) fn one_day() -> DateRange {
         DateRange::new(day(0), day(0))
     }
 
-    /// `[today, today.plusWeeks(1)]` — eight days.
     pub(super) fn week() -> DateRange {
         DateRange::new(day(0), day(7))
     }
@@ -682,93 +753,95 @@ mod tests {
     }
 
     #[test]
-    fn the_days_earning_hours_are_added_into_the_distributions_hours() {
-        // Seven worked hours on a day carrying a two-hour configured earning:
-        // nine against an eight-hour limit, so one hour is premium and the
-        // write happens — and the regular row comes out at 7 + 2 - 1 = 8, two
-        // hours the shift never worked.
-        let mut card = card(
-            vec![shift(1, 0, at(0, 0, 0), at(0, 7, 0), 7.0)],
-            vec![shift(11, 0, at(0, 0, 0), at(0, 7, 0), 7.0)],
-        )
-        .with_earnings(vec![earning(1, 0, INCLUDED_EARNING, 2.0)]);
-
-        rule().execute(&mut card, &one_day(), &item(&[(EARNING_TYPES, "[1]")]));
-
-        assert_eq!(rows(&card, 0), vec![(REGULAR, 8.0), (OVERTIME, 1.0)]);
-    }
-
-    #[test]
-    fn the_fold_only_happens_when_a_premium_is_written() {
-        // The same day under the limit: no premium, so `setHours` is never
-        // reached and the earning hours stay out of the row.
-        let mut card = card(
-            vec![shift(1, 0, at(0, 0, 0), at(0, 4, 0), 4.0)],
-            vec![shift(11, 0, at(0, 0, 0), at(0, 4, 0), 4.0)],
-        )
-        .with_earnings(vec![earning(1, 0, INCLUDED_EARNING, 2.0)]);
-
-        rule().execute(&mut card, &one_day(), &item(&[(EARNING_TYPES, "[1]")]));
-
-        assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
-    }
-
-    #[test]
-    fn a_gap_longer_than_the_split_shift_limit_on_one_day_is_a_rest_violation() {
-        // Two shifts on one date five hours apart: past dailyShiftSplitLimit of
-        // 3, so not a split shift, and under minTimeBetweenShifts of 7.
-        let mut card = card(
-            vec![
-                shift(1, 0, at(0, 4, 0), at(0, 8, 0), 4.0),
-                shift(2, 0, at(0, 13, 0), at(0, 17, 0), 4.0),
-            ],
-            vec![
-                shift(11, 0, at(0, 4, 0), at(0, 8, 0), 4.0),
-                shift(12, 0, at(0, 13, 0), at(0, 17, 0), 4.0),
-            ],
-        );
+    fn the_break_rule_needs_the_gap_to_span_midnight() {
+        // Two shifts on ONE date, five hours apart: past the split-shift limit
+        // and under the ten-hour minimum, but the prior shift did not end the
+        // day before, so nothing is paid. The sibling rule pays this.
+        let mut card = card(vec![
+            shift(1, 0, at(0, 4, 0), at(0, 8, 0), 4.0),
+            shift(2, 0, at(0, 13, 0), at(0, 17, 0), 4.0),
+        ]);
 
         rule().execute(&mut card, &week(), &item(&[]));
 
-        assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
-        // min(7 - 5, 4) = 2 hours of break overtime.
-        assert_eq!(rows(&card, 1), vec![(REGULAR, 2.0), (OVERTIME, 2.0)]);
+        assert_eq!(rows(&card, 1), vec![(REGULAR, 4.0)]);
     }
 
     #[test]
-    fn an_adjustment_only_shift_skips_the_break_rule() {
-        let mut card = card(
-            vec![
-                shift(1, 0, at(0, 4, 0), at(0, 8, 0), 4.0),
-                EmployeeShift::new(2, 1, JOB, day(0), ShiftType::Actual, Vec::new())
-                    .with_worked_adjustments()
-                    .with_net_hours(4.0)
-                    .with_hours_distributions(vec![HoursDistribution::new(
-                        1,
-                        day(0),
-                        Some(REGULAR),
-                        4.0,
-                        0.0,
-                    )]),
-            ],
-            vec![shift(11, 0, at(0, 4, 0), at(0, 8, 0), 4.0)],
-        );
+    fn a_gap_across_midnight_inside_the_minimum_is_paid() {
+        let mut card = card(vec![
+            shift(1, 0, at(0, 17, 45), at(0, 21, 45), 4.0),
+            shift(2, 1, at(1, 1, 0), at(1, 5, 0), 4.0),
+        ]);
 
         rule().execute(&mut card, &week(), &item(&[]));
 
-        assert_eq!(rows(&card, 1), vec![(REGULAR, 4.0)], "no break overtime");
+        // The gap is 3.25 hours, so min(10 - 3.25, 4) is the whole shift.
+        assert_eq!(rows(&card, 1), vec![(REGULAR, 0.0), (OVERTIME, 4.0)]);
+    }
+
+    #[test]
+    fn min_time_between_pay_full_shift_pays_the_whole_shift() {
+        // A gap of 9 hours leaves a shortfall of 1; with the flag set the whole
+        // four-hour shift is paid instead.
+        let shifts = || {
+            vec![
+                shift(1, 0, at(0, 12, 0), at(0, 16, 0), 4.0),
+                shift(2, 1, at(1, 1, 0), at(1, 5, 0), 4.0),
+            ]
+        };
+
+        let mut shortfall = card(shifts());
+        rule().execute(&mut shortfall, &week(), &item(&[]));
+        assert_eq!(rows(&shortfall, 1), vec![(REGULAR, 3.0), (OVERTIME, 1.0)]);
+
+        let mut full = card(shifts());
+        rule().execute(
+            &mut full,
+            &week(),
+            &item(&[(MIN_TIME_BETWEEN_PAY_FULL_SHIFT, "true")]),
+        );
+        assert_eq!(rows(&full, 1), vec![(REGULAR, 0.0), (OVERTIME, 4.0)]);
+    }
+
+    #[test]
+    fn consecutive_day_overtime_is_measured_in_hours() {
+        // Six consecutive eight-hour days against a 40-hour consec-day limit:
+        // the sixth day is in the range and pays 8 + min(40, 40) - 40 = 8.
+        let shifts: Vec<EmployeeShift> = (0..6)
+            .map(|d| shift(d as i32 + 1, d, at(d, 9, 0), at(d, 17, 0), 8.0))
+            .collect();
+        let mut card = card(shifts);
+
+        rule().execute(&mut card, &week(), &item(&[(THIS_WEEK_ONLY, "true")]));
+
+        assert_eq!(rows(&card, 5), vec![(REGULAR, 0.0), (OVERTIME, 8.0)]);
+    }
+
+    #[test]
+    fn a_higher_consec_day_hours_limit_pays_less() {
+        // The same six days against a 44-hour limit: 8 + 40 - 44 = 4.
+        let shifts: Vec<EmployeeShift> = (0..6)
+            .map(|d| shift(d as i32 + 1, d, at(d, 9, 0), at(d, 17, 0), 8.0))
+            .collect();
+        let mut card = card(shifts);
+
+        rule().execute(
+            &mut card,
+            &week(),
+            &item(&[(THIS_WEEK_ONLY, "true"), (CONSEC_DAY_HRS_LIMIT, "44")]),
+        );
+
+        assert_eq!(rows(&card, 5), vec![(REGULAR, 4.0), (OVERTIME, 4.0)]);
     }
 
     #[test]
     fn a_property_with_no_double_time_bucket_writes_nothing() {
-        let mut card = card(
-            vec![shift(1, 0, at(0, 1, 0), at(0, 15, 0), 14.0)],
-            Vec::new(),
-        )
-        .with_hours_distribution_types(vec![
-            HoursDistributionType::new(REGULAR, "Regular", false),
-            HoursDistributionType::new(OVERTIME, "Overtime", true),
-        ]);
+        let mut card = card(vec![shift(1, 0, at(0, 1, 0), at(0, 15, 0), 14.0)])
+            .with_hours_distribution_types(vec![
+                HoursDistributionType::new(REGULAR, "Regular", false),
+                HoursDistributionType::new(OVERTIME, "Overtime", true),
+            ]);
 
         rule().execute(&mut card, &one_day(), &item(&[]));
 
@@ -776,50 +849,17 @@ mod tests {
     }
 }
 
-/// `DlyWklyOffConsecOTMinBreakRuleImplTest.groovy`, transcribed.
+/// `DlyWklyConsecOTMinBreakSpanningMidnightRuleImplTest.groovy`, transcribed.
 ///
 /// Ground truth:
-/// `taps/src/junit/com/unifocus/watson/server/labor/rules/algorithm/hoursdistribution/DlyWklyOffConsecOTMinBreakRuleImplTest.groovy`
-/// — all sixteen cases. The last is written with single quotes, so a search for
-/// `def "` finds only fifteen.
+/// `taps/src/junit/com/unifocus/watson/server/labor/rules/algorithm/hoursdistribution/DlyWklyConsecOTMinBreakSpanningMidnightRuleImplTest.groovy`
+/// — all thirteen cases. Each builds its own card; `today` is
+/// `LocalDate.now()`, pinned here. The mocked `PayGroup` is divergence 24's
+/// derivation, so the calculation start date is set on the card, and the mocked
+/// `PriorDaysCalculator` answers 0 in every case.
 ///
-/// Each case builds its own card, so there is no shared `setup()`. `today` is
-/// `LocalDate.now()`, pinned here; the rule reads no day of week. The mocked
-/// `PayGroup` is divergence 24's derivation, so the calculation start date is
-/// set on the card.
-///
-/// The mocked `PriorDaysCalculator` answers **0** in every case, and the ported
-/// calculator answers 0 too for a card whose shifts all start on the work
-/// week's first day — so `PriorDays(0)` needs no adjustment here, unlike
-/// `CaliforniaExtSpecialJobOTHrs`'s.
-///
-/// # The last case was copied from the sibling rule's spec — resolved
-///
-/// `when both consec and weekly OT is checked…` asserts three values this rule
-/// cannot produce from the fixture beside it. The same case, fixture and
-/// expectations appear in
-/// `DlyWklyConsecOTMinBreakSpanningMidnightRuleImplTest`, where they are
-/// **correct**, and the reason is config:
-///
-/// | row | Groovy | this rule | why |
-/// |---|---|---|---|
-/// | shift 2 (T+1, 4h) | reg 0, OT 4 | reg 0.25, OT 3.75 | `minTimeBetweenShifts` defaults to 7 here, 10 there: `min(7 - 3.25, 4)` vs `min(10 - 3.25, 4)` |
-/// | shift 3 (T+1, 9h) | reg 8, DT 1 | reg 7.75, OT 0.25, DT 1 | the quarter hour left over above |
-/// | shift 6 (T+4, 8h) | reg 7, OT 1 | reg 0, OT 8 | the sibling pays `8 + min(28, 35) - 35` from its `consecDayHrsLimit`; this rule has no such parameter and pays the whole day |
-///
-/// So the case was copied here from that spec, where its four parameters and
-/// its `17:45` first shift belong. The transcription below asserts what **this**
-/// rule produces and labels the three rows. Confirmed by porting the sibling
-/// and running the same case against it; see
-/// [`dly_wkly_consec_ot_min_break_spanning_midnight`](super::dly_wkly_consec_ot_min_break_spanning_midnight).
-///
-/// # The last case passes a parameter the rule cannot read/// # The last case passes a parameter the rule cannot read
-///
-/// `when both consec and weekly OT is checked…` sets `CONSEC_DAY_HRS_LIMIT`,
-/// which it imports from `DlyWklyConsecOTMinBreakSpanningMidnightRuleConfig` —
-/// a **different rule's** config. `DlyWklyOffConsecOTMinBreakRuleConfig` does
-/// not declare that key, so `fixMap` never adds it and nothing reads it. It is
-/// transcribed as written, with the inert parameter left in place and labelled.
+/// The last case is the one the sibling rule's spec also carries; see the
+/// module note for why it belongs here.
 #[cfg(test)]
 mod java_parity_tests {
     use super::tests::{
@@ -829,26 +869,9 @@ mod java_parity_tests {
     use super::*;
     use crate::entity::employee_shift::EmployeeShift;
 
-    /// The spec builds its schedule list as a copy of the shift list in most
-    /// cases; ids are shifted so the two lists stay distinguishable.
-    fn mirror(shifts: &[EmployeeShift]) -> Vec<EmployeeShift> {
-        shifts.to_vec()
-    }
-
-    #[test]
-    fn overtime_is_given_if_a_scheduled_shift_does_not_exist_for_a_worked_shift() {
-        let mut card = card(vec![shift(1, 0, at(0, 0, 0), at(0, 4, 0), 4.0)], Vec::new());
-
-        rule().execute(&mut card, &one_day(), &item(&[]));
-
-        assert_eq!(card.shifts()[0].hours_distributions().len(), 2);
-        assert_eq!(rows(&card, 0), vec![(REGULAR, 0.0), (OVERTIME, 4.0)]);
-    }
-
     #[test]
     fn daily_ot_is_given_if_you_work_more_than_the_daily_ot_threshold() {
-        let shifts = vec![shift(1, 0, at(0, 0, 0), at(0, 4, 0), 10.0)];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        let mut card = card(vec![shift(1, 0, at(0, 0, 0), at(0, 4, 0), 10.0)]);
 
         rule().execute(&mut card, &one_day(), &item(&[]));
 
@@ -857,13 +880,12 @@ mod java_parity_tests {
 
     #[test]
     fn weekly_ot_is_given_if_you_work_more_than_the_weekly_ot_threshold() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 0, 0), at(0, 4, 0), 10.0),
             shift(2, 1, at(1, 0, 0), at(1, 4, 0), 10.0),
             shift(3, 2, at(2, 0, 0), at(2, 4, 0), 10.0),
             shift(4, 3, at(3, 0, 0), at(3, 4, 0), 11.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
         rule().execute(&mut card, &week(), &item(&[(DAILY_OT_LIMIT_PROP, "12")]));
 
@@ -874,34 +896,39 @@ mod java_parity_tests {
     }
 
     #[test]
-    fn consecutive_days_gives_full_hours_overtime_if_passing_the_consec_days_limit() {
-        let shifts = vec![
-            shift(1, 0, at(0, 0, 0), at(0, 4, 0), 5.0),
-            shift(2, 1, at(1, 0, 0), at(1, 4, 0), 5.0),
-            shift(3, 2, at(2, 0, 0), at(2, 4, 0), 5.0),
-            shift(4, 3, at(3, 0, 0), at(3, 4, 0), 5.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+    fn consecutive_days_gives_overtime_over_the_consec_day_hrs_in_the_period() {
+        let shifts: Vec<EmployeeShift> = (0..4)
+            .map(|d| shift(d as i32 + 1, d, at(d, 0, 0), at(d, 4, 0), 5.0))
+            .collect();
+        let mut card = card(shifts);
 
-        rule().execute(&mut card, &week(), &item(&[(CONSEC_DAY_OT_LIMIT, "4")]));
+        rule().execute(
+            &mut card,
+            &week(),
+            &item(&[(CONSEC_DAY_OT_LIMIT, "4"), (CONSEC_DAY_HRS_LIMIT, "17.0")]),
+        );
 
         assert_eq!(rows(&card, 0), vec![(REGULAR, 5.0)]);
         assert_eq!(rows(&card, 1), vec![(REGULAR, 5.0)]);
         assert_eq!(rows(&card, 2), vec![(REGULAR, 5.0)]);
-        assert_eq!(rows(&card, 3), vec![(REGULAR, 0.0), (OVERTIME, 5.0)]);
+        // The fourth day: 5 + min(15, 17) - 17 = 3.
+        assert_eq!(rows(&card, 3), vec![(REGULAR, 2.0), (OVERTIME, 3.0)]);
     }
 
     #[test]
     fn weekly_ot_does_not_double_dip() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 0, 0), at(0, 4, 0), 12.0),
             shift(2, 1, at(1, 0, 0), at(1, 4, 0), 12.0),
             shift(3, 2, at(2, 0, 0), at(2, 4, 0), 12.0),
             shift(4, 3, at(3, 0, 0), at(3, 4, 0), 8.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
-        rule().execute(&mut card, &week(), &item(&[]));
+        rule().execute(
+            &mut card,
+            &week(),
+            &item(&[(PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT, "false")]),
+        );
 
         assert_eq!(rows(&card, 0), vec![(REGULAR, 8.0), (OVERTIME, 4.0)]);
         assert_eq!(rows(&card, 1), vec![(REGULAR, 8.0), (OVERTIME, 4.0)]);
@@ -911,11 +938,10 @@ mod java_parity_tests {
 
     #[test]
     fn split_shifts_are_not_given_minimum_break_ot() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 12, 0), at(0, 16, 0), 4.0),
             shift(2, 0, at(0, 17, 0), at(0, 21, 0), 4.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
         rule().execute(&mut card, &week(), &item(&[]));
 
@@ -925,45 +951,52 @@ mod java_parity_tests {
 
     #[test]
     fn non_split_shifts_within_the_minimum_break_threshold_are_given_ot() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 4, 0), at(0, 8, 0), 4.0),
             shift(2, 0, at(0, 12, 0), at(0, 19, 0), 7.0),
             shift(3, 1, at(1, 2, 0), at(1, 6, 0), 4.0),
             shift(4, 1, at(1, 13, 0), at(1, 17, 0), 4.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
         rule().execute(&mut card, &week(), &item(&[]));
 
         assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
+        // Eleven hours on the day against an eight-hour limit.
         assert_eq!(rows(&card, 1), vec![(REGULAR, 4.0), (OVERTIME, 3.0)]);
-        assert_eq!(rows(&card, 2), vec![(REGULAR, 4.0)]);
+        // 19:00 to 02:00 is 7 hours, across midnight and under the ten-hour
+        // minimum: min(10 - 7, 4) = 3.
+        assert_eq!(rows(&card, 2), vec![(REGULAR, 1.0), (OVERTIME, 3.0)]);
         assert_eq!(rows(&card, 3), vec![(REGULAR, 4.0)]);
     }
 
     #[test]
-    fn working_on_a_non_scheduled_day_does_not_double_dip_weekly_ot() {
-        let shifts: Vec<EmployeeShift> = (0..6)
-            .map(|d| shift(d as i32 + 1, d, at(d, 0, 0), at(d, 8, 0), 8.0))
-            .collect();
-        // No schedule on the first day.
-        let schedules: Vec<EmployeeShift> = (1..6)
-            .map(|d| shift(d as i32 + 11, d, at(d, 0, 0), at(d, 8, 0), 8.0))
-            .collect();
-        let mut card = card(shifts, schedules);
+    fn full_shift_is_paid_when_configured_for_full_shift() {
+        let mut card = card(vec![
+            shift(1, 0, at(0, 4, 0), at(0, 8, 0), 4.0),
+            shift(2, 0, at(0, 12, 0), at(0, 19, 0), 7.0),
+            shift(3, 1, at(1, 2, 0), at(1, 6, 0), 4.0),
+            shift(4, 1, at(1, 13, 0), at(1, 17, 0), 4.0),
+        ]);
 
-        rule().execute(&mut card, &week(), &item(&[(CONSEC_DAY_OT_LIMIT, "8")]));
+        rule().execute(
+            &mut card,
+            &week(),
+            &item(&[(MIN_TIME_BETWEEN_PAY_FULL_SHIFT, "true")]),
+        );
 
-        assert_eq!(rows(&card, 0), vec![(REGULAR, 0.0), (OVERTIME, 8.0)]);
-        for index in 1..6 {
-            assert_eq!(rows(&card, index), vec![(REGULAR, 8.0)], "shift {index}");
-        }
+        assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
+        assert_eq!(rows(&card, 1), vec![(REGULAR, 4.0), (OVERTIME, 3.0)]);
+        // The whole shift, where the shortfall alone would have been 3.
+        assert_eq!(rows(&card, 2), vec![(REGULAR, 0.0), (OVERTIME, 4.0)]);
+        assert_eq!(rows(&card, 3), vec![(REGULAR, 4.0)]);
     }
 
     #[test]
     fn combine_all_rule_scenarios() {
-        let shifts = vec![
-            shift(1, 0, at(0, 20, 0), at(1, 0, 0), 4.0),
+        let mut card = card(vec![
+            // 17:45, not the sibling spec's 20:00 — the gap to the next shift
+            // is what the break rule measures.
+            shift(1, 0, at(0, 17, 45), at(0, 21, 45), 4.0),
             shift(2, 1, at(1, 1, 0), at(1, 5, 0), 4.0),
             shift(3, 1, at(1, 7, 0), at(1, 16, 0), 9.0),
             shift(4, 2, at(2, 12, 0), at(2, 20, 0), 8.0),
@@ -971,13 +1004,17 @@ mod java_parity_tests {
             shift(6, 4, at(4, 12, 0), at(4, 20, 0), 8.0),
             shift(7, 5, at(5, 12, 0), at(5, 20, 0), 8.0),
             shift(8, 6, at(6, 12, 0), at(6, 22, 0), 10.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
         rule().execute(
             &mut card,
             &week(),
-            &item(&[(CONSEC_DAY_OT_LIMIT, "5"), (MAX_CONSEC_DAYS_PD, "1")]),
+            &item(&[
+                (CONSEC_DAY_OT_LIMIT, "5"),
+                (CONSEC_DAY_HRS_LIMIT, "35.0"),
+                (MAX_CONSEC_DAYS_PD, "1"),
+                (PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT, "false"),
+            ]),
         );
 
         assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
@@ -985,18 +1022,17 @@ mod java_parity_tests {
         assert_eq!(rows(&card, 2), vec![(REGULAR, 8.0), (DOUBLE_TIME, 1.0)]);
         assert_eq!(rows(&card, 3), vec![(REGULAR, 8.0)]);
         assert_eq!(rows(&card, 4), vec![(REGULAR, 8.0), (OVERTIME, 2.0)]);
-        assert_eq!(rows(&card, 5), vec![(REGULAR, 0.0), (OVERTIME, 8.0)]);
-        assert_eq!(rows(&card, 6), vec![(REGULAR, 8.0)]);
-        assert_eq!(rows(&card, 7), vec![(REGULAR, 4.0), (OVERTIME, 6.0)]);
+        assert_eq!(rows(&card, 5), vec![(REGULAR, 7.0), (OVERTIME, 1.0)]);
+        assert_eq!(rows(&card, 6), vec![(REGULAR, 5.0), (OVERTIME, 3.0)]);
+        assert_eq!(rows(&card, 7), vec![(REGULAR, 0.0), (OVERTIME, 10.0)]);
     }
 
     #[test]
     fn daily_ot_is_taken_into_account_even_if_there_is_a_min_break_violation() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 1, 0), at(0, 9, 0), 8.0),
             shift(2, 0, at(0, 15, 0), at(0, 23, 0), 8.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
         rule().execute(&mut card, &one_day(), &item(&[]));
 
@@ -1008,40 +1044,8 @@ mod java_parity_tests {
     }
 
     #[test]
-    fn dt_is_given_on_a_non_scheduled_day_worked_over_the_daily_dt_limit() {
-        let mut card = card(
-            vec![shift(1, 0, at(0, 1, 0), at(0, 15, 0), 14.0)],
-            Vec::new(),
-        );
-
-        rule().execute(&mut card, &one_day(), &item(&[]));
-
-        assert_eq!(
-            rows(&card, 0),
-            vec![(REGULAR, 0.0), (OVERTIME, 12.0), (DOUBLE_TIME, 2.0)]
-        );
-    }
-
-    #[test]
-    fn the_pay_ot_on_unscheduled_days_flag_pays_nothing_when_false() {
-        let mut card = card(
-            vec![
-                shift(1, 0, at(0, 12, 0), at(0, 16, 0), 4.0),
-                shift(2, 2, at(2, 17, 0), at(2, 21, 0), 4.0),
-            ],
-            Vec::new(),
-        );
-
-        rule().execute(&mut card, &week(), &item(&[(OT_ON_UNSCHED_DAY, "false")]));
-
-        assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
-        assert_eq!(rows(&card, 1), vec![(REGULAR, 4.0)]);
-    }
-
-    #[test]
     fn daily_ot_takes_into_account_configured_earning_types() {
-        let shifts = vec![shift(1, 0, at(0, 0, 0), at(0, 8, 0), 8.0)];
-        let mut card = card(shifts.clone(), mirror(&shifts)).with_earnings(vec![
+        let mut card = card(vec![shift(1, 0, at(0, 0, 0), at(0, 8, 0), 8.0)]).with_earnings(vec![
             earning(1, 0, INCLUDED_EARNING, 2.0),
             earning(2, -1, INCLUDED_EARNING, 2.0),
             earning(3, 0, EXCLUDED_EARNING, 2.0),
@@ -1054,13 +1058,13 @@ mod java_parity_tests {
 
     #[test]
     fn weekly_ot_accounts_for_configured_earning_types() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 0, 0), at(0, 4, 0), 5.0),
             shift(2, 1, at(1, 0, 0), at(1, 4, 0), 10.0),
             shift(3, 2, at(2, 0, 0), at(2, 4, 0), 4.0),
             shift(4, 3, at(3, 0, 0), at(3, 4, 0), 11.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts)).with_earnings(vec![
+        ])
+        .with_earnings(vec![
             earning(1, 0, INCLUDED_EARNING, 5.0),
             earning(2, 2, INCLUDED_EARNING, 6.0),
             earning(3, 0, EXCLUDED_EARNING, 2.0),
@@ -1080,11 +1084,11 @@ mod java_parity_tests {
 
     #[test]
     fn consecutive_days_accounts_for_configured_earning_types() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 0, 0), at(0, 4, 0), 5.0),
             shift(2, 3, at(3, 0, 0), at(3, 4, 0), 5.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts)).with_earnings(vec![
+        ])
+        .with_earnings(vec![
             earning(1, 1, INCLUDED_EARNING, 5.0),
             earning(2, 2, INCLUDED_EARNING, 6.0),
         ]);
@@ -1092,16 +1096,23 @@ mod java_parity_tests {
         rule().execute(
             &mut card,
             &week(),
-            &item(&[(CONSEC_DAY_OT_LIMIT, "4"), (EARNING_TYPES, "[1]")]),
+            &item(&[
+                (CONSEC_DAY_OT_LIMIT, "4"),
+                (CONSEC_DAY_HRS_LIMIT, "17.0"),
+                (EARNING_TYPES, "[1]"),
+            ]),
         );
 
         assert_eq!(rows(&card, 0), vec![(REGULAR, 5.0)]);
-        assert_eq!(rows(&card, 1), vec![(REGULAR, 0.0), (OVERTIME, 5.0)]);
+        assert_eq!(rows(&card, 1), vec![(REGULAR, 1.0), (OVERTIME, 4.0)]);
     }
 
+    /// The case this spec shares with `DlyWklyOffConsecOTMinBreak`'s, which is
+    /// where it belongs: `minTimeBetweenShifts` defaults to 10 here and 7
+    /// there, and `consecDayHrsLimit` exists only here.
     #[test]
     fn when_both_consec_and_weekly_ot_is_checked_it_applies_both_parameters() {
-        let shifts = vec![
+        let mut card = card(vec![
             shift(1, 0, at(0, 17, 45), at(0, 21, 45), 4.0),
             shift(2, 1, at(1, 1, 0), at(1, 5, 0), 4.0),
             shift(3, 1, at(1, 7, 0), at(1, 16, 0), 9.0),
@@ -1110,34 +1121,28 @@ mod java_parity_tests {
             shift(6, 4, at(4, 12, 0), at(4, 20, 0), 8.0),
             shift(7, 5, at(5, 12, 0), at(5, 20, 0), 8.0),
             shift(8, 6, at(6, 12, 0), at(6, 22, 0), 10.0),
-        ];
-        let mut card = card(shifts.clone(), mirror(&shifts));
+        ]);
 
         rule().execute(
             &mut card,
             &week(),
             &item(&[
                 (CONSEC_DAY_OT_LIMIT, "5"),
-                // From a different rule's config; this one never reads it.
-                ("consecDayHrsLimit", "35.0"),
+                (CONSEC_DAY_HRS_LIMIT, "35.0"),
                 (MAX_CONSEC_DAYS_PD, "1"),
                 (BOTH_CONSECUTIVE_AND_WEEKLY_OT, "true"),
             ]),
         );
 
         assert_eq!(rows(&card, 0), vec![(REGULAR, 4.0)]);
-        // The Groovy asserts 0.0 and 4.0 here, and 8.0 below — the sibling
-        // rule's numbers. See the note above this module.
-        assert_eq!(rows(&card, 1), vec![(REGULAR, 0.25), (OVERTIME, 3.75)]);
-        assert_eq!(
-            rows(&card, 2),
-            vec![(REGULAR, 7.75), (OVERTIME, 0.25), (DOUBLE_TIME, 1.0)]
-        );
+        // The 3.25-hour gap across midnight: min(10 - 3.25, 4) is the whole
+        // shift. The sibling's 7-hour default gives 3.75 here instead.
+        assert_eq!(rows(&card, 1), vec![(REGULAR, 0.0), (OVERTIME, 4.0)]);
+        assert_eq!(rows(&card, 2), vec![(REGULAR, 8.0), (DOUBLE_TIME, 1.0)]);
         assert_eq!(rows(&card, 3), vec![(REGULAR, 8.0)]);
         assert_eq!(rows(&card, 4), vec![(REGULAR, 8.0), (OVERTIME, 2.0)]);
-        // The Groovy asserts (7.0, 1.0) here, which is the sibling rule's
-        // hours-based consecutive-day figure. See the note above this module.
-        assert_eq!(rows(&card, 5), vec![(REGULAR, 0.0), (OVERTIME, 8.0)]);
+        // The fifth consecutive day: 8 + min(28, 35) - 35 = 1.
+        assert_eq!(rows(&card, 5), vec![(REGULAR, 7.0), (OVERTIME, 1.0)]);
         assert_eq!(rows(&card, 6), vec![(REGULAR, 0.0), (OVERTIME, 8.0)]);
         assert_eq!(rows(&card, 7), vec![(REGULAR, 0.0), (OVERTIME, 10.0)]);
     }

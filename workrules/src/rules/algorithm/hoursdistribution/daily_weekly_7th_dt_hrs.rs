@@ -10,7 +10,7 @@
 //! Structurally it is [`CaliforniaOTHrs`](super::california_ot_hrs) — the same
 //! day/shift/earning walk, the same three-row earning rewrite, the same
 //! `dailyDataProducer` (shared now; see
-//! [`build_daily_data_map`](super::daily_data::build_daily_data_map)). What
+//! [`super::daily_data::build_daily_data_map`]). What
 //! differs is the arithmetic, and it differs because this rule **declares its
 //! own accumulators**.
 //!

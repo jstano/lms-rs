@@ -35,27 +35,31 @@ see "Test backing" below for why.
 | 1 | `punchvalidation` — 4 of 4 rules | **done** |
 | 3 | `hoursdistribution` — `TimeCard` surface | **done** |
 | 3 | `hoursdistribution` — the six shared helpers | **done** |
-| 3 | `hoursdistribution` — 17 of 19 rules | **in progress** — see below |
+| 3 | `hoursdistribution` — 19 of 19 rules | **done** |
 | 1+ | the other 29 families | not started |
 
 ## Where the work stands
 
-**1,197 tests, 315 of them transcribed Java assertions.** Clippy clean,
+**1,236 tests, 341 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
 config machinery, resolution, dispatch, eleven entities, and both
 `punchrounding` (6 rules + runner) and `punchvalidation` (4 rules).
 
-Wave 3's `hoursdistribution` is in progress, taken out of plan order at the
-user's request — the plan puts the rate families (Wave 2) first because the
-overtime rules lean on them. **Nothing has blocked on that yet; flag it if
-something does.**
+Wave 3's `hoursdistribution` is **complete** — all 19 catalogue entries, every
+Groovy case in the family transcribed. It was taken out of plan order at the
+user's request; the plan puts the rate families (Wave 2) first because the
+overtime rules lean on them. **Nothing blocked on that**, which is now settled
+rather than provisional: no rule in the family needed a rate.
 
-### `hoursdistribution` — where to pick up
+**Wave 2, the rate families, is the next body of work.** Nothing in this crate
+depends on it yet.
 
-Done: the `TimeCard` surface, all six shared helpers, all four DAO ports the
-family needs (plus `MinWagePort`, divergence 38), and **17 of 19 rules**.
+### `hoursdistribution` — done
+
+The `TimeCard` surface, all six shared helpers, all four DAO ports the family
+needs (plus `MinWagePort`, divergence 38), and **all 19 rules**.
 
 | Ported | Java spec cases |
 |---|---:|
@@ -75,13 +79,15 @@ family needs (plus `MinWagePort`, divergence 38), and **17 of 19 rules**.
 | `DailyWeekly7thDTHrs` | 7/7 |
 | `CaliforniaExtSpecialJobOTHrs` | 9/9 |
 | `MinHrsForFullTimeOT` | 18/19 — see below |
-| `DlyWklyOffConsecOTMinBreak` | 16/16, three rows unreconciled — see below |
+| `DlyWklyOffConsecOTMinBreak` | 16/16, three rows are the sibling's — see below |
+| `DailyWeekly6thOT7thDTHrs` | 13/13 |
+| `DlyWklyConsecOTMinBreakSpanningMidnight` | 13/13 |
 
-**Sixteen of the seventeen passed their whole Groovy spec on the first run.**
-The exception is `DlyWklyOffConsecOTMinBreak`, whose last case asserts three
-values its own fixture cannot produce; see the finding under "Rules". Every
-other discrepancy found while porting has been a transcription slip on this
-side, caught by the test and corrected against the Java.
+**Eighteen of the nineteen passed their whole Groovy spec on the first run.**
+The exception is `DlyWklyOffConsecOTMinBreak`, whose last case was copied from
+its sibling's spec and asserts that rule's numbers — now resolved, see below.
+Every other discrepancy found while porting has been a transcription slip on
+this side, caught by the test and corrected against the Java.
 
 `CaliforniaExtendedOTHrs` and `TwentyFourHourOT` are the two that matter most
 for confidence. The first exercises both shared accumulators and
@@ -89,23 +95,22 @@ for confidence. The first exercises both shared accumulators and
 largest spec — 27 methods, 31 executions — and pins 24-hour-window arithmetic no
 amount of reading the source settles.
 
-**Remaining two**, the last and largest of the family:
-
-1. `DailyWeekly6thOT7thDTHrs` (451 lines, spec 316) — **next**. No finding
-   recorded against it yet; nobody has read it closely.
-2. `DlyWklyConsecOTMinBreakSpanningMidnight` (456 lines, spec 842, 12 cases) —
-   the sibling of `DlyWklyOffConsecOTMinBreak`, and the place to settle that
-   rule's three unreconciled rows. Its config declares `CONSEC_DAY_HRS_LIMIT`, a
-   consecutive-day **hours** limit no other rule in the family has, which is
-   what makes a copied test case detectable.
+**Nothing remains in this family.** What the porting order taught, for whoever
+starts the next one:
 
 **Measure before scheduling.** The one-line descriptions this file used to carry
-were wrong or badly short four times out of six: `CaliforniaOTHrs` turned out to
-write earnings and brought `EarningTypePaySet` with it; `TwentyFourHourOT`
+were wrong or badly short five times out of eight: `CaliforniaOTHrs` turned out
+to write earnings and brought `EarningTypePaySet` with it; `TwentyFourHourOT`
 brought `ShiftUtil.getNetHoursInRange`; `ContractOTHrs` was described as a
 `ContractHrsRule`, which it is not, and brought the contract calculators;
-`CaliforniaExtSpecialJobOTHrs` shadows three shared types, not one. Read the
-Java before estimating.
+`CaliforniaExtSpecialJobOTHrs` shadows three shared types, not one; and
+`DlyWklyOffConsecOTMinBreak` could not be settled at all until its sibling was
+ported. Read the Java before estimating.
+
+**Port siblings together.** The last two rules share a spec case, and the only
+way to tell which rule it belonged to was to have both. The same is true of the
+three rules that declare `dailyDataProducer` identically, and of the four that
+shadow the shared accumulators.
 
 `ShiftDifferenceOTRuleImpl` exists as a twentieth `*RuleImpl` but has no
 catalogue entry; it is deferred with the rules.
@@ -207,7 +212,7 @@ see divergence 38's `MinWagePort`.
 week, and `FlsaData` for the two `getFlsaDataMap` call sites. Both are now
 settled — see below.
 
-## Rules — 17 of 19
+## Rules — 19 of 19
 
 | Rust | Java | Ported cases |
 |---|---|---:|
@@ -228,6 +233,8 @@ settled — see below.
 | `…/california_ext_special_job_ot_hrs.rs` | `CaliforniaExtSpecialJobOTHrsRuleImpl` | **9/9** |
 | `…/min_hrs_for_full_time_ot.rs` | `MinHrsForFullTimeOTRuleImpl` | **18/19** |
 | `…/dly_wkly_off_consec_ot_min_break.rs` | `DlyWklyOffConsecOTMinBreakRuleImpl` | **16/16** |
+| `…/daily_weekly_6th_ot_7th_dt_hrs.rs` | `DailyWeekly6thOT7thDTHrsRuleImpl` | **13/13** |
+| `…/dly_wkly_consec_ot_min_break_spanning_midnight.rs` | `DlyWklyConsecOTMinBreakSpanningMidnightRuleImpl` | **13/13** |
 | `entity/employee_shift.rs` — `is_adjustment_only_shift` | the same | — |
 | `common/json_ids.rs` — `ids_from_json` | `JSONUtils.getIdsFromJSON` | — |
 | `…/daily_data.rs` — `build_daily_data_map` | the `dailyDataProducer` two rules declare identically | — |
@@ -235,7 +242,7 @@ settled — see below.
 | `common/enums/schedule_mode.rs` | `ScheduleMode` | — |
 | `entity/time_card.rs` — `pay_period_type`, `schedule_mode` | `Property`'s two getters | — |
 | `…/mod.rs` — `ContractHrsRule` | `ContractHrsRuleImpl` | — |
-| `…/config.rs` | `HoursDistributionRuleConfig` + the seventeen rules' configs | **7**, from `TwentyFourHourOTRuleConfigTest` |
+| `…/config.rs` | `HoursDistributionRuleConfig` + all nineteen rules' configs | **7**, from `TwentyFourHourOTRuleConfigTest` |
 | `entity/employee_shift.rs` — `net_hours_in_range` | `ShiftUtil.getNetHoursInRange` and its four helpers | — |
 | `rules/types/earning_type_pay_set.rs` | `EarningTypePaySet` | — |
 | `rules/types/earning_type_pay_map.rs` | `EarningTypePayMap` | — |
@@ -273,6 +280,95 @@ rewrites, so it arrives `&mut` and reads go through the index primitives.
   `original_hours` equal to `hours`, which is right for a fresh regular row and
   wrong here, so the factory builds the struct field by field. Pinned by
   `a_premium_distribution_has_zero_original_hours`.
+
+- **The last two rules are siblings, and one of them settles a question the
+  other could not.** `DlyWklyOffConsecOTMinBreak`'s last spec case,
+  `when both consec and weekly OT is checked…`, was recorded here as
+  unreconciled in three rows. The same case — same eight shifts, same four
+  parameters, same expectations — appears in
+  `DlyWklyConsecOTMinBreakSpanningMidnightRuleImplTest`, where **it passes**.
+  Two config differences explain all three rows:
+
+  | | `DlyWklyOffConsecOTMinBreak` | the spanning-midnight sibling |
+  |---|---|---|
+  | `minTimeBetweenShifts` default | 7.0 | **10.0** |
+  | `consecDayHrsLimit` | not declared | **40.0**, and the rule reads it |
+
+  The fixture's first gap is 3.25 hours, so the shortfall is `min(10 - 3.25, 4)`
+  = 4 there and `min(7 - 3.25, 4)` = 3.75 here; and the fifth consecutive day
+  pays `8 + min(28, 35) - 35` = 1 there where this rule has no hours limit and
+  pays the whole day. The case was copied into the wrong spec. Both
+  transcriptions now assert what their own rule produces, and each names the
+  other. **Resolved by porting the sibling**, not by reading.
+
+- **`DlyWklyConsecOTMinBreakSpanningMidnight` is the only rule with an
+  hours-based consecutive-day limit.** Reaching the consecutive-day *count*
+  only opens the question; what is paid is everything past `consecDayHrsLimit`
+  **hours** across the run:
+  `hours + min(priorConsecutiveDaysHours, limit) - limit - overtime`.
+
+  `priorConsecutiveDaysHours` is advanced **one day late** — Java adds
+  `currentDailyData.hoursForConsecDays()` before reassigning `currentDailyData`,
+  so the total never includes the day being processed. And it reads
+  `getHours()`, the current value, so a day already reduced contributes less.
+  The port carries the lag explicitly as a `yesterday` variable.
+
+- **Its break rule fires only across midnight**, where the sibling's fires on
+  any pair of shifts with different shift dates or a long enough gap on one:
+  `priorShift.getEndDateTime().toLocalDate().equals(shift.getStartDateTime().toLocalDate().minusDays(1))`.
+  Two shifts on one date never qualify. `minTimeBetweenPayFullShift` then
+  chooses whether a violation costs the shortfall or the **whole shift**.
+
+  It also asks its two halves two different ways: the prior-run seeding filters
+  with `HoursDistribution.isRegularType`, the static predicate testing the
+  `REGULAR_ID` constant, while the in-week half goes through
+  `getRegularHoursDistributionTypeIds()`. The same split the family has seen
+  before.
+
+- **`DailyWeekly6thOT7thDTHrs` has two consecutive-day thresholds, and they are
+  disjoint.** `isDuringOTConsecDaysRange()` is `counter >= otLimit && counter <
+  dtLimit` and `isDuringDTConsecDaysRange()` is `counter >= dtLimit`, so the
+  sixth day is "OT range", the seventh is "DT range", and a day is never both.
+  On the seventh `shiftDT` equals `shiftOT`, so no overtime row is written at
+  all.
+
+- **`payDailyOT` and `payDailyDT` suppress rows without changing the
+  arithmetic.** `addDistributions` reassigns its **local** `premiumHours` — to
+  `doubleTime` inside the consecutive-day branch, to `0` outside it — so the
+  regular row loses only what was written, while the caller's copy still feeds
+  `addOvertime` and `addWeeklyOT`. And `computeDailyDoubleTime`'s last branch
+  ignores `payDailyDT` entirely: with the flag clear the figure is computed,
+  discarded, and **still added to the day's double-time total**. Pinned.
+
+- **`isDuringDaysInWeekOtRange` mixes its two counters**:
+  `daysInWeekCounter >= otConsecDaysLimit && consecutiveDaysCounter < dtConsecDayLimit`.
+  `overrideConsecDayOt` selects it, so six non-consecutive worked days reach the
+  sixth-day rule — but the seventh *consecutive* day still shuts it off.
+  `daysInWeekCounter` is never reset and never wrapped.
+
+- **`bothConsecutiveAndWeeklyOt` is dead in a third rule.**
+  `DailyWeekly6thOT7thDTHrs` and `DlyWklyConsecOTMinBreakSpanningMidnight` both
+  assign it to a field nothing reads, as `CaliforniaExtendedOTHrs` hands it to
+  an accumulator field nothing reads. **`MinHrsForFullTimeOT` is the only rule
+  in the family that does anything with it.** Four rules read the parameter;
+  one acts on it.
+
+- **`DailyWeekly6thOT7thDTHrs`'s `shiftMatches` asserts nothing for a zero.**
+
+  ```groovy
+  void shiftMatches(EmployeeShift shift, netHours, regHours, otHours, dtHours) {
+     if (regHours > 0) { assert … }
+     if (otHours  > 0) { assert … }
+     if (dtHours  > 0) { assert … }
+  }
+  ```
+
+  So `shiftMatches(shift1, 8, 0, 0, 0)` — the line every case uses for the two
+  shifts outside the week, commented "should not calc" — asserts **nothing**,
+  and could not detect the rule paying them. `netHours` is never read in the
+  body either, so the first number is decorative in all 117 calls. Eighth
+  spec-weakness in the family, and the second where a helper silently drops
+  assertions. The transcriptions assert the whole triple, zeros included.
 
 - **`DlyWklyOffConsecOTMinBreak` adds two ideas nothing else in the family
   has**: overtime for working a day you were **not scheduled**, and overtime for
