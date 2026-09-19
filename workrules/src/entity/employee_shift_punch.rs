@@ -114,6 +114,14 @@ impl EmployeeShiftPunch {
         self.adj_time = adj_time;
     }
 
+    /// Set the raw punch time. `setPunchTime()` — no side effects in Java
+    /// either. `pub(crate)` for the same reason as
+    /// [`set_rounded_time`](Self::set_rounded_time): reached only through
+    /// [`PunchCursor::set_all_times`](crate::entity::employee_shift::PunchCursor::set_all_times).
+    pub(crate) fn set_punch_time(&mut self, punch_time: Option<LocalDateTime>) {
+        self.punch_time = punch_time;
+    }
+
     /// Set the badge number. `setBadgeNo()`.
     pub fn set_badge_no(&mut self, badge_no: impl Into<String>) {
         self.badge_no = badge_no.into();

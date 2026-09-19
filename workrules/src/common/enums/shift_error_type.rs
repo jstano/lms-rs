@@ -70,6 +70,42 @@ impl ShiftErrorType {
                 | Self::UnbalancedBreak
         )
     }
+
+    /// The Java enum constant's own spelling — `Enum.toString()`'s default,
+    /// which Java never overrides for this type. First needed by
+    /// `ScheduleRestrictionResult.getMessage()`, which returns exactly this.
+    pub fn name(&self) -> &'static str {
+        match self {
+            Self::MinHoursOff => "MIN_HOURS_OFF",
+            Self::MinDaysOff => "MIN_DAYS_OFF",
+            Self::MinShiftLength => "MIN_SHIFT_LENGTH",
+            Self::MaxShiftLength => "MAX_SHIFT_LENGTH",
+            Self::TimeOff => "TIME_OFF",
+            Self::Availability => "AVAILABILITY",
+            Self::AvailableHours => "AVAILABLE_HOURS",
+            Self::EmptyShift => "EMPTY_SHIFT",
+            Self::MissingIn => "MISSING_IN",
+            Self::MissingOut => "MISSING_OUT",
+            Self::MissingBreakIn => "MISSING_BREAK_IN",
+            Self::MissingBreakOut => "MISSING_BREAK_OUT",
+            Self::UnbalancedBreak => "UNBALANCED_BREAK",
+            Self::InOutSame => "IN_OUT_SAME",
+            Self::InvalidTimes => "INVALID_TIMES",
+            Self::RoundNextDayInactiveEmp => "ROUND_NEXT_DAY_INACTIVE_EMP",
+            Self::RoundNextDayInactiveJob => "ROUND_NEXT_DAY_INACTIVE_JOB",
+            Self::RequiredDaysOff => "REQUIRED_DAYS_OFF",
+            Self::ShiftDefinition => "SHIFT_DEFINITION",
+            Self::NoHomeJob => "NO_HOME_JOB",
+            Self::JobNotActive => "JOB_NOT_ACTIVE",
+            Self::NotActive => "NOT_ACTIVE",
+            Self::DifferentPaygroups => "DIFFERENT_PAYGROUPS",
+            Self::PaygroupNotActive => "PAYGROUP_NOT_ACTIVE",
+            Self::MaxHoursOnDay => "MAX_HOURS_ON_DAY",
+            Self::MaxHoursPerWeek => "MAX_HOURS_PER_WEEK",
+            Self::EarliestStartLatestEnd => "EARLIEST_START_LATEST_END",
+            Self::MaxDaysWorkedPerWeek => "MAX_DAYS_WORKED_PER_WEEK",
+        }
+    }
 }
 
 #[cfg(test)]
@@ -96,6 +132,23 @@ mod tests {
         let count = codes.len();
         codes.dedup();
         assert_eq!(codes.len(), count);
+    }
+
+    #[test]
+    fn the_names_are_unique_and_screaming_snake() {
+        let mut names: Vec<_> = ShiftErrorType::VALUES.iter().map(|e| e.name()).collect();
+        names.sort_unstable();
+        let count = names.len();
+        names.dedup();
+        assert_eq!(names.len(), count);
+        for name in names {
+            assert!(name.chars().all(|c| c.is_ascii_uppercase() || c == '_'));
+        }
+    }
+
+    #[test]
+    fn required_days_off_names_itself_the_way_java_to_string_would() {
+        assert_eq!(ShiftErrorType::RequiredDaysOff.name(), "REQUIRED_DAYS_OFF");
     }
 
     #[rstest]

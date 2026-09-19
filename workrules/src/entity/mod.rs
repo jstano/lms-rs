@@ -27,6 +27,7 @@ pub mod flsa_data;
 pub mod holiday;
 pub mod hours_distribution;
 pub mod hours_distribution_type;
+pub mod planned_shift;
 pub mod property;
 pub mod punch_log;
 pub mod rule_item;

@@ -41,11 +41,15 @@ see "Test backing" below for why.
 | 2 | `doubletimerate` — 5 of 5 rules | **done** |
 | 2 | `overtimerate` — 8 of 8 rules | **done** |
 | 2 | `earningrate` — 10 of 10 rules | **done** |
-| 1+ | the other 27 families | not started |
+| 4 | `schedulerestriction` — 5 of 6 rules | **done, one deferred** |
+| 4 | `schedulelunch` — 3 of 3 rules | **done** |
+| 4 | `shiftadjustment` — 7 of 7 rules | **done** |
+| 4+ | `shiftcorrection`, `dailyearning`, `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
+| 1+ | the other 21 families | not started |
 
 ## Where the work stands
 
-**1,458 tests, 412 of them transcribed Java assertions.** Clippy clean,
+**1,566 tests, 476 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -77,6 +81,17 @@ shift at a time, before `HoursDistribution`'s rules ever run.
 
 **`earningrate`, the fourth and last rate family, is done — all 10 rules.**
 See "`earningrate` — done" below. All four rate families are now complete.
+
+**`schedulerestriction` is done — 5 of its 6 rules**, the first of seven
+families now being ported for scheduling at the user's request (ahead of the
+other, unprioritized not-started families). See "`schedulerestriction` — done,
+one deferred" at the end of this file.
+
+**`schedulelunch` is done — all 3 rules.** See "`schedulelunch` — done" at the
+end of this file.
+
+**`shiftadjustment` is done — all 7 rules.** See "`shiftadjustment` — done" at
+the end of this file. Next up: `shiftcorrection`.
 
 ### `hoursdistribution` — done
 
@@ -139,7 +154,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Sixty-eight so far, listed at the end of the section that introduced them. The
+Seventy-nine so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -158,6 +173,9 @@ resolves anywhere in the file.
 | 58–59 | `doubletimerate` |
 | 60–62 | `overtimerate` |
 | 63–68 | `earningrate` |
+| 69–71 | `schedulerestriction` |
+| 72–75 | `schedulelunch` |
+| 76–79 | `shiftadjustment` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -2892,3 +2910,246 @@ table runs against this layer.
   multi-select id lists. Deferred until a family needs it.
 - `DateUtil`'s `Locale`/`NumberFormat` half, and `TDouble`'s `format*` methods —
   display only, out of scope.
+
+## `schedulerestriction` — done, one deferred
+
+**Ported first among the seven families the user prioritized for scheduling**
+(`schedulerestriction`, `schedulelunch`, `shiftadjustment`, `shiftcorrection`,
+`dailyearning`, `weeklyearning`, `shiftearning`, in that order — see the
+recommendation given before this section started). Measured before porting:
+sizes and spec coverage varied more than the family names suggested —
+`shiftearning` alone is 23 concrete rules with its own `utility` subpackage,
+closer to a second `hoursdistribution` than a quick family, so it is left for
+last and will get its own "Scoping —" pass when its turn comes.
+
+**29 tests, 20 of them transcribed Java assertions.** Five of the six
+catalogue entries have an algorithm: `NoRestrictionRuleImpl`,
+`EarliestStartLatestEndTimeRuleImpl`, `MaxDaysWorkedPerWeekRuleImpl`,
+`MaxHoursOnDayRuleImpl`, `MaxHoursPerWeekRuleImpl`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `NoRestrictionRuleImpl` | 2/2 |
+| `EarliestStartLatestEndTimeRuleImpl` | 4/4 (two `where:` tables) |
+| `MaxDaysWorkedPerWeekRuleImpl` | 3/3 |
+| `MaxHoursOnDayRuleImpl` | 6/6 |
+| `MaxHoursPerWeekRuleImpl` | 3/3 |
+| `MonthlyRequiredDaysOffRuleImpl` | not ported — see below |
+| `ScheduleRestrictionResult` | 2/2 (its own spec file) |
+
+**A new rule shape.** Every family ported before this one either writes a
+rate/distribution field or produces an earning.
+`ScheduleRestrictionRuleImpl.canEmployeeWorkShift` computes a result instead —
+`ScheduleRestrictionResult`, an OK/error value with the `ShiftErrorType` that
+explains a failure — and never mutates its arguments. `ScheduleCalcDataSet`
+needed no new Rust type: it is reached as `&dyn TimeCard`, the same
+one-struct-for-both-implementations shape divergence 23 already settled.
+
+**`MonthlyRequiredDaysOffRuleImpl` is not ported.** It is the only rule in the
+family needing genuinely new infrastructure: `Property.getPlanningPeriodType()`/
+`getPlanningPeriod()` (a "monthly planning period" concept distinct from the
+pay period already carried), a standalone `DaysOffCalculator` class (not a DAO
+method), and `EmployeeTimeOff`/`TORDistribution` entities — none ported.
+Deferred the way `AnnualSalaryOverHoursRegRateRuleImpl` was deferred from
+`regularrate`: a catalogue entry (`MonthlyRequiredDaysOffSrr`) exists, no
+algorithm here yet.
+
+**Nothing else needed new Rust-side surface.** `EmployeeShift` already carried
+`shift_date`/`net_hours`/`start_date_time`/`end_date_time`;
+`translate_dow_from_iso` and `ids_for_key` already existed for day-of-week and
+multi-select parameters; `PropertyPort::period_end_date` plus
+`WeeklyDateRange::with_end_date(...).range_containing_date(date)` — the same
+mechanism `FLSAOTRateRuleImpl`/`CombinationJobsRegRateRuleImpl` already use —
+covered `Property.getWorkWeekForDate`. The one addition was
+`ShiftErrorType::name()` (below).
+
+### Deliberate divergences (continued)
+
+69. **`ShiftErrorType::name()` added, matching Java's default `Enum.toString()`.**
+    `ScheduleRestrictionResult.getMessage()` is the first call site in the
+    tree to need an enum's *unparsed* Java constant spelling (`"REQUIRED_DAYS_OFF"`,
+    not the `code()` used everywhere else) — an exhaustive match over all 28
+    variants rather than a name-mangling transform, so it can't drift silently
+    if a future variant's screaming-snake spelling doesn't cleanly reverse its
+    Rust `PascalCase` name.
+
+70. **`ScheduleRestrictionRule::is_strict` reads through `.fixed()`, not the
+    raw params `BaseScheduleRestrictionRuleImpl.isStrict` reads.** Java
+    intentionally skips `fixMap`: `params.get(STRICT_MODE)`, `null` treated as
+    `false`. Reading it through this crate's uniform `.fixed()` shape
+    (divergence 9) lands on the same answer here because the config's own
+    default is also `"false"` — no behavior changes, only the mechanism.
+    `NoRestrictionRuleImpl` still overrides to a hardcoded `false` rather than
+    reading any parameter, the one override in the family.
+
+71. **`MaxHoursOnDayRuleConfig`/`MaxHoursPerWeekRuleConfig`'s `HOURS_PER_DAY`/
+    `HOURS_PER_WEEK` bounds are inlined as `24.0`/`168.0`.**
+    `com.unifocus.framework.datetime.DateTimeConstants` is not ported — these
+    are the first two rules in the tree to read either constant, and neither
+    is used anywhere else yet.
+
+## `schedulelunch` — done
+
+**Second of the seven families the user prioritized for scheduling.** 28
+tests, 19 of them transcribed Java assertions, full spec coverage across all
+three catalogue entries: `LunchSimpleRuleImpl`, `LunchAdjustEndTimeRuleImpl`,
+`LunchStartTimeAndLengthRuleImpl`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `LunchSimpleRuleImpl` | 7/7 |
+| `LunchAdjustEndTimeRuleImpl` | 8/8 |
+| `LunchStartTimeAndLengthRuleImpl` | 11/11 |
+
+**The first family to write through the `adj_hours` stand-in, not just read
+it.** Every rule inserts an unpaid lunch break by deducting hours from a
+shift that was scheduled without one — `ScheduleLunchRuleImpl.addAdjustmentToShift`
+builds a full `EmployeeShiftAdjustment` audit record (reason, changing user,
+timestamp, the owning `RuleItem`) and appends it to the shift's adjustment
+list in Java. `EmployeeShift` already stood in for that whole entity with a
+plain `adj_hours: f64` scalar (see that module's own doc), but nothing before
+this family had needed to *write* to it — only read the aggregate. The new
+[`EmployeeShift::apply_adjustment`](crate::entity::employee_shift::EmployeeShift::apply_adjustment)
+reproduces `calcAdjustments`' arithmetic for one `BREAK`-type entry
+(`adjHours -= adjustment; netHours = workedHours + adjHours`) with no audit
+trail behind it — see divergence 72.
+
+**Two of the three rules also move a punch outright.**
+`LunchAdjustEndTimeRuleImpl` and (conditionally)
+`LunchStartTimeAndLengthRuleImpl` call `EmployeeShiftPunch.setAllTimes` on
+the shift's OUT punch — writing the raw punch time itself, not just a
+rounding — to push the shift's end out to cover the new break. Neither the
+punch-type lookup nor a three-times-at-once write existed before this
+family; see divergence 73.
+
+**`LunchStartTimeAndLengthRuleImpl` needed `shiftearning`'s own
+`ShiftTimeWindowUtility`, ported early** — see divergence 74 and
+`shiftearning`'s own module doc.
+
+### Deliberate divergences (continued)
+
+72. **`EmployeeShift::apply_adjustment` is the write-side of the
+    `adj_hours` stand-in for the unported `EmployeeShiftAdjustment` entity.**
+    It reproduces exactly the arithmetic `calcAdjustments` runs for a
+    `BREAK`-type adjustment — nothing else, since no ported rule needs the
+    `WORKED`/`OT`/`DT` branches that arithmetic also has. There is no
+    adjustment list, so `shift.getAdjustments()` (which the Groovy specs
+    assert against directly — size, `adjHours`, `reason`, `changedByUser`,
+    `source`, `adjType`, `ruleItem`) has nothing to port to; the transcribed
+    `java_parity_tests` assert `shift.adj_hours()` and, where relevant, the
+    moved punch's three times instead — a strictly narrower set of
+    assertions than the Java spec makes, the same reduction the crate's
+    general adjustments stand-in already accepted.
+
+73. **`PlannedShift` is a new, narrow entity: two fields of the Java
+    entity's several dozen.** `EmployeeShift::punch_index_of_type` (`getPunchOfType`)
+    and `PunchCursor::set_all_times` (`EmployeeShiftPunch.setAllTimes`) are
+    new surface on the existing punch-cursor design (divergence 13's
+    successor) rather than a new abstraction: `set_all_times` writes the raw
+    punch time and the adjusted time directly (no callback, matching Java),
+    then delegates to the existing `set_rounded_time` for the third write,
+    which is the one that fires `resetStartAndEndTimesFromPunch`.
+
+74. **`ShiftTimeWindowUtility` is ported from `shiftearning.utility` ahead of
+    the rest of that family.** `LunchStartTimeAndLengthRuleImpl` is the only
+    rule needing it so far; `DTUtil.convertStartTime`/`convertEndTime`,
+    which it depends on in Java, are not separately ported — their two
+    operations (`date.at_time(time)`, and the same "roll to next day if the
+    end time is before the start time" pattern `EarliestStartLatestEndTimeRuleImpl`
+    already needed in `schedulerestriction`) are inlined as private helpers
+    instead of standing up a `DTUtil` module for two call sites.
+
+75. **`ScheduleLunchRule::execute` takes one `RuleItem`, not a `RuleItem`
+    plus a separately-passed params map.** Java's abstract method signature
+    carries both even though every concrete rule reads only
+    `ruleItem.getParams()` — the same redundant shape divergence 9 already
+    resolved for the rate families, applied again here.
+
+## `shiftadjustment` — done
+
+**Third of the seven families the user prioritized for scheduling.** 46
+tests, 25 of them transcribed Java assertions. All seven catalogue entries
+have an algorithm: `NoAdjustmentRuleImpl`, `AutoBreakRuleImpl`,
+`MinBreakRuleImpl`, `PaidBreakRuleImpl`, `TotalBreakLengthRuleImpl`,
+`DSTAdjustmentRuleImpl`, `MinDailyHrsRuleImpl`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `NoAdjustmentRuleImpl` | no spec — behaviour test written from the Java |
+| `AutoBreakRuleImpl` | 3/3 `where:` tables, narrowed — see below |
+| `MinBreakRuleImpl` | 5/5 |
+| `PaidBreakRuleImpl` | 5/5 |
+| `TotalBreakLengthRuleImpl` | 20/24 rows — the four `shift: null` rows are not transcribed, since `execute` takes `&mut EmployeeShift`, not a nullable reference |
+| `DSTAdjustmentRuleImpl` | no spec — behaviour tests written from the Java |
+| `MinDailyHrsRuleImpl` | no spec — behaviour tests written from the Java |
+
+**Same adjustment-writing shape as `schedulelunch`, extended to a second
+adjustment type.** `EmployeeShift::apply_adjustment` (renamed from
+`apply_break_adjustment`, which `schedulelunch` introduced) now takes an
+explicit `ShiftAdjustType`: `DSTAdjustmentRuleImpl` and `MinDailyHrsRuleImpl`
+write `WORKED`, which *adds* the stored value to the shift's total rather
+than subtracting it. See divergence 76's arithmetic note and the family's own
+module doc for the full explanation, including the counterintuitive sign
+`AutoBreakRuleImpl` stores.
+
+**A new per-shift flag, not a provenance-tagged adjustment list.**
+`AutoBreakRuleImpl.hasNoScheduleLunchAdjustment` walks the (unported)
+adjustments list for one created by a `schedulelunch` rule.
+`EmployeeShift::has_schedule_lunch_adjustment` narrows this to a boolean,
+set by `schedulelunch`'s own three rules — see divergence 76.
+
+**`MinBreakRuleImpl`/`PaidBreakRuleImpl`/`TotalBreakLengthRuleImpl` needed no
+new surface** beyond what `apply_adjustment` and `EmployeeShift::breaks`
+(already ported, matching `ShiftUtil.getBreaks(shift, false)`) already
+provide — confirming, the same lesson every prior family's scoping already
+taught, that reading the Java before adding surface finds less missing than
+expected. `EmployeeShift::total_break_time_in_minutes` moved from private to
+`pub` for `TotalBreakLengthRuleImpl`, since it is a direct call site in Java,
+not only an internal helper of `calcWorkedHours`.
+
+### Deliberate divergences (continued)
+
+76. **`EmployeeShift::apply_adjustment` takes an explicit `ShiftAdjustType`
+    (`WORKED` or `BREAK`) rather than being break-only.** `schedulelunch`
+    first wrote it as `apply_break_adjustment`; this family is the first to
+    need `WORKED`, so it generalized. The `hours` parameter is always the
+    adjustment's own **stored** value, sign included — never a magnitude the
+    caller expects added or subtracted by convention. This matters concretely
+    for `AutoBreakRuleImpl`: it stores `-hrsAdjustment` on a `BREAK`-type
+    adjustment, and `calcAdjustments`' `BREAK` branch is `adjHours -=
+    adj.getAdjHours()`, so subtracting a negative number *increases* the
+    shift's total — the rule's net effect is to add `hrsAdjustment` to net
+    hours, not remove it, despite the name and the negative sign at the call
+    site. `OT`/`DT` adjustment types are a no-op in `apply_adjustment` — no
+    ported rule anywhere in the tree writes either, and Java folds them into
+    separate `adjOTHours`/`adjDTHours` fields nothing here reads.
+
+77. **`EmployeeShift::has_schedule_lunch_adjustment` replaces a
+    provenance-tagged adjustments list with a boolean flag.**
+    `AutoBreakRuleImpl.hasNoScheduleLunchAdjustment` walks the shift's
+    adjustments for one whose owning `RuleItem.getRuleSet().getRuleType() ==
+    SCHEDULE_LUNCH`; this crate carries no adjustments list at all (the
+    `adj_hours` scalar stand-in predates this family — see `schedulelunch`'s
+    own doc), so `schedulelunch`'s three rules set the flag directly via
+    `mark_schedule_lunch_adjustment` when they apply their own adjustment,
+    and `AutoBreakRuleImpl` reads it. Narrower than Java (it cannot
+    distinguish "touched by schedule lunch" from "touched by schedule lunch
+    and then something else"), but nothing in the ported rule set needs that
+    distinction.
+
+78. **`MinDailyHrsRuleImpl` and `DSTAdjustmentRuleImpl` build their
+    adjustment's stored value with each rule's own rounding, not a shared
+    helper.** `DSTAdjustmentRuleImpl` does not round its `adjustmentInHours`
+    at all; `MinDailyHrsRuleImpl` rounds with `TDouble.round(_, 2)`
+    (`round_hours` — the same function `netHours` itself uses, per
+    `common/numbers.rs`'s table), not `roundRawHours` the way every
+    `BREAK`-type rule in this family does through
+    `ShiftAdjustmentRuleImpl.createAdjustment`. Each is reproduced exactly as
+    its own rule rounds, not unified.
+
+79. **`MinDailyHrsRuleConfig`'s overlapping-tier-values validation is not
+    ported.** Java additionally rejects configurations where two of the
+    three `minDailyHrs*`/`minWorkedHrs*` tiers share a nonzero value; nothing
+    in the ported algorithm reads the result differently for overlapping
+    versus non-overlapping tiers, and no ported behaviour test configures
+    more than one nonzero tier at a time.

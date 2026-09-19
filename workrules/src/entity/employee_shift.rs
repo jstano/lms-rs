@@ -37,11 +37,13 @@
 //! the normal case, not an exception.
 
 use crate::common::enums::punch_type::PunchType;
+use crate::common::enums::shift_adjust_type::ShiftAdjustType;
 use crate::common::enums::shift_error_type::ShiftErrorType;
 use crate::common::enums::shift_type::ShiftType;
 use crate::common::numbers::{round_hours, round_raw_hours};
 use crate::entity::employee_shift_punch::EmployeeShiftPunch;
 use crate::entity::hours_distribution::HoursDistribution;
+use crate::entity::planned_shift::PlannedShift;
 use date_range_rs::DateRange;
 use date_range_rs::datetimerange::date_time_range::DateTimeRange;
 use joda_rs::LocalDate;
@@ -70,10 +72,18 @@ pub struct EmployeeShift {
     adj_hours: f64,
     reg_rate: f64,
     shift_category_id: Option<i32>,
+    planned_shift: Option<PlannedShift>,
     /// Stands in for `workedAdjustmentsEmpty()` until the adjustments entity
     /// is ported. `true` matches a shift with no worked adjustments, which is
     /// every shift the punch-rounding tests build.
     worked_adjustments_empty: bool,
+    /// Whether any `schedulelunch` rule has applied an adjustment to this
+    /// shift. Stands in for `AutoBreakRuleImpl.hasNoScheduleLunchAdjustment`'s
+    /// walk of the (unported) adjustments list, checking each entry's owning
+    /// `RuleItem.getRuleSet().getRuleType() == SCHEDULE_LUNCH` — narrowed to
+    /// "has any", since nothing here carries adjustment-to-`RuleItem`
+    /// provenance. See divergence 76.
+    schedule_lunch_adjustment: bool,
     /// The *persisted* errors, as last saved. Distinct from
     /// [`derived_errors`](EmployeeShift::derived_errors).
     errors: Vec<ShiftErrorType>,
@@ -105,7 +115,9 @@ impl EmployeeShift {
             adj_hours: 0.0,
             reg_rate: 0.0,
             shift_category_id: None,
+            planned_shift: None,
             worked_adjustments_empty: true,
+            schedule_lunch_adjustment: false,
             errors: Vec::new(),
         }
     }
@@ -135,6 +147,27 @@ impl EmployeeShift {
     pub fn with_worked_adjustments(mut self) -> Self {
         self.worked_adjustments_empty = false;
         self
+    }
+
+    /// Build a shift as if a `schedulelunch` rule already touched it.
+    #[must_use]
+    pub fn with_schedule_lunch_adjustment(mut self) -> Self {
+        self.schedule_lunch_adjustment = true;
+        self
+    }
+
+    /// Record that a `schedulelunch` rule adjusted this shift.
+    /// `schedulelunch`'s own rules call this alongside
+    /// [`apply_adjustment`](Self::apply_adjustment) so `shiftadjustment`'s
+    /// `AutoBreakRuleImpl` can later see it.
+    pub fn mark_schedule_lunch_adjustment(&mut self) {
+        self.schedule_lunch_adjustment = true;
+    }
+
+    /// Whether any `schedulelunch` rule has adjusted this shift.
+    /// `hasNoScheduleLunchAdjustment`'s negation — see the field's own doc.
+    pub fn has_schedule_lunch_adjustment(&self) -> bool {
+        self.schedule_lunch_adjustment
     }
 
     /// Hours recorded as an adjustment with no punches behind them.
@@ -188,6 +221,13 @@ impl EmployeeShift {
     #[must_use]
     pub fn with_shift_category_id(mut self, shift_category_id: Option<i32>) -> Self {
         self.shift_category_id = shift_category_id;
+        self
+    }
+
+    /// Attach the schedule this shift was built from. `setPlannedShift()`.
+    #[must_use]
+    pub fn with_planned_shift(mut self, planned_shift: Option<PlannedShift>) -> Self {
+        self.planned_shift = planned_shift;
         self
     }
 
@@ -323,6 +363,11 @@ impl EmployeeShift {
         self.shift_category_id
     }
 
+    /// The schedule this shift was built from, if any. `getPlannedShift()`.
+    pub fn planned_shift(&self) -> Option<PlannedShift> {
+        self.planned_shift
+    }
+
     /// How this shift's hours break down. `getHoursDistributions()`.
     ///
     /// Empty until the distribution families have run — the punch families
@@ -399,6 +444,13 @@ impl EmployeeShift {
     /// How many punches this shift has.
     pub fn punch_count(&self) -> usize {
         self.punches.len()
+    }
+
+    /// The position of the first punch of a type, if any. `getPunchOfType(PunchType)`.
+    pub fn punch_index_of_type(&self, punch_type: PunchType) -> Option<usize> {
+        self.punches
+            .iter()
+            .position(|punch| punch.punch_type() == punch_type)
     }
 
     /// A cursor onto one punch, through which writes fire the shift callback.
@@ -675,8 +727,10 @@ impl EmployeeShift {
         breaks
     }
 
-    /// Total break time in whole minutes. `ShiftUtil.totalBreakTimeInMinutes`.
-    fn total_break_time_in_minutes(&self) -> i32 {
+    /// Total break time in whole minutes. `ShiftUtil.totalBreakTimeInMinutes`
+    /// — `pub` because `TotalBreakLengthRuleImpl` calls it directly, not just
+    /// `calcWorkedHours` internally.
+    pub fn total_break_time_in_minutes(&self) -> i32 {
         self.breaks()
             .iter()
             .map(|range| duration_in_seconds(range.start(), range.end()))
@@ -706,6 +760,32 @@ impl EmployeeShift {
             self.worked_hours = 0.0;
             self.net_hours = 0.0;
         }
+    }
+
+    /// Add one adjustment and recompute net hours. `addAdjustment(EmployeeShiftAdjustment)`
+    /// restricted to `WORKED` and `BREAK` — the only two types any ported
+    /// rule writes so far; `OT`/`DT` fold into their own `adjOTHours`/`adjDTHours`
+    /// fields in Java, which nothing here reads yet, so they are a no-op.
+    ///
+    /// `hours` is the adjustment's **own stored `adjHours`**, sign and all —
+    /// not a magnitude to add or subtract by convention. `calcAdjustments`
+    /// then does the opposite of what the sign suggests for `BREAK`:
+    /// `adjHours = roundRawHours(adjHours - adj.getAdjHours())` — a rule that
+    /// stores a *negative* `BREAK` value (as `AutoBreakRuleImpl` does)
+    /// **increases** the shift's total `adjHours`. `WORKED` is the plain
+    /// case: `adjHours = roundRawHours(adjHours + adj.getAdjHours())`.
+    ///
+    /// The adjustments entity is not ported (see [`with_worked_adjustments`](Self::with_worked_adjustments)),
+    /// so there is no list to append to and no audit fields (`reason`,
+    /// `changedByUser`, the owning `RuleItem`) to carry — only this
+    /// observable effect, then `netHours = roundHours(workedHours + adjHours)`.
+    pub fn apply_adjustment(&mut self, hours: f64, adj_type: ShiftAdjustType) {
+        self.adj_hours = round_raw_hours(match adj_type {
+            ShiftAdjustType::Worked => self.adj_hours + hours,
+            ShiftAdjustType::Break => self.adj_hours - hours,
+            ShiftAdjustType::Ot | ShiftAdjustType::Dt => return,
+        });
+        self.net_hours = round_hours(self.worked_hours + self.adj_hours);
     }
 
     /// Pull the shift's start or end from a punch whose rounded time changed,
@@ -871,6 +951,17 @@ impl PunchCursor<'_> {
         if self.shift.punches[self.index].set_rounded_time(rounded_time) {
             self.shift.reset_start_and_end_times_from_punch(self.index);
         }
+    }
+
+    /// Write all three times together. `EmployeeShiftPunch.setAllTimes` —
+    /// `setPunchTime`/`setAdjTime` (no side effect) followed by
+    /// `setRoundedTime` (the callback). Used only by `schedulelunch`'s
+    /// rules, which move a scheduled shift's punch outright rather than
+    /// adjusting a rounding.
+    pub fn set_all_times(&mut self, time: Option<LocalDateTime>) {
+        self.shift.punches[self.index].set_punch_time(time);
+        self.shift.punches[self.index].set_adj_time(time);
+        self.set_rounded_time(time);
     }
 
     /// Run `action` against every punch on the shift, this one included.
