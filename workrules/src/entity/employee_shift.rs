@@ -68,6 +68,8 @@ pub struct EmployeeShift {
     worked_hours: f64,
     net_hours: f64,
     adj_hours: f64,
+    reg_rate: f64,
+    shift_category_id: Option<i32>,
     /// Stands in for `workedAdjustmentsEmpty()` until the adjustments entity
     /// is ported. `true` matches a shift with no worked adjustments, which is
     /// every shift the punch-rounding tests build.
@@ -101,6 +103,8 @@ impl EmployeeShift {
             worked_hours: 0.0,
             net_hours: 0.0,
             adj_hours: 0.0,
+            reg_rate: 0.0,
+            shift_category_id: None,
             worked_adjustments_empty: true,
             errors: Vec::new(),
         }
@@ -170,6 +174,20 @@ impl EmployeeShift {
     #[must_use]
     pub fn with_adj_hours(mut self, adj_hours: f64) -> Self {
         self.adj_hours = adj_hours;
+        self
+    }
+
+    /// Set the persisted regular rate, as loading from the database would.
+    #[must_use]
+    pub fn with_reg_rate(mut self, reg_rate: f64) -> Self {
+        self.reg_rate = reg_rate;
+        self
+    }
+
+    /// Tag the shift with a shift category. `setShiftCategory()`.
+    #[must_use]
+    pub fn with_shift_category_id(mut self, shift_category_id: Option<i32>) -> Self {
+        self.shift_category_id = shift_category_id;
         self
     }
 
@@ -249,6 +267,16 @@ impl EmployeeShift {
         self
     }
 
+    /// Set the persisted worked hours directly, the same way
+    /// [`with_net_hours`](Self::with_net_hours) sets net hours — for a spec
+    /// that fixes `workedHours` on the fixture rather than deriving it from
+    /// punches.
+    #[must_use]
+    pub fn with_worked_hours(mut self, worked_hours: f64) -> Self {
+        self.worked_hours = worked_hours;
+        self
+    }
+
     /// The instant `ShiftStartTimeComparator` orders shifts by: the start time
     /// if the shift has one, and otherwise **midnight on its shift date**.
     ///
@@ -278,6 +306,23 @@ impl EmployeeShift {
         self.adj_hours
     }
 
+    /// The regular rate `RegularRate` family rules write here so
+    /// `FLSAOTRateRuleImpl`/`WeightedOTRateRuleImpl` can read it back.
+    /// `getRegRate()`.
+    pub fn reg_rate(&self) -> f64 {
+        self.reg_rate
+    }
+
+    /// `setRegRate()`.
+    pub fn set_reg_rate(&mut self, reg_rate: f64) {
+        self.reg_rate = reg_rate;
+    }
+
+    /// The configured tag this shift carries, if any. `getShiftCategory().getID()`.
+    pub fn shift_category_id(&self) -> Option<i32> {
+        self.shift_category_id
+    }
+
     /// How this shift's hours break down. `getHoursDistributions()`.
     ///
     /// Empty until the distribution families have run — the punch families
@@ -294,6 +339,16 @@ impl EmployeeShift {
     /// Append one distribution. `addHoursDistribution()`.
     pub fn add_hours_distribution(&mut self, distribution: HoursDistribution) {
         self.hours_distributions.push(distribution);
+    }
+
+    /// Append several distributions. `addHoursDistributions()`.
+    pub fn add_hours_distributions(&mut self, distributions: Vec<HoursDistribution>) {
+        self.hours_distributions.extend(distributions);
+    }
+
+    /// Drop every distribution. `clearHoursDistributions()`.
+    pub fn clear_hours_distributions(&mut self) {
+        self.hours_distributions.clear();
     }
 
     /// The distinct dates this shift has distributions on, in date order.
@@ -588,20 +643,21 @@ impl EmployeeShift {
         duration_in_seconds(in_time, out_time) / SECONDS_PER_MINUTE
     }
 
-    /// Total break time in whole minutes. `ShiftUtil.totalBreakTimeInMinutes`.
+    /// This shift's breaks, as rounded-time ranges. `ShiftUtil.getBreaks(shift,
+    /// false)` — the `useActual` argument every caller in this tree passes.
     ///
-    /// Note `ShiftUtil.getBreaks` pairs punches positionally — indices 1&2,
-    /// 3&4, … — rather than by punch type, and yields nothing at all when the
-    /// shift has errors or three punches or fewer.
-    fn total_break_time_in_minutes(&self) -> i32 {
+    /// Punches pair positionally — indices 1&2, 3&4, … in `PunchTimeComparator`
+    /// order, not by punch type — and the whole list is empty when the shift
+    /// has (persisted) errors or three punches or fewer.
+    pub fn breaks(&self) -> Vec<DateTimeRange> {
         // ShiftUtil.getBreaks tests `shift.getErrors()`, the persisted set —
         // not the derived one calcWorkedHours uses two lines later.
         if self.has_errors() || self.punches.len() <= 2 {
-            return 0;
+            return Vec::new();
         }
 
         let order = self.punch_order();
-        let mut break_seconds = 0;
+        let mut breaks = Vec::new();
 
         let mut index = 1;
         while index < order.len().saturating_sub(2) {
@@ -612,11 +668,20 @@ impl EmployeeShift {
                 index += 2;
                 continue;
             };
-            break_seconds += duration_in_seconds(start, end);
+            breaks.push(DateTimeRange::of(start, end));
             index += 2;
         }
 
-        break_seconds / SECONDS_PER_MINUTE
+        breaks
+    }
+
+    /// Total break time in whole minutes. `ShiftUtil.totalBreakTimeInMinutes`.
+    fn total_break_time_in_minutes(&self) -> i32 {
+        self.breaks()
+            .iter()
+            .map(|range| duration_in_seconds(range.start(), range.end()))
+            .sum::<i32>()
+            / SECONDS_PER_MINUTE
     }
 
     /// Recompute worked and net hours from the punches. `calcWorkedHours()`.
@@ -941,6 +1006,38 @@ mod tests {
         shift.calc_worked_hours();
 
         assert_eq!(shift.worked_hours(), 7.5);
+    }
+
+    #[test]
+    fn breaks_are_the_shift_s_punches_paired_positionally() {
+        let shift = shift(vec![
+            punch(1, PunchType::In, 8, 0),
+            punch(2, PunchType::Break, 12, 0),
+            punch(3, PunchType::Back, 12, 30),
+            punch(4, PunchType::Out, 16, 0),
+        ]);
+
+        let breaks = shift.breaks();
+
+        assert_eq!(breaks.len(), 1);
+        assert_eq!(breaks[0].start(), at(12, 0));
+        assert_eq!(breaks[0].end(), at(12, 30));
+    }
+
+    #[test]
+    fn a_shift_with_three_punches_or_fewer_has_no_breaks() {
+        let shift = shift(vec![
+            punch(1, PunchType::In, 8, 0),
+            punch(2, PunchType::Break, 12, 0),
+            punch(3, PunchType::Back, 12, 30),
+        ]);
+
+        assert!(shift.breaks().is_empty());
+    }
+
+    #[test]
+    fn a_shift_with_no_break_has_no_breaks() {
+        assert!(worked_shift().breaks().is_empty());
     }
 
     #[test]

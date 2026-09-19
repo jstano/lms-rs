@@ -36,6 +36,7 @@
 //! | `WatsonUserDAO` | 2 | — | `WatsonUser` |
 
 use crate::common::enums::shift_type::ShiftType;
+use crate::entity::accrual_transaction::AccrualTransaction;
 use crate::entity::assignment::Assignment;
 use crate::entity::earning_type::EarningType;
 use crate::entity::employee_earning::EmployeeEarning;
@@ -152,6 +153,22 @@ pub trait EmployeeEarningPort {
         employee_id: i32,
         period: &DateRange,
         earning_type_ids: &[i32],
+    ) -> Option<f64>;
+
+    /// An employee's already-banked cost-over-hours rate for a pair of accrual
+    /// buckets. `getBankedRateForRule(Integer, Integer, Integer)`.
+    ///
+    /// `CalculatedAccrualRateRuleImpl`'s last-bucket fallback when its own
+    /// `AccrualTransaction` pair for the bucket's `asOfDate` has no matching
+    /// cost transaction. Hand-built SQL dividing one earning-type's summed
+    /// `dollars` by another's summed `hours`; `None` where Java's
+    /// `uniqueResult()` is null (no rows, or an hours sum of zero making the
+    /// division undefined).
+    fn banked_rate_for_rule(
+        &self,
+        employee_id: i32,
+        hours_earning_type_id: i32,
+        cost_earning_type_id: i32,
     ) -> Option<f64>;
 }
 
@@ -328,6 +345,89 @@ pub trait EmployeeShiftConsecutiveDaysPort {
     ) -> i32;
 }
 
+/// A property's current pay period. `PropertyDAO` (reached in Java through
+/// `shift.getEmployee().getProperty()`, which the entity graph here does not
+/// carry — [`EmployeeShift`](crate::entity::employee_shift::EmployeeShift)
+/// only holds the property's id).
+///
+/// `RegularHoursByWorkWeekRuleImpl` is the only caller so far.
+pub trait PropertyPort {
+    /// The end date of the property's current pay period.
+    /// `Property.getPeriodEndDate()`.
+    fn period_end_date(&self, property_id: i32) -> LocalDate;
+}
+
+/// An employee's unapplied and prior-period accrual transactions.
+/// `AccrualTransactionDAO`.
+///
+/// Both methods are Hibernate `Criteria` queries with no portable body — see
+/// the file-level scope note. `CalculatedAccrualRateRuleImpl` and
+/// `PriorBalancesRateRuleImpl` are the only two readers, one method each.
+pub trait AccrualTransactionPort {
+    /// Every transaction across a set of accrual earning types that still has
+    /// unapplied hours, oldest `payPeriodEndDate` first.
+    /// `getTransactionsForEmployeeWithUnappliedHours(int, Collection<Integer>)`.
+    fn transactions_for_employee_with_unapplied_hours(
+        &self,
+        employee_id: i32,
+        earning_type_ids: &[i32],
+    ) -> Vec<AccrualTransaction>;
+
+    /// The transaction(s) as of the pay period immediately before the
+    /// property's current one. `getLatestTransactionsPriorToPayPeriod(Employee)`.
+    ///
+    /// Java resolves the date through `property.getPayPeriod()` and
+    /// `Weeks(periodEndDate)` internally; the port takes only the employee id,
+    /// the same shape [`PropertyPort`] already keeps property-date arithmetic
+    /// out of the rules tree for.
+    fn latest_transactions_prior_to_pay_period(&self, employee_id: i32) -> Vec<AccrualTransaction>;
+}
+
+/// The three-field raw-SQL aggregate `AvgDayXWeeksRateRuleImpl` loads over a
+/// date window. `earningrate.EligibleHours` — a plain DTO in the Java, not a
+/// DAO or entity, populated by `Transformers.aliasToBean` off a hand-written
+/// query, not a full row.
+///
+/// Every field is `None` exactly where Java's boxed `Integer`/`Double` is
+/// null — an empty result set, which makes all three columns null together
+/// the way [`NetAndOtHours`]'s single-row `SUM` query does.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct EligibleHours {
+    /// Distinct shift dates in the window. `getDateCount()`.
+    pub date_count: Option<i32>,
+    /// Summed net hours. `getNetHours()`.
+    pub net_hours: Option<f64>,
+    /// Summed regular hours — loaded by the query, not read by
+    /// `AvgDayXWeeksRateRuleImpl`. `getRegHours()`.
+    pub reg_hours: Option<f64>,
+}
+
+/// The two holiday-eligibility queries `AvgDayXWeeksRateRuleImpl` needs.
+/// `HolidayDataDAO`.
+pub trait HolidayDataPort {
+    /// The start of the work week that begins the `x_weeks`'th worked week
+    /// before `calc_period_end_date`. `getWeekStartOfNthPastWorkedWeek(int,
+    /// int, LocalDate)`.
+    ///
+    /// `None` where Java returns null — not enough worked history to count
+    /// back that far.
+    fn week_start_of_nth_past_worked_week(
+        &self,
+        employee_id: i32,
+        x_weeks: i32,
+        calc_period_end_date: LocalDate,
+    ) -> Option<LocalDate>;
+
+    /// The date count and net/regular hours totals across a date window.
+    /// `loadEligibleHours` — the query behind `holidayEligibilityHoursQuery`.
+    ///
+    /// `None` where the caller has no window to query at all (Java's
+    /// `loadEligibleHours` short-circuits on a null `DateRange` before
+    /// querying); a window with no matching shifts still queries and comes
+    /// back `Some` with every field `None`.
+    fn eligible_hours(&self, employee_id: i32, period: &DateRange) -> Option<EligibleHours>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -363,6 +463,14 @@ mod tests {
             _earning_type_ids: &[i32],
         ) -> Option<f64> {
             Some(self.0.iter().map(EmployeeEarning::hours).sum())
+        }
+        fn banked_rate_for_rule(
+            &self,
+            _employee_id: i32,
+            _hours_earning_type_id: i32,
+            _cost_earning_type_id: i32,
+        ) -> Option<f64> {
+            None
         }
     }
 

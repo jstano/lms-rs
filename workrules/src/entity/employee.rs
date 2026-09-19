@@ -179,6 +179,37 @@ impl Employee {
             .find_map(|date| self.home_employee_job_status(date))
     }
 
+    /// The status covering one job on a date. `getEffectiveJobStatus(LocalDate,
+    /// Assignment)` — the same lookup as [`employee_job_status`](Self::employee_job_status)
+    /// with its arguments in Java's order. Kept as its own method (rather than
+    /// just calling the existing one at each site) because
+    /// `CombinationJobsRegRateRuleImpl` is the first caller to need its
+    /// **period** sibling below, and the two read as a pair in the Java.
+    pub fn effective_job_status(&self, date: LocalDate, job_id: i32) -> Option<&EmployeeJobStatus> {
+        self.employee_job_status(job_id, date)
+    }
+
+    /// The status covering one job on the **last** date of `period` that has
+    /// one, scanning backward. `getLastEffectiveJobStatusForPeriod(DateRange,
+    /// Assignment)`.
+    ///
+    /// Distinct from [`last_home_employee_job_status_for_period`](Self::last_home_employee_job_status_for_period):
+    /// that one asks "who is home on this date", this one asks "who holds
+    /// *this* job on this date" — `CombinationJobsRegRateRuleImpl`'s weekly
+    /// candidate uses it to price a job at whatever rate is in force at the
+    /// end of the target week, not at each shift's own date.
+    pub fn last_effective_job_status_for_period(
+        &self,
+        period: &DateRange,
+        job_id: i32,
+    ) -> Option<&EmployeeJobStatus> {
+        period
+            .dates()
+            .into_iter()
+            .rev()
+            .find_map(|date| self.effective_job_status(date, job_id))
+    }
+
     /// Is the employee active in a job on a date? `isActiveJobOnDate`.
     pub fn is_active_job_on_date(&self, job_id: i32, date: LocalDate) -> bool {
         self.employee_job_status(job_id, date).is_some()
@@ -312,6 +343,39 @@ mod tests {
             "Override"
         );
         assert!(e.rule_set_for_type(RuleType::BenefitAccrual).is_none());
+    }
+
+    #[test]
+    fn last_effective_job_status_for_period_picks_the_rate_in_force_at_periods_end() {
+        let early = EmployeeJobStatus::new(
+            1,
+            100,
+            200,
+            LocalDate::of(2010, 1, 1),
+            LocalDate::of(2010, 1, 15),
+            EmployeePayType::Hourly,
+            10.0,
+            false,
+        );
+        let late = EmployeeJobStatus::new(
+            2,
+            100,
+            200,
+            LocalDate::of(2010, 1, 16),
+            LocalDate::of(2010, 12, 31),
+            EmployeePayType::Hourly,
+            15.0,
+            false,
+        );
+        let e = Employee::new(100, 11, "Alex Kim", vec![early, late]);
+        let week = DateRange::new(LocalDate::of(2010, 1, 10), LocalDate::of(2010, 1, 16));
+
+        let status = e.last_effective_job_status_for_period(&week, 200).unwrap();
+        assert_eq!(
+            status.hourly_rate(),
+            15.0,
+            "the week-end date, the 16th, is on the new rate"
+        );
     }
 
     #[test]

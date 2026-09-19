@@ -143,6 +143,11 @@ impl HoursDistribution {
         self.original_hours = original_hours;
     }
 
+    /// Undo whatever a distribution rule did. `resetHoursToOriginalHours()`.
+    pub fn reset_hours_to_original_hours(&mut self) {
+        self.set_hours(self.original_hours);
+    }
+
     /// `setHoursDistributionTypeID()`.
     pub fn set_hours_distribution_type_id(&mut self, id: Option<i32>) {
         self.hours_distribution_type_id = id;

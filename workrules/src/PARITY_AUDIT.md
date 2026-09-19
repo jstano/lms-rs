@@ -36,11 +36,16 @@ see "Test backing" below for why.
 | 3 | `hoursdistribution` — `TimeCard` surface | **done** |
 | 3 | `hoursdistribution` — the six shared helpers | **done** |
 | 3 | `hoursdistribution` — 19 of 19 rules | **done** |
-| 1+ | the other 29 families | not started |
+| — | `regularhoursdistribution` — 3 of 3 rules + runner | **done** |
+| 2 | `regularrate` — 7 of 8 rules | **done, one deferred** |
+| 2 | `doubletimerate` — 5 of 5 rules | **done** |
+| 2 | `overtimerate` — 8 of 8 rules | **done** |
+| 2 | `earningrate` — 10 of 10 rules | **done** |
+| 1+ | the other 27 families | not started |
 
 ## Where the work stands
 
-**1,236 tests, 341 of them transcribed Java assertions.** Clippy clean,
+**1,458 tests, 412 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -53,8 +58,25 @@ user's request; the plan puts the rate families (Wave 2) first because the
 overtime rules lean on them. **Nothing blocked on that**, which is now settled
 rather than provisional: no rule in the family needed a rate.
 
-**Wave 2, the rate families, is the next body of work.** Nothing in this crate
-depends on it yet.
+**`regularhoursdistribution` is also complete**, ported out of plan order for
+the same reason as `hoursdistribution` — see its own section below. It is a
+different family from `hoursdistribution` despite the name: `HoursDistribution`
+(code `HD`) moves already-distributed hours between regular, overtime and
+double-time buckets over a work week; `RegularHoursDistribution` (code `RH`)
+puts a shift's own net hours onto its regular bucket in the first place, one
+shift at a time, before `HoursDistribution`'s rules ever run.
+
+**`regularrate`, the first rate family, is done — 7 of its 8 rules.** See
+"`regularrate` — done" below.
+
+**`doubletimerate`, the second rate family, is done — all 5 rules.** See
+"`doubletimerate` — done" below.
+
+**`overtimerate`, the third rate family, is done — all 8 rules.** See
+"`overtimerate` — done" below.
+
+**`earningrate`, the fourth and last rate family, is done — all 10 rules.**
+See "`earningrate` — done" below. All four rate families are now complete.
 
 ### `hoursdistribution` — done
 
@@ -117,7 +139,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Forty-one so far, listed at the end of the section that introduced them. The
+Sixty-eight so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -131,6 +153,11 @@ resolves anywhere in the file.
 | 21–27 | The `TimeCard` surface |
 | 28–32 | The shared helpers |
 | 33–50 | Rules |
+| 51–53 | `regularhoursdistribution` |
+| 54–57 | `regularrate` |
+| 58–59 | `doubletimerate` |
+| 60–62 | `overtimerate` |
+| 63–68 | `earningrate` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -148,6 +175,589 @@ deliberate divergences land in this file as they are discovered. The Groovy is
 weaker than it looks in several places — see the spec-quality findings under
 "Rules" — so the transcriptions assert more than the originals do wherever the
 original's predicate was accidentally vacuous.
+
+## Scoping — the rate families
+
+Measured before starting, per the lesson `hoursdistribution` left behind:
+"measure before scheduling," because guessed one-liners were wrong five times
+out of eight there. Every description below was read off the Java, not
+inferred from the class name.
+
+**Four catalogue entries, not thirty-four.** `RuleType.REGULAR_RATE` ("RR"),
+`OVERTIME_RATE` ("OR"), `DOUBLE_TIME_RATE` ("DR") and `EARNING_RATE` ("ER")
+are each **one** catalogue entry with several selectable concrete
+implementations behind it — the same shape as Wave 1's `punchrounding` (one
+`RuleType`, six rule classes) and `punchvalidation`, not the
+`hoursdistribution` shape (one `RuleType` per rule). `RuleUtils`/`RuleType.java`
+confirms it: there is no `REG_RATE_HOME_JOB`-style per-rule entry anywhere in
+the enum. So the four marker interfaces/abstract classes
+(`RegularRateRuleImpl`, `OvertimeRateRuleImpl`, `DoubleTimeRateRuleImpl`,
+`EarningRateRuleImpl`) are real supertraits to port, not extra catalogue rows —
+unlike `ShiftDifferenceOTRuleImpl` in the last wave, which really was deferred
+because it had no catalogue entry at all.
+
+**Thirty-four concrete rule classes across four families, 54 spec cases in 18
+spec files:**
+
+| Family | Concrete rules | Spec files | Spec cases |
+|---|---:|---:|---:|
+| `regularrate` | 8 | 9 (`CombinationJobsRegRateRuleImpl` has 3) | 39 |
+| `overtimerate` | 9 (incl. marker) | 2 | 3 |
+| `doubletimerate` | 6 (incl. marker) | 1 | 3 |
+| `earningrate` | 12 (incl. marker, excl. `EligibleHours`) | 5 | 10 |
+
+`overtimerate` and `doubletimerate` are the thinnest-tested families in the
+crate so far — most of their rules (`CommissionBased*`, `HomeDept*`,
+`HomeJob*`, `Job*Rate`, `WeightedOTRateRuleImpl`) have **no Groovy spec at
+all**; only the FLSA and guaranteed-wage rules do. Their behaviour tests will
+have to be written from the Java the way Wave 0's were, not transcribed.
+
+### The shared interface
+
+`regularrate.RateRuleImpl` is the root every family but `earningrate` extends:
+
+```java
+public interface RateRuleImpl extends RuleImpl {
+   void execute(EmployeeShift shift, HoursDistribution distribution, TimeCard dataset, RuleItem ruleItem);
+   void execute(EmployeeEarning earning, TimeCard dataset, RuleItem ruleItem);
+}
+```
+
+Every `RegularRateRuleImpl`/`OvertimeRateRuleImpl`/`DoubleTimeRateRuleImpl`
+implements **both** overloads — one rates a shift's distribution, the other
+rates a standalone earning — and almost every concrete rule's earning overload
+is a near-duplicate of its distribution overload with `earning.setRate(...)`
+in place of `setRegularRates`/`setOvertimeRates`/`setDoubleTimeRates`. That
+duplication is in the Java itself, not a porting artifact; expect the Rust
+trait to keep both methods rather than collapsing them.
+
+`earningrate.EarningRateRuleImpl` is a **separate root**, extending the bare
+`RuleImpl` rather than `RateRuleImpl`: `void execute(TimeCard, EmployeeEarning,
+Map<String,String>)` — one method, no `RuleItem`, raw params instead. It never
+touches a shift or distribution at all. Read literally this family prices
+*earnings*, not worked time, and several of its rules (`EarningFixedRateRuleImpl`,
+`CalculatedAccrualRateRuleImpl`, `PriorBalancesRateRuleImpl`) have nothing to
+do with wage rates in the hourly sense — they price benefit/accrual payouts.
+
+`BaseRegularRateRuleImpl.setRegularRates` writes `distribution.baseRate` +
+`rateRuleItemID`; `BaseOvertimeRateRuleImpl`/`BaseDoubleTimeRateRuleImpl.set*Rates`
+write `distribution.premiumRate` + `rateRuleItemID` and log (not throw) when
+the computed rate is `0`. All three fields already exist on the Rust
+`HoursDistribution` (`base_rate`, `premium_rate`, `rate_rule_item_id`,
+`entity/hours_distribution.rs:36-137`) — this part needs no new entity work.
+
+### Corrected one-line descriptions
+
+**`regularrate`** (8 concrete rules, all implement both `RateRuleImpl` overloads):
+
+| Rule | What it actually does |
+|---|---|
+| `JobRegRateRuleImpl` | The job's own `EmployeeJobStatus.hourlyRate` on the effective date — the simple case every other rule complicates. Silently no-ops (writes nothing) if the job status is null on the distribution path; **throws** on the earning path (`jobStatus.getHourlyRate()` on a null). |
+| `HomeJobRegRateRuleImpl` | The employee's *home* job status's rate, `0.0` if they have none that date — no job/department comparison at all. |
+| `HomeDeptRegRateRuleImpl` | Home job's rate **if** the shift's job shares the home job's parent department; otherwise the job's own effective rate, optionally raised to the employee's own job-status rate if `payGreater` is set. |
+| `FactorJobRegRateRuleImpl` | The job's own rate **times a configured factor** — a scaling rule, not a lookup rule. |
+| `ShiftCategoryRegRateRuleImpl` | Rewrites the rate only for shifts (or earnings, unconditionally) matching a configured set of shift-category ids: fixed rate, or job rate ± addition/multiplier, then optionally floored at minimum wage. Distributions outside the category either keep the plain job-status rate or are skipped entirely, gated by `isOpenForEditingOn`/`isOpenForEditingFor`. |
+| `ShiftCategoryMinWageRegRateRuleImpl` — **different rule from the above despite the name overlap** | Always starts from the job-status rate; only *floors* it at minimum wage, and only for shifts in the configured category list. No fixed-rate/multiplier path, no open-for-editing gate. |
+| `AnnualSalaryOverHoursRegRateRuleImpl` | Backs out an *effective hourly rate* from a salaried employee's period salary: `(periodSalary − otherConfiguredEarningDollars) / totalWorkedHoursInPayPeriod`, recomputed fresh on every call from `PayRateCalculator.getPeriodSalary` — not a stored per-shift value. Needs a `PayRateCalculator` port/service and `Employee.getPayGroup().currentPayPeriod()`, neither ported yet. |
+| `CombinationJobsRegRateRuleImpl` | The family's largest and only one with real complexity (369+334+173 spec lines across three specs). For each date, computes a "daily" candidate rate (only same-date shifts/earnings, grouped by job status, keeping groups meeting an hours threshold) and a "weekly" candidate (whole scheduling week, grouped, keeping groups meeting a **days**-worked threshold, using the employee's **last** effective job status over the week rather than the point-in-time one), each candidate limited to rates *higher* than the shift's own and optionally required to be a separate job id, then pays `max(daily, weekly)` — falling back to the shift's own status if nothing qualifies. |
+
+**`overtimerate`** (`OvertimeRateRuleImpl` is the abstract marker; 8 concrete rules):
+
+| Rule | What it actually does |
+|---|---|
+| `FLSAOTRateRuleImpl` | `flsaData.getEffectiveRegularRate(applyMinWagePerShift) * otFactor`, plus a minimum-wage shortfall make-up added on top if `shift.getRegRate() < minWage`. The **only** overtime rule that reads `shift.getRegRate()` — i.e. the only one with a real dependency on `RegularRate` having run first. Picks its FLSA week/pay-period key via `Property.getCurrentWeek()`/`getPayPeriod()`, gated on `PayPeriodType`. |
+| `JobOTRateRuleImpl` | Job-status rate (floored at min wage) × factor. **Throws `RuntimeException`** if the job status resolves to null — the only overtime rule that throws rather than silently producing `0`/skipping. |
+| `HomeJobOTRateRuleImpl` | Home job-status rate (`0.0` if none), floored at min wage, × factor. |
+| `HomeDeptOTRateRuleImpl` | Home job's rate if same parent department as the shift's job, else the job's own effective rate; floored at min wage; × factor. Same department comparison as `HomeDeptRegRateRuleImpl` but without the `payGreater` branch. |
+| `CommissionBasedOTRateRuleImpl` | Same-date, same-job earnings-of-configured-types ÷ same-date same-job worked hours, floored at a configured minimum commission rate *and* at minimum wage, × factor. Structurally identical arithmetic to its `doubletimerate` sibling below. |
+| `GuaranteedWageOTRateRuleImpl` | Prices overtime off a **weekly guaranteed wage**: `homeJobRate × configuredWeeklyHours`, divided by the week's actual worked hours (shifts + regular/premium earnings) to get an effective hourly rate, then `× factor`, then rounded with `roundHours` (not `roundCurrency`, unlike every sibling). |
+| `WeightedOTRateRuleImpl` | The FLSA weighted-average-rate calculation, but backs out only the **incremental** rate to add on top of the distribution's own `baseRate`: computes total OT dollars due at the true weighted rate × factor, subtracts what straight-time-at-baseRate would already cover, and divides the remainder back over the hours — so what it writes as `premiumRate` is a top-up, not the whole rate. The earning overload does the same subtraction against `earning.getRate() * earning.getHours()`. |
+| `FLSAWeightedOTRateRuleImpl` | Confusingly named next to the above — this one is the *plain* FLSA-rate × factor rule (same shape as `FLSAOTRateRuleImpl`'s core formula), keyed by `Weeks(periodEndDate)` instead of `Property.getCurrentWeek()`. No min-wage make-up term. |
+
+**`doubletimerate`** (`DoubleTimeRateRuleImpl` marker; 5 concrete rules — a proper
+subset of `overtimerate`'s shapes, no `Job`/`Guaranteed`/`Weighted` analogue):
+
+| Rule | What it actually does |
+|---|---|
+| `FLSADTRateRuleImpl` | FLSA rate × dtFactor, keyed by `Weeks(periodEndDate)` — the `doubletimerate` sibling of `FLSAWeightedOTRateRuleImpl`, not of `FLSAOTRateRuleImpl` (no min-wage shortfall make-up, no `Property.getCurrentWeek()`/pay-period branch). |
+| `HomeDeptDTRateRuleImpl` | Same department-match-then-floor-at-min-wage shape as `HomeDeptOTRateRuleImpl`, × dtFactor. |
+| `HomeJobDTRateRuleImpl` | Same shape as `HomeJobOTRateRuleImpl`, × dtFactor. |
+| `JobDTRateRuleImpl` | Job-status rate floored at min wage × dtFactor — **does not throw** on a null job status (unlike `JobOTRateRuleImpl`); a null status NPEs instead on `jobStatus.getHourlyRate()`, an unguarded call the OT sibling explicitly guards against. |
+| `CommissionBasedDTRateRuleImpl` | Identical arithmetic to `CommissionBasedOTRateRuleImpl`, own config keys (`DOUBLETIME_FACTOR_PROP` instead of `OVERTIME_FACTOR_PROP`). |
+
+**`earningrate`** (`EarningRateRuleImpl` interface, `AvgWageEarningRateRule`
+sub-interface with one implementor; `EligibleHours` is a plain DTO, not a
+rule; 11 concrete rules):
+
+| Rule | What it actually does |
+|---|---|
+| `EarningFixedRateRuleImpl` | Sets the earning's rate to one configured constant. The simplest rule in the whole wave. |
+| `EarningFactorRateRuleImpl` | Job-status rate (home job's if configured, else the earning's own job) by UOM (hourly or piece), × factor **only if** the earning's type is in a configured allow-list, then floored at min wage if the earning type says so. |
+| `EarningOverrideJobRateRuleImpl` | If the employee's plain job rate already meets minimum wage, **delegates entirely** to a fresh `EarningFactorRateRuleImpl` instance constructed with that rule's *default* config values (not this rule's own params) — an unusual cross-rule call, not a shared helper. Otherwise applies a configured override rate (itself possibly replaced by minimum wage) × factor. |
+| `HomeJobRateRuleImpl` | Home job-status rate by UOM (hourly/piece), `0.0` if no home job that date, × factor, floored at min wage if configured. |
+| `HomeDeptRateRuleImpl` | Same department-match-then-fallback shape as `HomeDeptRegRateRuleImpl`/`HomeDeptOTRateRuleImpl`, but UOM-aware (piece rate only reads the home job status, never falls back to the job's own). |
+| `ContractDailyRateRuleImpl` | Backs out a **daily** rate from a contract: home job's hourly-or-piece rate × factor (floored at min wage), times `contractHours / contractDays`, or `0.0` outright if `contractDays == 0` or there's no home job status. |
+| `FLSAEarningRateRuleImpl` | The `earningrate` counterpart of `FLSAOTRateRuleImpl`'s core formula (FLSA effective rate × factor, `Property.getCurrentWeek()`/`getPayPeriod()` gated on `PayPeriodType`) — implements `AvgWageEarningRateRule`, the family's only user of that sub-interface, despite the name suggesting it belongs with `FLSAWeightedOTRateRuleImpl` instead. |
+| `AvgDayXWeeksRateRuleImpl` | Prices an average-day benefit payout: home job rate × factor (floored at min wage if the earning type says so), × `(net hours / distinct worked days)` averaged over a DAO-supplied window starting N weeks before the current scheduling week — `0.0` if the employee was hired after that window's end or the DAO finds no start date. Needs a new `HolidayDataDAO`-style port plus a raw-SQL "eligible hours" aggregate the Java runs directly against Hibernate (`EligibleHours`, a plain three-field DTO holding `dateCount`/`netHours`/`regHours`). |
+| `CalculatedAccrualRateRuleImpl` | The family's largest and most stateful rule (230-line spec) — blends an accrual payout's rate across every unapplied hours/cost transaction bucket for the employee, oldest first, falling back to the current job rate for buckets older than a year or for hours left over once buckets are exhausted; caches per-employee bucket state across calls within one run (`@Scope("prototype")`, a `Map` field keyed by employee id) rather than recomputing per earning. Needs `AccrualTransactionDAO` and `EmployeeEarningDAO.getBankedRateForRule`, plus an `AccrualTransaction` entity — none ported. |
+| `PriorBalancesRateRuleImpl` | Divides a prior accrual period's ending wage balance by its ending hours balance, memoized per employee for the run. Needs the same `AccrualTransactionDAO` (a different method: `getLatestTransactionsPriorToPayPeriod`) and `AccrualTransaction` entity as the rule above. |
+| `AvgWageEarningRateRule` | A one-implementor marker sub-interface (`FLSAEarningRateRuleImpl`); no separate behaviour of its own — port as a marker trait or fold it away, the way `ContractHrsRule` was ported as a supertrait rather than a distinct type. |
+
+### Dependency order between the families
+
+**Refuted as stated: `RegularRate` does not gate `OvertimeRate`/`DoubleTimeRate`
+as a family.** Of the 14 concrete OT/DT rules, only `FLSAOTRateRuleImpl` reads
+`shift.getRegRate()` — the value a `RegularRate` rule would have written earlier
+in the same shift's pipeline. Every other OT/DT rule prices independently, off
+`EmployeeJobStatus.hourlyRate`, minimum wage, FLSA data, or configured
+constants — none of them read the distribution's `baseRate` or the shift's
+`regRate` at all. (`WeightedOTRateRuleImpl` reads `distribution.getBaseRate()`,
+but that is the **distribution's own** base rate set moments earlier in the
+same `execute` call chain, by whichever `RegularRate` rule ran on this
+property — not a separate-phase dependency the way `hoursdistribution` depended
+on prior weeks.)
+
+So the real ordering constraint is narrower than the Status table's old phrase
+suggested: **within one calculation run**, `RegularRate` rules run before
+`OvertimeRate`/`DoubleTimeRate` rules for the *same* distribution (matching how
+the engine dispatches rate rule types in sequence per `RuleType.java`'s
+declaration order: `REGULAR_RATE`, `OVERTIME_RATE`, `DOUBLE_TIME_RATE`), but
+nothing stops porting `overtimerate`/`doubletimerate` before `regularrate` is
+finished — only `FLSAOTRateRuleImpl` and `WeightedOTRateRuleImpl` need
+`EmployeeShift.reg_rate`/`HoursDistribution.base_rate` to be meaningfully
+populated to test end-to-end, and both can be tested with a hand-set `reg_rate`
+in isolation.
+
+**`EarningRate` is genuinely independent.** Its interface doesn't take a
+`RuleItem`, a shift, or a distribution — only `TimeCard` + `EmployeeEarning` +
+raw params — and none of its 11 rules read `regRate`, `baseRate`, or anything
+another rate family wrote. It can be ported in any order relative to the other
+three. It is, however, the family needing the most **new** infrastructure
+(`AccrualTransaction`, two DAO ports, a raw-SQL aggregate, `PayRateCalculator`),
+so it is not obviously the cheapest to go first either.
+
+**Recommended order, cheapest infrastructure first:** `regularrate` (all
+Rust-side surface already exists except `EmployeeShift.reg_rate` and
+`Property`'s week/pay-period accessors) → `doubletimerate` (smallest family,
+5 concrete rules, reuses everything `regularrate` and `overtimerate` need) →
+`overtimerate` (adds only `FLSAData`/`Weeks`-style FLSA week keying, already
+partly present via `TimeCard::flsa_data_map`) → `earningrate` last (needs the
+new accrual DAO ports and `PayRateCalculator`, and is fully decoupled from the
+other three so nothing blocks starting it in parallel if desired).
+
+### What's missing on the Rust side before any rule can be ported
+
+Already in place and needing no new work: `HoursDistribution.base_rate` /
+`premium_rate` / `rate_rule_item_id` (`entity/hours_distribution.rs:36-137`);
+`TimeCard::flsa_data_map`/`flsa_data_map_for`/`current_pay_period`
+(`entity/time_card.rs:170,737,811`); `MinWagePort` (`rules/ports.rs`,
+divergence 38); `FlsaData::effective_regular_rate` (`entity/flsa_data.rs:144`);
+`EarningType::earn_type`/`uom`/`pay_at_least_min_wage`
+(`entity/earning_type.rs:81-91`); `Employee::employee_job_status`/
+`home_employee_job_status`/`last_home_employee_job_status_for_period`
+(`entity/employee.rs:138-183`).
+
+Missing, roughly in the order the recommended porting order needs them:
+
+- **`EmployeeShift.reg_rate`** — a plain `f64` field with getter/setter in
+  Java, read by `FLSAOTRateRuleImpl` and (via `distribution.getBaseRate()`,
+  its already-ported analogue) `WeightedOTRateRuleImpl`. Not yet on
+  `entity/employee_shift.rs`.
+- **`Property.getCurrentWeek()` / `getPayPeriod()`** returning a `DateRange`
+  containing a given date, and **`Property.getPayPeriodType()`**. Read by
+  `CombinationJobsRegRateRuleImpl`, `FLSAOTRateRuleImpl`,
+  `GuaranteedWageOTRateRuleImpl`, `FLSAEarningRateRuleImpl`. `Property`
+  currently exposes only `period_end_date()`/`week_end_day()`
+  (`entity/property.rs:56-72`) — no week/pay-period range machinery yet, and
+  no `PayPeriodType` enum reachable from it.
+- **`Employee.getLastEffectiveJobStatusForPeriod`** (distinct from the already-ported
+  `last_home_employee_job_status_for_period` — this one is job-specific, not
+  home-job-specific) and **`Employee.getEffectiveJobStatus`** (point-in-time,
+  distinct from `employee_job_status` if that method's semantics differ —
+  needs a read of `Employee.java` to confirm before porting, not assumed).
+  Both used only by `CombinationJobsRegRateRuleImpl`.
+- **`Employee.getPayGroup().currentPayPeriod()`** — a `PayGroup` entity/port,
+  used only by `AnnualSalaryOverHoursRegRateRuleImpl`. `Employee` currently
+  stores `pay_group_id` but no `PayGroup` entity exists.
+- **`PayRateCalculator.getPeriodSalary(Employee, LocalDate)`** — a calculator
+  service, not a DAO; used only by `AnnualSalaryOverHoursRegRateRuleImpl`. Not
+  ported, not scoped in detail yet.
+- **`Assignment.getParentAssignment()`** (only `parent_assignment_id()` exists
+  today — needs either a resolving port or the caller doing the lookup) and
+  **`Assignment.getEffectiveHourlyPayRate(LocalDate)`**. Read by
+  `HomeDeptRegRateRuleImpl`, `HomeDeptOTRateRuleImpl`, `HomeDeptDTRateRuleImpl`,
+  `HomeDeptRateRuleImpl`.
+- **`ShiftCategory`** — no entity yet. Needed for `ShiftCategoryRegRateRuleImpl`
+  and `ShiftCategoryMinWageRegRateRuleImpl` (`shift.getShiftCategory()`), and
+  for `EmployeeShift` to expose it.
+- **`EmployeeShift.getEmployeeJobStatus()`** — a shift-cached job status
+  accessor `ShiftCategoryRegRateRuleImpl` and `EarningOverrideJobRateRuleImpl`'s
+  earning analogue (`EmployeeEarning.getEmployeeJobStatus()`) both read
+  directly, apparently pre-resolved on the entity rather than looked up fresh
+  each time the way every other rule in these families does it. Worth
+  confirming against `EmployeeShift.java`/`EmployeeEarning.java` before
+  assuming it's just a cache of `employee.getEmployeeJobStatus(job, date)`.
+- **`EmployeeShift.getWorkedHours()`** — distinct from the already-ported
+  `net_hours`; `CombinationJobsRegRateRuleImpl` groups on it specifically.
+  Needs confirming whether it differs from net hours (e.g. excludes breaks
+  differently) before assuming it's an alias.
+- **New DAO ports** for `earningrate` only: something covering
+  `HolidayDataDAO.getWeekStartOfNthPastWorkedWeek` plus the raw
+  `EligibleHours` SQL aggregate (`AvgDayXWeeksRateRuleImpl`);
+  `AccrualTransactionDAO.getTransactionsForEmployeeWithUnappliedHours` and
+  `.getLatestTransactionsPriorToPayPeriod`; `EmployeeEarningDAO.getBankedRateForRule`.
+  All three need an `AccrualTransaction` entity that doesn't exist yet.
+
+### Findings, so far (from reading, not yet from porting)
+
+- **Two same-named-sounding rules in `regularrate` do different things.**
+  `ShiftCategoryRegRateRuleImpl` and `ShiftCategoryMinWageRegRateRuleImpl` both
+  filter on a configured shift-category list, but the first *replaces* the
+  rate (fixed value, or job rate with an addition/multiplier) while the second
+  only ever *floors* the plain job-status rate at minimum wage. Reading one
+  does not tell you what the other does, despite the near-identical name — the
+  same trap `hoursdistribution` hit with `HolidayDTHrs`/holiday-calendar
+  lookups going by two different keys.
+- **`JobOTRateRuleImpl` throws on a null job status; its `doubletimerate` and
+  `regularrate` counterparts don't guard it at all** (`JobDTRateRuleImpl`,
+  `JobRegRateRuleImpl`'s earning overload) — one NPEs, the other throws a
+  custom `RuntimeException` with a message naming the shift or earning id.
+  Three different failure behaviours for the same missing-job-status
+  condition, family-wide.
+- **`FLSAWeightedOTRateRuleImpl` and `FLSADTRateRuleImpl` key their FLSA week
+  off `new Weeks(property.getPeriodEndDate())`, while `FLSAOTRateRuleImpl` and
+  `FLSAEarningRateRuleImpl` key off `Property.getCurrentWeek()`/`getPayPeriod()`
+  gated on `PayPeriodType`.** Two different week-resolution mechanisms
+  live side by side across what look like sibling rules, and the names don't
+  signal which one a given rule uses.
+- **`WeightedOTRateRuleImpl` computes a *top-up* rate, not the OT rate
+  itself** — it subtracts what straight time at the distribution's own
+  `baseRate` would already have paid before dividing the remainder back into a
+  `premiumRate`. Reading `setOvertimeRates(shift, distribution, rate, ...)` in
+  isolation elsewhere in the family suggests `rate` is the whole overtime rate;
+  here it's an increment. Needs its own doc comment flagging this before
+  porting, so a future rule reader doesn't assume the shared shape.
+- **`EarningOverrideJobRateRuleImpl` delegates to a *fresh, differently
+  configured* instance of another concrete rule** rather than calling a shared
+  helper — `new EarningFactorRateRuleConfig().getDefaultValues()`, not this
+  rule's own `params`. If `EarningFactorRateRuleImpl` is ported as a
+  free-standing struct, this call site needs to construct one with default
+  config explicitly, not share the params map naively.
+- **`CalculatedAccrualRateRuleImpl` and `PriorBalancesRateRuleImpl` both cache
+  state in a field across calls within one calculation run**, keyed by
+  employee id (`@Scope("prototype")`/`@Scope("request")` Spring semantics —
+  effectively "lives for one dataset's worth of rule executions"). Neither
+  hoursdistribution nor the rate families so far have needed a rule struct to
+  carry state across `execute` calls; this is new territory for how the Rust
+  rule trait's `&mut self`/ownership needs to work for these two, and is worth
+  settling before porting either.
+
+## `regularrate` — done, one deferred
+
+**67 tests, 39 of them transcribed Java assertions.** All eight catalogue entries
+have an algorithm except `AsohwRrr` (`AnnualSalaryOverHoursRegRateRuleImpl`),
+deferred with the family for the reason its own module doc gives.
+
+| Ported | Java spec cases |
+|---|---:|
+| `JobRegRateRuleImpl` | 1/1 |
+| `HomeJobRegRateRuleImpl` | 1/1 |
+| `FactorJobRegRateRuleImpl` | 1/1 |
+| `HomeDeptRegRateRuleImpl` | 2/2 |
+| `ShiftCategoryMinWageRegRateRuleImpl` | 2/2 |
+| `ShiftCategoryRegRateRuleImpl` | 3/3 |
+| `CombinationJobsRegRateRuleImpl` | 14/14, 11/11, 4/4 (three spec files) |
+| `AnnualSalaryOverHoursRegRateRuleImpl` | not ported — see below |
+
+**Measuring the scoping section against what porting actually needed found it
+half wrong**, the same lesson `hoursdistribution` left behind:
+
+- **"Property week/pay-period accessors + `PayPeriodType`" needed no new
+  surface at all.** `TimeCard::current_pay_period`/`pay_period_type` already
+  stand in for `Property.getPayPeriod()`/`getPayPeriodType()` (divergence 24),
+  which is the value `AnnualSalaryOverHoursRegRateRuleImpl`'s
+  `employee.getPayGroup().currentPayPeriod()` reaches. And
+  `Property.getCurrentWeek().getDateRangeContainingDate(date)` —
+  `CombinationJobsRegRateRuleImpl`'s only property dependency — turned out to
+  already be exactly how `RegularHoursByWorkWeekRule` reaches the property
+  (divergence 51): `WeeklyDateRange::with_end_date(property.period_end_date(id))
+  .range_containing_date(date)`. Nothing new needed adding for either.
+- **`EmployeeShift.getEmployeeJobStatus()` is not cached**, despite reading
+  like it might be from the outside — it is exactly
+  `TimeCard::employee_job_status_for_shift`, already ported.
+- **`EmployeeShift.getWorkedHours()` is not an alias of `net_hours`** — it was
+  already its own field (`EmployeeShift::worked_hours`), ported with the
+  `TimeCard` surface and never revisited since.
+- **What genuinely needed adding**: `EmployeeShift.reg_rate` and
+  `.shift_category_id`; `AssignmentPayRate` plus
+  `Assignment::effective_hourly_pay_rate`; the `ShiftCategory` entity;
+  `Employee::effective_job_status`/`last_effective_job_status_for_period`
+  (the job-specific siblings of the already-ported home-job methods).
+
+**`AnnualSalaryOverHoursRegRateRuleImpl` is not ported.** It backs an hourly
+rate out of `PayRateCalculator.getPeriodSalary(Employee, LocalDate)` — a
+calculator service, not a DAO query, and genuinely out of scope for this pass
+(unlike the two items above, this dependency is real). Deferred the way
+`ShiftDifferenceOTRuleImpl` was deferred from `hoursdistribution`: a catalogue
+entry exists, no algorithm does yet.
+
+**`CombinationJobsRegRateRuleImpl`** is the family's only complex rule — see
+its module doc for the full algorithm and the two things reading the Java
+alone would not settle: that grouping by job id is loss-less versus Java's
+job-status-object identity, and that `mustBeSeparateJob` compares the
+**job**, not the specific status row (a job whose rate changed mid-week is
+still "the same job").
+
+### Deliberate divergences (continued)
+
+54. **`AssignmentPayRate` resolves through the existing `AssignmentPort`, not
+    a new one.** `Assignment::effective_hourly_pay_rate` needs to walk the
+    parent-assignment chain exactly as `HomeDeptRegRateRuleImpl` already
+    needed `AssignmentPort` for; one port serves both.
+
+55. **`ShiftCategory` is carried by id only.** `EmployeeShift` stores
+    `shift_category_id: Option<i32>`, the same shape as `job_id`, rather than
+    a reference to the new `ShiftCategory` entity — no ported rule reads
+    anything off a shift category but its id.
+
+56. **`CombinationJobsRegRateRuleImpl` groups by job id, not job-status
+    identity.** Java's `Map<EmployeeJobStatus, List<Double>>` relies on
+    reference/id equality Hibernate provides for free; every shift or earning
+    for one job on one date (or across one week, for the weekly path)
+    resolves to exactly the same status, so partitioning by `job_id` is the
+    identical grouping without needing `Hash`/`Eq` on the entity.
+
+57. **`AnnualSalaryOverHoursRegRateRuleImpl` is deferred, not ported.** Needs
+    `PayRateCalculator.getPeriodSalary`, a calculator service with no Rust
+    surface yet — the one genuine gap the scoping section's missing-surface
+    list correctly flagged for this family (see divergence 54-56's siblings
+    above for the three items it flagged that turned out unnecessary).
+
+## `doubletimerate` — done
+
+**29 tests, 8 of them transcribed Java assertions.** All five catalogue
+entries have an algorithm: `JobDTRateRuleImpl`, `HomeJobDTRateRuleImpl`,
+`HomeDeptDTRateRuleImpl`, `FLSADTRateRuleImpl`, `CommissionBasedDTRateRuleImpl`.
+Ported second, per the recommended order in "Scoping — the rate families":
+smallest family, and it needed nothing beyond what `regularrate` had already
+proven out (`AssignmentPort`, `MinWagePort`) plus `PropertyPort` and
+`TimeCard::flsa_data_map`, both already in place from Wave 0/3.
+
+| Ported | Java spec cases |
+|---|---:|
+| `JobDTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `HomeJobDTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `HomeDeptDTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `FLSADTRateRuleImpl` | 2 of 3 (the third asserts `fixMap` plumbing, not arithmetic — see below) |
+| `CommissionBasedDTRateRuleImpl` | no spec — behaviour tests written from the Java |
+
+**Nothing in the scoping section's missing-surface list for `doubletimerate`
+needed adding** — the section's own recommendation ("reuses everything
+`regularrate` and `overtimerate` need") undersold it slightly: `overtimerate`
+hasn't been ported yet either, and `doubletimerate` needed none of its
+surface, only `regularrate`'s.
+
+**`FLSADTRateRuleImplTest`'s first case, "fixMap should be called when the
+rule is run", is not transcribed.** It exists in Java to assert a Spring-bean
+implementation detail — that calling `execute` mutates the passed-in
+`RuleItem`'s params map in place via `fixMap`. This crate's `RuleParams::fixed`
+returns a new, defaulted-and-merged `RuleParams` rather than mutating the
+caller's map (divergence 9's shape, applied consistently everywhere params
+are read), so there is nothing of that assertion left to port — every other
+test in this family already exercises `.fixed()` on every params read, which
+is the same guarantee from a different angle.
+
+### Deliberate divergences (continued)
+
+58. **`CommissionBasedDTRateRuleConfig.EARNING_TYPES_PROP` is declared but
+    never read by the algorithm.** The config defines, defaults and validates
+    its own `earningTypes` parameter (distinct from the inherited
+    `premiumTypes`), but `CommissionBasedDTRateRuleImpl` computes both the
+    shift path's earning total *and* the earning path's gate from
+    `ruleConfig.getEarningTypeIdsList(params)` — the inherited method, which
+    only ever reads `premiumTypes`. `earningTypes` is dead configuration,
+    reproduced as-is: `CommissionBasedDTRateRuleConfig` carries the parameter
+    in `default_values`/`validate.rs`, but `commission_based_dt_rate.rs`
+    sources every earning-type-id list from `PREMIUM_TYPES`. Same shape as
+    `regularrate`'s `SELECTED_HOURS_DISTRIBUTION_TYPES` finding one family up.
+
+59. **`BaseDoubleTimeRateRuleImpl.setDoubleTimeRates`'s zero-rate log is
+    dropped, not reproduced.** Java logs (does not throw or skip the write)
+    when the computed rate is `0`. Nothing in the rules tree uses a logging
+    framework — the crate has no equivalent call anywhere else — so
+    `set_double_time_rates` writes the zero rate unconditionally and silently.
+    Every observable effect (the write itself) is preserved; only the log
+    line, which no test anywhere in either language's suite asserts on, is
+    not.
+
+## `overtimerate` — done
+
+**33 tests, 3 of them transcribed Java assertions.** All eight catalogue
+entries have an algorithm: `JobOTRateRuleImpl`, `HomeJobOTRateRuleImpl`,
+`HomeDeptOTRateRuleImpl`, `FLSAOTRateRuleImpl`, `FLSAWeightedOTRateRuleImpl`,
+`GuaranteedWageOTRateRuleImpl`, `WeightedOTRateRuleImpl`,
+`CommissionBasedOTRateRuleImpl`. Ported third, per the recommended order in
+"Scoping — the rate families" — it adds one port beyond what `doubletimerate`
+needed (`EarningTypePort`, for `GuaranteedWageOTRateRuleImpl`'s
+regular-or-premium earning filter), already introduced by `regularrate`'s
+`CombinationJobsRegRateRuleImpl`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `JobOTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `HomeJobOTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `HomeDeptOTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `FLSAOTRateRuleImpl` | 2 of 3 (the third asserts `fixMap` plumbing, not arithmetic — see the `doubletimerate` section's identical finding) |
+| `FLSAWeightedOTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `GuaranteedWageOTRateRuleImpl` | 2/2 |
+| `WeightedOTRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `CommissionBasedOTRateRuleImpl` | no spec — behaviour tests written from the Java |
+
+**Refuted, as the scoping section itself flagged might happen: the family did
+not need `overtimerate`-specific new infrastructure beyond `EarningTypePort`.**
+`FLSAOTRateRuleImpl` — the one rule the scoping section called out as needing
+`Property.getCurrentWeek()`/`getPayPeriod()` gated on `PayPeriodType` — turned
+out to need no new surface at all: `TimeCard::pay_period_containing` already
+stands in for `Property.getPayPeriod().getDateRangeContainingDate` (divergence
+24, same finding `regularrate` and `doubletimerate` already made for their own
+property lookups), and `TimeCard::pay_period_type()` already stands in for
+`employee.getProperty().getPayPeriodType()`.
+
+### Deliberate divergences (continued)
+
+60. **`JobOTRateRuleImpl`'s two Java instance fields collapse to nothing.**
+    Java tracks which overload is running with `this.shift`/`this.earning`,
+    set at the top of each `execute` and never cleared, so a shared private
+    `getRate` can throw the right message for whichever one triggered the
+    missing-job-status condition. `JobOTRateRule::execute_for_shift`/
+    `execute_for_earning` already know which overload they are — no shared
+    state needed, the two call sites just panic with their own message.
+
+61. **`GuaranteedWageOTRateRuleImpl`'s earning path does not round the
+    addition.** Every other rule in `regularrate`/`doubletimerate`/
+    `overtimerate` that adds a computed rate onto an earning's existing rate
+    wraps the sum in `roundCurrency`
+    ([`add_overtime_rate`](crate::rules::algorithm::overtimerate::add_overtime_rate)
+    and its `doubletimerate` twin). `GuaranteedWageOTRateRuleImpl` does not:
+    `earning.setRate(getOtRate(...) + earning.getRate())`, no rounding around
+    the `+`. `getOtRate` already rounds its own result with `roundHours`, so
+    nothing is lost in practice — but the shape is different enough that this
+    rule does not call the shared helper, reproduced with its own bespoke
+    `execute_for_earning`.
+
+62. **`CommissionBasedOTRateRuleConfig.EARNING_TYPES_PROP` is declared but
+    never read**, the same finding as `CommissionBasedDTRateRuleConfig`
+    (divergence 58) one family over — both the commission total and the
+    earning-path gate read the inherited `premiumTypes` via
+    `getPremiumEarningTypeIdsList`, never the rule's own `earningTypes`.
+
+## `earningrate` — done
+
+**41 tests, 15 of them transcribed Java assertions.** All ten catalogue
+entries have an algorithm: `EarningFixedRateRuleImpl`, `EarningFactorRateRuleImpl`,
+`EarningOverrideJobRateRuleImpl`, `HomeJobRateRuleImpl`, `HomeDeptRateRuleImpl`,
+`ContractDailyRateRuleImpl`, `FLSAEarningRateRuleImpl`, `AvgDayXWeeksRateRuleImpl`,
+`PriorBalancesRateRuleImpl`, `CalculatedAccrualRateRuleImpl`. Ported last, per
+the recommended order in "Scoping — the rate families" — the family needing
+the most new infrastructure, and fully decoupled from the other three.
+`AvgWageEarningRateRule`, the one-implementor marker sub-interface, folded
+away rather than becoming a separate Rust trait — see `mod.rs`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `EarningFixedRateRuleImpl` | 1/1 |
+| `EarningFactorRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `EarningOverrideJobRateRuleImpl` | 6/6 |
+| `HomeJobRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `HomeDeptRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `ContractDailyRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `FLSAEarningRateRuleImpl` | 2/2 |
+| `AvgDayXWeeksRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `PriorBalancesRateRuleImpl` | 3/3 |
+| `CalculatedAccrualRateRuleImpl` | 3/3 |
+
+**Measuring the scoping section against what porting actually needed found it
+about half wrong again**, the same lesson every other rate family already
+left behind:
+
+- **A `PayRateCalculator`-equivalent port — flagged as "likely needed again
+  here" by the `regularrate` section — turned out not to be needed at all.**
+  None of this family's ten rules call anything like `getPeriodSalary`; no
+  such port was added. Refuted, not confirmed.
+- **What genuinely needed adding, confirmed by reading each rule**:
+  `EmployeeJobStatus.contract_days` (a plain `f64`, alongside the
+  already-ported `contract_hours`); [`AccrualTransactionPort`](crate::rules::ports::AccrualTransactionPort)
+  plus the new [`AccrualTransaction`](crate::entity::accrual_transaction::AccrualTransaction)
+  entity; [`HolidayDataPort`](crate::rules::ports::HolidayDataPort) plus the
+  [`EligibleHours`](crate::rules::ports::EligibleHours) DTO; and
+  `EmployeeEarningPort::banked_rate_for_rule`. Everything else — `AssignmentPort`,
+  `MinWagePort`, `EarningTypePort`, `PropertyPort`, `Assignment::effective_hourly_pay_rate`,
+  `Employee::home_employee_job_status`/`employee_job_status` — `regularrate`
+  had already proved out.
+
+**The family's interface shape forced one genuinely new decision.**
+`EarningRateRuleImpl` takes raw parameters, not a `RuleItem`, so
+[`EarningRateRule::execute`](crate::rules::algorithm::earningrate::EarningRateRule::execute)
+takes `&RuleParams` directly rather than reading through `rule_item.params()`.
+And because `CalculatedAccrualRateRuleImpl` and `PriorBalancesRateRuleImpl`
+both cache state in a field across calls within one run — new territory
+flagged in the scoping section — `execute` takes `&mut self` for the whole
+family, not just those two. See `mod.rs` for both.
+
+**A Groovy int-typing quirk, not a Rust divergence, explains one spec's
+numbers.** `EarningOverrideJobRateRuleImplTest` declares
+`static int minimumWage = 10.55`; Groovy's static typing truncates the
+literal to `10` at assignment, and that truncated `10` (not `10.55`) is what
+flows into every `AssignmentPayRate.minWage` the spec builds. Read `10.55` at
+first glance and every expected rate in that spec looks unreconcilable; the
+transcribed cases use `10.0` throughout, matching what the spec actually
+exercises rather than what it appears to declare.
+
+### Deliberate divergences (continued)
+
+63. **`AccrualTransaction` carries four of the Java entity's nineteen
+    fields** — `earningType`, `asOfDate`, `unappliedHours`,
+    `endingTotalBalance` — the same narrow-slice practice every other entity
+    in this crate already follows.
+
+64. **`AvgDayXWeeksRateRuleImpl`'s hire-date guard compares against the
+    averaging window's *end* date, not its start.** `calcPeriodEndDate` —
+    the day before the week containing the earning date starts — is what
+    `employee.getHireDate().isOnOrBefore(...)` checks; the window's start
+    date (from `HolidayDataDAO.getWeekStartOfNthPastWorkedWeek`) only matters
+    once that guard has already passed.
+
+65. **`CalculatedAccrualRateRuleImpl`'s bucket-count-mismatch handling has a
+    Java bug in one direction, reproduced rather than fixed.** When there are
+    more hours transactions than cost transactions, Java correctly trims the
+    unmatched hours transactions. When there are fewer, it runs
+    `costMap.keySet().removeIf(key -> !hoursTransactions.contains(key))` —
+    checking a `LocalDate` key against a `List<AccrualTransaction>` with
+    `List.contains`, which can never be `true` for any element. The predicate
+    is therefore always `true`, and the branch empties the whole cost map
+    rather than trimming it. `build_buckets_for_employee` reproduces this
+    exactly: an hours-count shortfall clears `cost_by_as_of_date` outright.
+
+66. **`EarningOverrideJobRateRuleConfig.validateProperties` does not call its
+    parent's.** It builds a fresh `ValidationResults`, so unlike every other
+    config in the family it does not require `selectedEarnings` to be
+    non-empty; and where the with-factor default requires `rateFactor >= 0`,
+    this config's own validation requires `>= 0.01`
+    (`AbstractRuleConfig.SMALLEST_VALID_DOUBLE`, a stricter bound also
+    applied to `overrideRate` when `useMinWage` is false).
+
+67. **`PriorBalancesRateRuleConfig.validateProperties` also skips its
+    parent's `selectedEarnings` check**, the same shape as divergence 66 —
+    but its sibling `CalculatedAccrualRateRuleConfig`, extending the same
+    base class, *does* call `super.validateProperties()` before adding its
+    own two accrual-id checks. Two configs in one family handle the base
+    check differently.
+
+68. **`EarningRateRule::execute` takes `&mut self`, not `&self`** — the one
+    shape difference from every other rate family's trait, needed by
+    `CalculatedAccrualRateRuleImpl` and `PriorBalancesRateRuleImpl`'s
+    per-employee caches even though the other eight rules in the family never
+    touch their own mutability. See `mod.rs`.
 
 ## Scoping — `hoursdistribution`
 
@@ -1664,6 +2274,105 @@ ones are overtime variants that build on the accumulators: `RegHrsOnly` (no-op),
 `CaliforniaExtSpecialJobOTHrs` (414), `MinHrsForFullTimeOT` (430),
 `DlyWklyOffConsecOTMinBreak` (439), `DailyWeekly6thOT7thDTHrs` (451),
 `DlyWklyConsecOTMinBreakSpanningMidnight` (456).
+
+## `regularhoursdistribution` — done
+
+`RuleType::RegularHoursDistribution` (code `RH`), a 32nd family distinct from
+`hoursdistribution` (code `HD`) despite the similar name — see "Where the work
+stands" above. Ground truth:
+`taps/src/main/java/com/unifocus/watson/server/labor/rules/algorithm/regularhoursdistribution/`
+for the rules, and
+`taps/src/main/java/com/unifocus/watson/server/labor/calcshift/rules/RegularHoursDistributionRunner.java`
+for the runner.
+
+### Scoping
+
+**A clean 1:1 match**: 3 `RuleClass` entries (`RegHoursRhd`, `RegHoursByDayRhd`,
+`RegHoursByWorkWeekRhd`), 3 `*RuleImpl` classes, no no-op and no deferred
+oddball — unlike `hoursdistribution`'s 19-vs-20 mismatch.
+
+**The interface is shift-scoped, not card-scoped.**
+`RegularHoursDistributionRule.execute(EmployeeShift, RuleItem)` — no
+`TimeCard`, no work week. The `TimeCard`-level orchestration (which shifts are
+open for editing, resetting or clearing distributions, falling back to a
+default rule) lives entirely in the runner, not in the rules.
+
+**Two shared helpers this family needed, neither ported before now**:
+`BreaksAndAdjustmentsCalculator` (needed a new `EmployeeShift::breaks()`
+accessor — positionally-paired punches, mirroring `worked_date_time_ranges`)
+and `SingleDistributionTypeRuleConfig` (the shared config base, one parameter:
+which bucket a rule writes into). Both close out divergence 34, which had
+deferred `HoursDistributionFactory::create_split_distributions` and
+`::create_distribution_of_configured_type` until "the family that calls them"
+arrived.
+
+### Rules — 3 of 3, plus the runner
+
+| Rust | Java | Ported cases |
+|---|---|---:|
+| `regularhoursdistribution/reg_hours_on_shift_date.rs` | `RegularHoursOnShiftDateRuleImpl` | no real spec — see below |
+| `regularhoursdistribution/reg_hours_by_day.rs` | `RegularHoursByDayRuleImpl` | **7/7** |
+| `regularhoursdistribution/reg_hours_by_work_week.rs` | `RegularHoursByWorkWeekRuleImpl` | **7/7** |
+| `runner/regular_hours_distribution.rs` | `RegularHoursDistributionRunner` | **3/3**, one strengthened — see below |
+
+**`RegularHoursOnShiftDateRuleImplTest.groovy` and its config test are
+misplaced stubs, not a real spec.** Both files live under the
+`hoursdistribution` test package instead of `regularhoursdistribution`'s own,
+and every method body in both is empty — the same situation as
+`hoursdistribution`'s `RegHrsOnlyRuleImpl`. Behavior tests only; nothing to
+transcribe.
+
+**`RegularHoursByDayRuleImplTest` and `RegularHoursByWorkWeekRuleImplTest` are
+the same spec run through two different boundaries.** Every one of the
+by-work-week spec's fixtures sets `periodEndDate: today`, which makes `today`
+the last day of its own work week — so the midnight-starting-the-day-after
+boundary both rules measure against lands on the identical instant, and all
+seven cases assert the identical numbers as their by-day counterparts. Ported
+side by side for exactly the reason `PARITY_AUDIT` already recorded for
+`hoursdistribution`'s siblings: porting them together is what makes a shared
+fixture's meaning legible.
+
+**The runner's own spec is weaker than it looks in its first case.** Its
+`ruleImplFactory` is a Spock mock standing in for the rule itself —
+`createRuleImpl` returns a mock `RegularHoursOnShiftDateRuleImpl` — and
+Spock's default for an unstubbed void method is a no-op. So the "cleared" open
+shift's `execute()` call never runs the real rule and never writes a
+distribution back, and the spec's `hoursDistributions.isEmpty()` assertion
+passes **because nothing rebuilt the list**, not because the runner leaves an
+open shift empty (it does not — a real rule always writes one back). The
+transcription wires the real `RegularHoursOnShiftDateRule` instead and asserts
+what actually happens: cleared *and* rerun. The other two cases don't touch
+rule dispatch at all and transcribe as written.
+
+### Deliberate divergences (continued)
+
+51. **The property comes through a new `PropertyPort`, not the entity
+    graph.** Java reaches a shift's period end date via
+    `shift.getEmployee().getProperty().getPeriodEndDate()`; this crate's
+    `EmployeeShift` carries only its property's id (the entity graph is
+    one-way, same reasoning as divergence 38's `MinWagePort`). So
+    `RegularHoursByWorkWeekRule<P: PropertyPort>` takes the port as a type
+    parameter, exactly as `HolidayDTHrsRule<P: HolidayPort>` does.
+
+52. **The runner takes one resolved rule set for the whole run, not one per
+    shift.** `RegularHoursDistributionRunner.runRules` calls
+    `ruleUtils.getRuleSet(shift.getEmployee(), shift.getJob(),
+    shift.getShiftDate(), REGULAR_HOURS_DISTRIBUTION)` **per shift** — a
+    different employee, job or date can select a different rule set. Reaching
+    a shift's employee and job needs the same entity-graph traversal
+    divergence 51 already declined, so `run_rules` takes an
+    `Option<&RuleSet>` once for the card, matching
+    `PunchRoundingRunner::round_shift`'s precedent of leaving resolution to
+    the caller. Faithful to every case in the Groovy spec, which stubs
+    `RuleUtils` unconditionally and so always falls back to the same default
+    regardless of which shift is being processed.
+
+53. **`shiftSpansCalculationStartDate` is a free function, not a `TimeCard`
+    method.** It only needs the scalar `calculation_start_date` divergence 24
+    already carries as a plain field, so keeping it free lets the runner
+    compute that scalar once before mutably borrowing the card's shifts,
+    sidestepping the aliasing problem divergence 22 solved with index forms —
+    there is no live `TimeCard` reference to alias against in the first place.
 
 ## Wave 1 — punchvalidation
 

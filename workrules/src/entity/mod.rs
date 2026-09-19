@@ -13,7 +13,9 @@
 //! The exception is `EmployeeShift`, which genuinely owns its punches — see
 //! that module for why the punch/shift coupling could not become an id.
 
+pub mod accrual_transaction;
 pub mod assignment;
+pub mod assignment_pay_rate;
 pub mod calc_data_set_stat;
 pub mod earning_type;
 pub mod employee;
@@ -29,5 +31,6 @@ pub mod property;
 pub mod punch_log;
 pub mod rule_item;
 pub mod rule_set;
+pub mod shift_category;
 pub mod time_card;
 pub mod time_clock_result;

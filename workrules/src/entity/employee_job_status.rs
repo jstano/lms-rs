@@ -22,6 +22,7 @@ pub struct EmployeeJobStatus {
     annual_rate: f64,
     piece_rate: f64,
     contract_hours: Option<f64>,
+    contract_days: f64,
     salary_dist_id: Option<i32>,
     seniority_date: Option<LocalDate>,
     home: bool,
@@ -51,6 +52,7 @@ impl EmployeeJobStatus {
             annual_rate: 0.0,
             piece_rate: 0.0,
             contract_hours: None,
+            contract_days: 0.0,
             salary_dist_id: None,
             seniority_date: None,
             home,
@@ -131,6 +133,18 @@ impl EmployeeJobStatus {
     /// Guaranteed hours, for contract employees. `getContractHours()`.
     pub fn contract_hours(&self) -> Option<f64> {
         self.contract_hours
+    }
+
+    /// Guaranteed days, for contract employees. `getContractDays()`.
+    pub fn contract_days(&self) -> f64 {
+        self.contract_days
+    }
+
+    /// Attach a contract-days figure that differs from the default `0.0`.
+    #[must_use]
+    pub fn with_contract_days(mut self, contract_days: f64) -> Self {
+        self.contract_days = contract_days;
+        self
     }
 
     /// `getSalaryDist().getID()`.

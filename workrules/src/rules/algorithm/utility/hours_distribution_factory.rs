@@ -28,15 +28,13 @@
 //! right for a fresh regular distribution and wrong here, so this builds the
 //! struct field by field.
 //!
-//! # Not ported yet
-//!
-//! `createSplitDistributions` and `createDistributionOfConfiguredType`, which
-//! the day-split families use. They need `BreaksAndAdjustmentsCalculator` and
-//! `SingleDistributionTypeRuleConfig`, neither of which any ported rule
-//! touches. They arrive with the family that calls them.
-
+use crate::entity::employee_shift::EmployeeShift;
 use crate::entity::hours_distribution::HoursDistribution;
-use joda_rs::LocalDate;
+use crate::rules::algorithm::single_distribution_type_config::HOURS_DISTRIBUTION_TYPE_ID;
+use crate::rules::algorithm::utility::breaks_and_adjustments_calculator::calculate_breaks_and_adjustments;
+use crate::rules::params::RuleParams;
+use date_range_rs::datetimerange::date_time_range::DateTimeRange;
+use joda_rs::{LocalDate, LocalDateTime};
 
 /// Build a distribution with every field spelled out. `createDistribution`.
 #[allow(clippy::too_many_arguments)]
@@ -63,6 +61,82 @@ pub fn create_distribution(
     distribution.set_hours_rule_item_id(hours_rule_item_id);
     distribution.set_rate_rule_item_id(rate_rule_item_id);
     distribution
+}
+
+/// Build a distribution at whatever bucket the rule item's
+/// `hoursDistributionTypeID` parameter names, with `hours` doing double duty
+/// as both the distribution's `hours` and its `originalHours`.
+/// `createDistributionOfConfiguredType`.
+///
+/// `regularhoursdistribution`'s three rules all end here for the
+/// non-split case — one distribution per shift, sized at the shift's own net
+/// hours, with no premium rate or base rate to carry (both `0`).
+pub fn create_distribution_of_configured_type(
+    distribution_date: LocalDate,
+    property_id: i32,
+    original_hours: f64,
+    params: &RuleParams,
+    hours_rule_item_id: Option<i32>,
+) -> HoursDistribution {
+    let distribution_type_id = params.int_at(HOURS_DISTRIBUTION_TYPE_ID);
+
+    create_distribution(
+        distribution_date,
+        property_id,
+        distribution_type_id,
+        original_hours,
+        original_hours,
+        0.0,
+        0.0,
+        hours_rule_item_id,
+        None,
+    )
+}
+
+/// Split a shift that spans `day_split_time` into two configured-type
+/// distributions, one dated its start and one dated its end.
+/// `createSplitDistributions`.
+///
+/// Each half's naive duration is corrected by
+/// [`calculate_breaks_and_adjustments`] before rounding — breaks in that half
+/// come off, and a share of the shift's adjustment hours (if any) is folded
+/// in.
+pub fn create_split_distributions(
+    shift: &EmployeeShift,
+    day_split_time: LocalDateTime,
+    params: &RuleParams,
+    hours_rule_item_id: Option<i32>,
+) -> Vec<HoursDistribution> {
+    let start = shift
+        .start_date_time()
+        .expect("a shift being split has both times");
+    let end = shift
+        .end_date_time()
+        .expect("a shift being split has both times");
+    let first_day_range = DateTimeRange::of(start, day_split_time);
+    let next_day_range = DateTimeRange::of(day_split_time, end);
+
+    let (first_day_adjustment, next_day_adjustment) = calculate_breaks_and_adjustments(shift);
+
+    let first_day_net_hours = first_day_range.duration().fractional_hours();
+    let first_day_distribution = create_distribution_of_configured_type(
+        start.to_local_date(),
+        shift.property_id(),
+        crate::common::numbers::round_hours(first_day_net_hours + first_day_adjustment),
+        params,
+        hours_rule_item_id,
+    );
+
+    let next_day_net_hours = next_day_range.duration().fractional_hours();
+    let next_day_distribution = create_distribution_of_configured_type(
+        end.to_local_date(),
+        shift.property_id(),
+        crate::common::numbers::round_hours(next_day_net_hours + next_day_adjustment),
+        params,
+        hours_rule_item_id,
+    );
+
+    vec![first_day_distribution, next_day_distribution]
 }
 
 /// Derive a premium distribution from the regular one it is taken out of.

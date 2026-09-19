@@ -7,4 +7,5 @@
 //! one family. They come across one at a time, with the first family that needs
 //! one.
 
+pub mod breaks_and_adjustments_calculator;
 pub mod hours_distribution_factory;

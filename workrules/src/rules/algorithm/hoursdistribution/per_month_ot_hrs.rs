@@ -462,6 +462,15 @@ mod tests {
         ) -> Option<f64> {
             None
         }
+
+        fn banked_rate_for_rule(
+            &self,
+            _employee_id: i32,
+            _hours_earning_type_id: i32,
+            _cost_earning_type_id: i32,
+        ) -> Option<f64> {
+            None
+        }
     }
 
     impl EmployeeShiftPort for NoHistory {

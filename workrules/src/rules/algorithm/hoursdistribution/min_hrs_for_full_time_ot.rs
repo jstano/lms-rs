@@ -85,7 +85,7 @@ use crate::entity::rule_item::RuleItem;
 use crate::entity::time_card::TimeCard;
 use crate::rules::algorithm::hoursdistribution::HoursDistributionRule;
 use crate::rules::algorithm::hoursdistribution::config::{
-    BOTH_CONSECUTIVE_AND_WEEKLY_OT, CONSEC_DAY_LIMIT, CONSEC_DAYS_IN_WEEK,
+    BOTH_CONSECUTIVE_AND_WEEKLY_OT, CONSEC_DAYS_IN_WEEK, CONSEC_DAY_LIMIT,
     DAILY_OT_LIMIT_PROP_CAPS, EARNING_TYPE_PAY_SET, ENABLE_CONSEC_DAY_OT_PROP,
     MAX_CONSEC_DAYS_PAID_PROP, MAX_DT_PAID_PROP, MinHrsForFullTimeOTRuleConfig,
     PART_TIME_ELIGIBILITY_LIMIT_PROP, WEEKLY_OT_LIMIT_PROP_CAPS,
@@ -692,6 +692,15 @@ mod tests {
         ) -> Option<f64> {
             None
         }
+
+        fn banked_rate_for_rule(
+            &self,
+            _employee_id: i32,
+            _hours_earning_type_id: i32,
+            _cost_earning_type_id: i32,
+        ) -> Option<f64> {
+            None
+        }
     }
 
     pub(super) fn rule() -> MinHrsForFullTimeOTRule<PriorDays, SavedEarnings> {
@@ -969,7 +978,7 @@ mod tests {
 #[cfg(test)]
 mod java_parity_tests {
     use super::tests::{
-        DOUBLE_TIME, DT_EARNING, JOB, OT_EARNING, OVERTIME, REG_EARNING, REGULAR, card, earning,
+        DOUBLE_TIME, DT_EARNING, JOB, OT_EARNING, OVERTIME, REGULAR, REG_EARNING, card, earning,
         earning_total, item, jan, prior_consecutive_days, rows, rule, shift, week,
     };
     use super::*;

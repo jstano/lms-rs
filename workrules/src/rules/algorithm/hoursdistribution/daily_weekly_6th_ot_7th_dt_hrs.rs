@@ -82,7 +82,7 @@ use crate::entity::rule_item::RuleItem;
 use crate::entity::time_card::TimeCard;
 use crate::rules::algorithm::hoursdistribution::HoursDistributionRule;
 use crate::rules::algorithm::hoursdistribution::config::{
-    BOTH_CONSECUTIVE_AND_WEEKLY_OT, CONSEC_DAY_DT_LIMIT, CONSEC_DAY_OT_LIMIT, CONSEC_DAYS_IN_WEEK,
+    BOTH_CONSECUTIVE_AND_WEEKLY_OT, CONSEC_DAYS_IN_WEEK, CONSEC_DAY_DT_LIMIT, CONSEC_DAY_OT_LIMIT,
     DAILY_DT_LIMIT_PROP, DAILY_OT_LIMIT_PROP, DailyWeekly6thOT7thDTHrsRuleConfig,
     EARNING_TYPE_PAY_SET, INCLUDE_EARNING_TYPE_PAY_MAP, MAX_CONSEC_DAYS_PD, OVERRIDE_CONSEC_DAY_OT,
     PAY_6TH_DAY_DT, PAY_DAILY_DT, PAY_DAILY_OT, PREMIUM_HOURS_COUNT_TOWARDS_WEEKLY_OT,
@@ -718,6 +718,15 @@ mod tests {
             _employee_id: i32,
             _period: &DateRange,
             _earning_type_ids: &[i32],
+        ) -> Option<f64> {
+            None
+        }
+
+        fn banked_rate_for_rule(
+            &self,
+            _employee_id: i32,
+            _hours_earning_type_id: i32,
+            _cost_earning_type_id: i32,
         ) -> Option<f64> {
             None
         }

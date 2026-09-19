@@ -12,3 +12,4 @@
 //! pipeline, and the rest are driven from their own subsystems.
 
 pub mod punch_rounding;
+pub mod regular_hours_distribution;
