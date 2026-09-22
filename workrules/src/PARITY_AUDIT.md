@@ -45,7 +45,7 @@ see "Test backing" below for why.
 | 4 | `schedulelunch` — 3 of 3 rules | **done** |
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
 | 4+ | `shiftcorrection`, `dailyearning`, `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
-| 1+ | the other 21 families | not started |
+| 1+ | the other 16 families | not started |
 
 ## Where the work stands
 
