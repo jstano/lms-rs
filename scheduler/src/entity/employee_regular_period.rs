@@ -9,7 +9,7 @@ use joda_rs::{DayOfWeek, LocalTime};
 pub struct EmployeeRegularPeriod {
     employee_id: i32,
     job_id: Option<i32>,
-    assignment_id: i32,
+    assignment_id: Option<i32>,
     day_of_week: DayOfWeek,
     start_time: LocalTime,
     end_time: LocalTime,
@@ -21,7 +21,7 @@ impl EmployeeRegularPeriod {
     pub fn new(
         employee_id: i32,
         job_id: Option<i32>,
-        assignment_id: i32,
+        assignment_id: Option<i32>,
         day_of_week: DayOfWeek,
         start_time: LocalTime,
         end_time: LocalTime,
@@ -48,8 +48,8 @@ impl EmployeeRegularPeriod {
         self.job_id
     }
 
-    /// `getAssignment().getID()`.
-    pub fn assignment_id(&self) -> i32 {
+    /// `getAssignment().getID()` — `null` in Java when the period has no assignment.
+    pub fn assignment_id(&self) -> Option<i32> {
         self.assignment_id
     }
 

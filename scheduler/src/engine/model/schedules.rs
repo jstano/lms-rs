@@ -102,7 +102,7 @@ impl Schedules {
             .iter()
             .filter(|s| s.shift_date() == shift_date)
             .min_by_key(|s| s.start_date_time())
-            .copied()
+            .cloned()
     }
 
     /// `findLastShiftOnDate(LocalDate)`.
@@ -111,7 +111,7 @@ impl Schedules {
             .iter()
             .filter(|s| s.shift_date() == shift_date)
             .max_by_key(|s| s.start_date_time())
-            .copied()
+            .cloned()
     }
 
     /// `hasTimeOffOnDate(LocalDate)`.

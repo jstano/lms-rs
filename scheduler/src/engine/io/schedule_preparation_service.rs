@@ -58,8 +58,9 @@ impl<'a> SchedulePreparationService<'a> {
                         }
 
                         employee_shift.set_planned_shift(None);
+                        let employee_shift_id = employee_shift.id();
                         old_shift_list.add_employee_shift(employee_shift);
-                        self.employee_shifts.evict(employee_shift.id());
+                        self.employee_shifts.evict(employee_shift_id);
 
                         continue;
                     }
@@ -118,6 +119,25 @@ mod java_parity_tests {
     impl EmployeeShiftPort for SpyEmployeeShiftPort {
         fn evict(&self, employee_shift_id: i32) {
             self.evicted.borrow_mut().push(employee_shift_id);
+        }
+
+        fn bulk_delete_by_shift_id(&self, _shift_ids: &std::collections::HashSet<i32>) {}
+
+        fn save(&self, _employee_shift: &crate::entity::employee_shift::EmployeeShift) {}
+
+        fn bulk_delete_employee_shifts_for_jobs_in_current_property(
+            &self,
+            _job_ids: &std::collections::HashSet<i32>,
+            _date_range: &date_range_rs::DateRange,
+        ) {
+        }
+
+        fn employee_schedule_shifts_for_period(
+            &self,
+            _employee_ids: &std::collections::HashSet<i32>,
+            _date_range: &date_range_rs::DateRange,
+        ) -> Vec<crate::entity::employee_shift::EmployeeShift> {
+            Vec::new()
         }
     }
 
@@ -225,9 +245,9 @@ mod java_parity_tests {
 
         let mut data_set = ScheduleCalcDataSet::default();
         data_set.set_employee(employee());
-        data_set.add_shift(employee_shift1);
-        data_set.add_shift(employee_shift2);
-        data_set.add_shift(employee_shift3);
+        data_set.add_shift(employee_shift1.clone());
+        data_set.add_shift(employee_shift2.clone());
+        data_set.add_shift(employee_shift3.clone());
 
         let mut employee_list = EmployeeList::new();
         employee_list.add_employee_data(EmployeeData::new(employee(), data_set, 0));

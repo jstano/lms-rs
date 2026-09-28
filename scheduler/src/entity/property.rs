@@ -21,6 +21,9 @@ pub struct Property {
     current_week: DateRange,
     schedule_mode: Option<ScheduleMode>,
     period_start_date: Option<LocalDate>,
+    max_scheduler_passes: i32,
+    max_employee_skills: i32,
+    max_balance_levels: i32,
 }
 
 impl Property {
@@ -30,6 +33,9 @@ impl Property {
             current_week,
             schedule_mode: None,
             period_start_date: None,
+            max_scheduler_passes: 0,
+            max_employee_skills: 0,
+            max_balance_levels: 0,
         }
     }
 
@@ -44,6 +50,27 @@ impl Property {
     #[must_use]
     pub fn with_period_start_date(mut self, period_start_date: LocalDate) -> Self {
         self.period_start_date = Some(period_start_date);
+        self
+    }
+
+    /// `setMaxSchedulerPasses(int)`.
+    #[must_use]
+    pub fn with_max_scheduler_passes(mut self, max_scheduler_passes: i32) -> Self {
+        self.max_scheduler_passes = max_scheduler_passes;
+        self
+    }
+
+    /// `setMaxEmployeeSkills(int)`.
+    #[must_use]
+    pub fn with_max_employee_skills(mut self, max_employee_skills: i32) -> Self {
+        self.max_employee_skills = max_employee_skills;
+        self
+    }
+
+    /// `setMaxBalanceLevels(int)`.
+    #[must_use]
+    pub fn with_max_balance_levels(mut self, max_balance_levels: i32) -> Self {
+        self.max_balance_levels = max_balance_levels;
         self
     }
 
@@ -71,5 +98,20 @@ impl Property {
     /// `DayOffPlan::rotate_employees`'s doc for how its one caller handles an unset value.
     pub fn period_start_date(&self) -> Option<LocalDate> {
         self.period_start_date
+    }
+
+    /// `getMaxSchedulerPasses()`.
+    pub fn max_scheduler_passes(&self) -> i32 {
+        self.max_scheduler_passes
+    }
+
+    /// `getMaxEmployeeSkills()`.
+    pub fn max_employee_skills(&self) -> i32 {
+        self.max_employee_skills
+    }
+
+    /// `getMaxBalanceLevels()`.
+    pub fn max_balance_levels(&self) -> i32 {
+        self.max_balance_levels
     }
 }

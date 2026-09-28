@@ -9,6 +9,7 @@
 //! `entity` module doc for why: the engine only ever reads the job's own id and its parent's id
 //! off `EmployeeJobStatus.getJob()`, both carried flat as `job_id`/`job_parent_assignment_id`.
 
+use crate::entity::employee_pay_type::EmployeePayType;
 use joda_rs::LocalDate;
 
 /// One employee's standing on one job for a date range. `EmployeeJobStatus`.
@@ -24,6 +25,7 @@ pub struct EmployeeJobStatus {
     contract_hours: f64,
     is_sub_only: bool,
     schedule_order: i32,
+    pay_type: Option<EmployeePayType>,
 }
 
 impl EmployeeJobStatus {
@@ -51,7 +53,19 @@ impl EmployeeJobStatus {
             contract_hours,
             is_sub_only,
             schedule_order,
+            pay_type: None,
         }
+    }
+
+    /// `setPayType(EmployeePayType)`, as a builder — `process/variable/filters/`'s first reader.
+    pub fn with_pay_type(mut self, pay_type: EmployeePayType) -> Self {
+        self.pay_type = Some(pay_type);
+        self
+    }
+
+    /// `getPayType()`.
+    pub fn pay_type(&self) -> Option<EmployeePayType> {
+        self.pay_type
     }
 
     /// `getJob().getID()`.
@@ -78,6 +92,13 @@ impl EmployeeJobStatus {
     /// `containsDate(LocalDate)` — `startDate <= date && endDate >= date`.
     pub fn contains_date(&self, date: LocalDate) -> bool {
         self.start_date.is_on_or_before(date) && self.end_date.is_on_or_after(date)
+    }
+
+    /// `overlapsPeriod(DateRange)` — `Employee::is_active_job_during_period`'s dependency
+    /// (Phase 3's `autosched` wave, its first real caller).
+    pub fn overlaps_period(&self, period: &date_range_rs::DateRange) -> bool {
+        self.start_date.is_on_or_before(period.end_date())
+            && self.end_date.is_on_or_after(period.start_date())
     }
 
     /// `isHome()`.

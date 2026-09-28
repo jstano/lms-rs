@@ -160,6 +160,8 @@ mod tests {
             _data_set: &mut ScheduleCalcDataSet,
         ) {
         }
+
+        fn calculate_schedule_calc_data_set(&self, _data_set: &mut ScheduleCalcDataSet) {}
     }
 
     struct NoOpLunchRunner;

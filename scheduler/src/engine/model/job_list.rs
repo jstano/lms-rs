@@ -3,11 +3,14 @@
 //! Ground truth: `taps/src/java/com/unifocus/watson/server/scheduler/engine/model/JobList.java`.
 //! Id-keyed collection of `JobData`; see `DATA_MODEL.md` §4.
 //!
-//! `getNonPreScheduledJobs()`/`getPreScheduledJobs()` are **not ported** — their sort order comes
-//! from `process/variable/comparators::{NonPreScheduledJobComparator,PreScheduledJobComparator}`,
-//! Phase 2 step 9. See `DATA_MODEL.md` §7 / `PARITY_AUDIT.md` finding 3.
+//! `getNonPreScheduledJobs()`/`getPreScheduledJobs()` are ported as of Phase 2 step 9, using
+//! `process/variable/comparators::{NonPreScheduledJobComparator,PreScheduledJobComparator}` (see
+//! `PARITY_AUDIT.md` finding 3, now resolved).
 
 use crate::engine::model::job_data::JobData;
+use crate::engine::process::variable::comparators::{
+    NonPreScheduledJobComparator, PreScheduledJobComparator,
+};
 use std::collections::HashMap;
 
 /// `JobList`.
@@ -36,6 +39,17 @@ impl JobList {
         self.job_data.get_mut(&job_id)
     }
 
+    /// Removes and returns one job's data, for a caller that needs simultaneous mutable access to
+    /// both this `JobList`'s owner (`ScheduleModel`) and the single `JobData` it holds — same
+    /// take/reinsert idiom as [`EmployeeList::take_employee_data`](crate::engine::model::
+    /// employee_list::EmployeeList::take_employee_data), used by `ScheduleEngine` (Phase 3) to
+    /// call `ProjectedHoursReducer`/`EmployeeAvailableHoursBalancer`, both of which take `&
+    /// ScheduleModel` (aliasing this job's own `JobList`) alongside `&mut JobData`. Pair with
+    /// [`add_job_data`](Self::add_job_data) to put it back once the caller is done.
+    pub fn take_job_data(&mut self, job_id: i32) -> Option<JobData> {
+        self.job_data.remove(&job_id)
+    }
+
     /// `containsJob(Assignment)`.
     pub fn contains_job(&self, job_id: i32) -> bool {
         self.job_data.contains_key(&job_id)
@@ -50,6 +64,30 @@ impl JobList {
     pub fn all_jobs(&self) -> Vec<&JobData> {
         let mut jobs: Vec<&JobData> = self.job_data.values().collect();
         jobs.sort_by_key(|j| j.job().full_name().to_lowercase());
+        jobs
+    }
+
+    /// `getNonPreScheduledJobs()`.
+    pub fn non_pre_scheduled_jobs(&self) -> Vec<&JobData> {
+        let mut jobs: Vec<&JobData> = self
+            .job_data
+            .values()
+            .filter(|j| j.pre_schedule_parameters().is_none())
+            .collect();
+        let comparator = NonPreScheduledJobComparator;
+        jobs.sort_by(|a, b| comparator.compare(a, b));
+        jobs
+    }
+
+    /// `getPreScheduledJobs()`.
+    pub fn pre_scheduled_jobs(&self) -> Vec<&JobData> {
+        let mut jobs: Vec<&JobData> = self
+            .job_data
+            .values()
+            .filter(|j| j.pre_schedule_parameters().is_some())
+            .collect();
+        let comparator = PreScheduledJobComparator;
+        jobs.sort_by(|a, b| comparator.compare(a, b));
         jobs
     }
 }

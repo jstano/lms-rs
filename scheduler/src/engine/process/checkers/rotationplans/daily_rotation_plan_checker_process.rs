@@ -44,8 +44,8 @@ impl RotationPlanChecker for DailyRotationPlanCheckerProcess<'_> {
             .data_set()
             .shifts()
             .iter()
-            .copied()
-            .filter(|s| s != employee_shift)
+            .filter(|s| *s != employee_shift)
+            .cloned()
             .collect();
         let schedules = Schedules::new(
             employee_shifts,

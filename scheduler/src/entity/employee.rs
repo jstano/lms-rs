@@ -5,14 +5,19 @@
 //! BasicEmployee}.java` for the methods below; only the fields Phase 1 (`process/comparators/`,
 //! `engine/model/`) reads are modeled — see `entity` module docs and `DATA_MODEL.md` §3.
 //!
-//! `isActiveOnDate`/`isActiveJobOnDate` (needs `EmployeeStatus`/`EmployeeStatusType`, not yet
-//! ported) are still deferred. `day_off_plan`/`current_pattern_no` (`process/checkers/
+//! `is_active_on_date`/`is_active_job_during_period` (needing `EmployeeStatus`/
+//! `EmployeeStatusType`/`EmployeeJobStatus::overlaps_period`) were ported for `ScheduleChecker`/
+//! `ScheduleHoursDistributionValidator` (Phase 3's `autosched` wave, their first real readers).
+//! `status` is a `with_*` builder field defaulting to empty, following `day_off_plan`'s precedent
+//! — most existing callers never set it. `day_off_plan`/`current_pattern_no` (`process/checkers/
 //! EmployeeDayOffRotationPlanChecker`) are `with_*` builder fields, following
 //! `entity::assignment::Assignment`'s pattern for the same reason.
 
 use crate::entity::day_off_plan::DayOffPlan;
 use crate::entity::employee_assignment::EmployeeAssignment;
 use crate::entity::employee_job_status::EmployeeJobStatus;
+use crate::entity::employee_status::EmployeeStatus;
+use crate::entity::employee_status_type::EmployeeStatusType;
 use crate::entity::employee_type::EmployeeType;
 use crate::entity::work_class::WorkClass;
 use date_range_rs::DateRange;
@@ -33,6 +38,7 @@ pub struct Employee {
     employee_job_statuses: Vec<EmployeeJobStatus>,
     day_off_plan: Option<DayOffPlan>,
     current_pattern_no: i32,
+    status: Vec<EmployeeStatus>,
 }
 
 impl Employee {
@@ -62,6 +68,7 @@ impl Employee {
             employee_job_statuses,
             day_off_plan: None,
             current_pattern_no: 0,
+            status: Vec::new(),
         }
     }
 
@@ -70,6 +77,13 @@ impl Employee {
     pub fn with_day_off_plan(mut self, day_off_plan: DayOffPlan, current_pattern_no: i32) -> Self {
         self.day_off_plan = Some(day_off_plan);
         self.current_pattern_no = current_pattern_no;
+        self
+    }
+
+    /// `setStatus(List<EmployeeStatus>)`.
+    #[must_use]
+    pub fn with_status(mut self, status: Vec<EmployeeStatus>) -> Self {
+        self.status = status;
         self
     }
 
@@ -190,5 +204,51 @@ impl Employee {
     /// `setCurrentPatternNo(int)`.
     pub fn set_current_pattern_no(&mut self, current_pattern_no: i32) {
         self.current_pattern_no = current_pattern_no;
+    }
+
+    /// `getStatus()`.
+    pub fn status(&self) -> &[EmployeeStatus] {
+        &self.status
+    }
+
+    /// `getStatusForDate(LocalDate)` — the first status whose range contains `date`.
+    pub fn status_for_date(&self, date: LocalDate) -> Option<EmployeeStatus> {
+        self.status.iter().copied().find(|s| s.contains_date(date))
+    }
+
+    /// `isActiveOnDate(LocalDate)`.
+    pub fn is_active_on_date(&self, date: LocalDate) -> bool {
+        let Some(status) = self.status_for_date(date) else {
+            return false;
+        };
+
+        match status.status_type() {
+            EmployeeStatusType::Active | EmployeeStatusType::Rehire => true,
+            EmployeeStatusType::LeaveOfAbsence => false,
+            EmployeeStatusType::Terminated => status.start_date() == date,
+            EmployeeStatusType::Transferred => false,
+        }
+    }
+
+    /// `isActiveJobDuringPeriod(int, DateRange)`.
+    pub fn is_active_job_during_period(&self, job_id: i32, period: &DateRange) -> bool {
+        self.employee_job_statuses
+            .iter()
+            .any(|status| status.overlaps_period(period) && status.job_id() == job_id)
+    }
+
+    /// `getActiveAssignmentIDs()`.
+    pub fn active_assignment_ids(&self) -> Vec<i32> {
+        self.assignments
+            .iter()
+            .filter(|a| a.is_active())
+            .map(|a| a.assignment_id())
+            .collect()
+    }
+
+    /// `getEffectiveAvailableHours()`.
+    pub fn effective_available_hours(&self) -> f64 {
+        self.hours_available
+            .unwrap_or_else(|| self.work_class.hours_available())
     }
 }

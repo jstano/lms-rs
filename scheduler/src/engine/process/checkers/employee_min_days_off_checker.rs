@@ -47,8 +47,8 @@ impl<'a> EmployeeMinDaysOffChecker<'a> {
             .data_set()
             .shifts()
             .iter()
-            .copied()
-            .filter(|s| s != employee_shift)
+            .filter(|s| *s != employee_shift)
+            .cloned()
             .collect();
         let schedules = Schedules::new(
             shifts,

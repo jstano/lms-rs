@@ -19,13 +19,26 @@
 //! `EmployeeShiftCreator.createShift` also sets punches (`addPunch`), `createdOnDT`, and
 //! `shiftType`/`source` (fixed constants, same treatment as `PlannedShift`'s undocumented
 //! constant fields) — none of them are modeled, since nothing ported reads any of them back yet.
+//!
+//! `errors`/`hours_distributions` were added for `ScheduleChecker`/`ScheduleHoursDistributionValidator`
+//! (Phase 3's `autosched` wave, their first real reader/writer) — Java's `getErrors()` returns a
+//! live, mutable `List<EmployeeShiftError>` the shift owns directly, so this type had to drop
+//! `Copy` to host it (decided with the user ahead of this wave: `Vec` isn't `Copy`, and the
+//! alternative — a side table keyed by shift id, kept outside `EmployeeShift` — would've diverged
+//! from Java's "the shift owns its own errors" shape). Every one of the ~55 other files
+//! referencing `EmployeeShift` from earlier waves used it as a plain `Copy` value; none held onto
+//! a copy across a mutation of the original (see `PARITY_AUDIT.md`'s finding on this wave for the
+//! handful of call sites that needed `.clone()` instead of `.copied()` as a result.
 
+use crate::entity::employee_shift_error::EmployeeShiftError;
+use crate::entity::hours_distribution::HoursDistribution;
 use crate::entity::planned_shift::PlannedShift;
+use crate::entity::shift_error_type::ShiftErrorType;
 use date_range_rs::DateTimeRange;
 use joda_rs::{LocalDate, LocalDateTime};
 
 /// A scheduled or worked shift for an employee. `EmployeeShift`.
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EmployeeShift {
     id: i32,
     shift_date: LocalDate,
@@ -38,6 +51,8 @@ pub struct EmployeeShift {
     employee_id: i32,
     flags: i32,
     shift_category_id: Option<i32>,
+    errors: Vec<EmployeeShiftError>,
+    hours_distributions: Vec<HoursDistribution>,
 }
 
 impl EmployeeShift {
@@ -60,6 +75,8 @@ impl EmployeeShift {
             employee_id: 0,
             flags: 0,
             shift_category_id: None,
+            errors: Vec::new(),
+            hours_distributions: Vec::new(),
         }
     }
 
@@ -102,6 +119,13 @@ impl EmployeeShift {
     #[must_use]
     pub fn with_shift_category_id(mut self, shift_category_id: Option<i32>) -> Self {
         self.shift_category_id = shift_category_id;
+        self
+    }
+
+    /// `setHoursDistributions(List<HoursDistribution>)`.
+    #[must_use]
+    pub fn with_hours_distributions(mut self, hours_distributions: Vec<HoursDistribution>) -> Self {
+        self.hours_distributions = hours_distributions;
         self
     }
 
@@ -168,5 +192,40 @@ impl EmployeeShift {
     /// `toDateTimeRange()`.
     pub fn to_date_time_range(&self) -> DateTimeRange {
         DateTimeRange::of(self.start_date_time, self.end_date_time)
+    }
+
+    /// `getDuration()` — `@Transient`, just returns `netHours`.
+    pub fn duration(&self) -> f64 {
+        self.net_hours
+    }
+
+    /// `getHoursDistributions()`.
+    pub fn hours_distributions(&self) -> &[HoursDistribution] {
+        &self.hours_distributions
+    }
+
+    /// `hoursDistributionStream()`.
+    pub fn hours_distribution_dates(&self) -> impl Iterator<Item = LocalDate> + '_ {
+        self.hours_distributions.iter().map(|d| d.date())
+    }
+
+    /// `getErrors()`.
+    pub fn errors(&self) -> &[EmployeeShiftError] {
+        &self.errors
+    }
+
+    /// `getErrors().clear()`.
+    pub fn clear_errors(&mut self) {
+        self.errors.clear();
+    }
+
+    /// `addError(EmployeeShiftError)`.
+    pub fn add_error(&mut self, error: EmployeeShiftError) {
+        self.errors.push(error);
+    }
+
+    /// `hasError(ShiftErrorType)`.
+    pub fn has_error(&self, error_type: ShiftErrorType) -> bool {
+        self.errors.iter().any(|e| e.error_type() == error_type)
     }
 }

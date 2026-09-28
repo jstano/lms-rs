@@ -49,12 +49,11 @@ covering 4 transcribed rows).
 | 2 | `process/schedulebalancers/` (step 4, 1 file) | **done** — `EmployeeAvailableHoursBalancer`; `rstest` added to `Cargo.toml` for its 4-row Spock table |
 | 2 | `io::SchedulePreparationService` (step 5) | **done** — `ScheduleModel::shift_preparation_fields` new (split-borrow accessor, finding 28); `EmployeeShift` grew `planned_shift`; new `EmployeeShiftPort` |
 | 2 | `PreScheduleProcess` (step 6) | **done** — `PreScheduleLoader`, `PlannedShiftCreator` (one overload), `EmployeeShiftCreator` (one overload), `CalculateDataSet`, `ScheduleSaver`, `PreScheduleProcess` itself; new `entity::pre_schedule::PreSchedule`; `EmployeeData::store_pre_schedule_check_overtime` now real (finding 16's `OvertimeForDateRangePort`, moved to `engine::process::ports`); `EmployeeList::take_employee_data` new (finding 30) |
-| 2 | `PermanentScheduleProcess` (step 7) | not started |
-| 2 | `process/regularschedules/` + `RegularScheduleProcess` (step 8, 7 files) | not started |
-| 2 | `process/variable/` + `VariableScheduleProcess` (step 9, 23 files) | not started |
-| 2 | `io::SaveSchedulesService` (step 10) | not started |
-| 3 | `ScheduleEngine` orchestrator | not started |
-| 3 | `autosched/` (6 files) | not started |
+| 2 | `PermanentScheduleProcess` (step 7) + `process/regularschedules/` + `RegularScheduleProcess` (step 8, 7 files) — **merged into one wave**, see finding 31 | **done** |
+| 2 | `process/variable/` + `VariableScheduleProcess` (step 9, 23 files) | **done** — all 23 files plus `VariableScheduleProcess` itself; unblocked `JobList::non_pre_scheduled_jobs`/`pre_scheduled_jobs` and `JobScheduleLog`/`ScheduleLog` (findings 38-41) |
+| 2 | `io::SaveSchedulesService` (step 10) | **done** — plus `CancelShiftRequestsService` (real no-op), `SaveScheduleSnapshotService`, `SaveScheduleLogService` (findings 44-48) |
+| 3 | `ScheduleEngine` orchestrator | **done** — `JobList::take_job_data` new (finding 49) |
+| 3 | `autosched/` (6 files) | **done** — `AvailPeriod` already ported (Phase 1 prerequisite); `ScheduleEmployee` not ported (dead code, finding 51); the other four (`ScheduleHoursDistributionValidator`, `ExceedsAvailableHoursConflictValidator`, `ScheduleChecker`, `ScheduleMatcher`) ported for real (findings 50, 52-55) |
 
 ## Findings
 
@@ -303,6 +302,282 @@ covering 4 transcribed rows).
     doesn't visibly have (the entity-level calculation is opaque in Java; this port models it as
     an external port instead).
 
+31. **Steps 7-8 (`PermanentScheduleProcess`/`RegularScheduleProcess`) merged into one wave.**
+    `PermanentScheduleProcess.schedulePermanentEmployees` is a 3-line facade whose entire real
+    dependency graph — `RegularScheduleLoader` and the whole `process/regularschedules/`
+    subpackage (`RegularScheduleGenerator` → `RegularScheduleSingleDate` →
+    `RegularScheduleSingleShift` → checker factory/creator/matcher/helper machinery) — is step 8's
+    stated scope; `RegularScheduleProcess` is the same facade shape, ~5 lines different
+    (`EmployeeType::Regular` vs. `::Permanent`). Delivering step 7 without step 8 would mean
+    building ~95% of step 8's files and reporting them under the wrong step. Decided with the user
+    ahead of this wave.
+32. **`RegularSchedule`/`EmployeeRegularPeriod.assignment_id` corrected from non-optional `i32` to
+    `Option<i32>`.** Both types were already ported (Phase 1's `engine/model/` prerequisite wave)
+    with `assignment_id: i32` — nothing read the field yet, so the gap was invisible. This wave's
+    `PlannedShiftMatcher` (`getRegularScheduleAssignment`) is the first real reader, and it
+    explicitly null-checks the assignment; ported as `Option<i32>` instead of carrying the bug
+    forward, same "first real caller turns a placeholder into a real field" pattern as findings 22
+    and `EmployeeData::store_pre_schedule_check_overtime`.
+33. **`RegularScheduleSingleDate` carries `job_id: i32`, not `&JobData` — a new instance of the
+    `&mut ScheduleModel`/nested-borrow conflict**, distinct from finding 30's `EmployeeData` case.
+    Java holds a `JobData` reference across the whole per-date loop, re-reading it after each
+    shift to decide whether to stop scheduling — safe there since `ScheduleSaver`/
+    `CalculateDataSet` mutate that same shared object in place. Rust can't hold `&JobData` across a
+    call needing `&mut ScheduleModel`, and unlike `EmployeeData` it can't be taken out either:
+    `ScheduleSaver` looks the job up *by id* through `schedule_model.job_list_mut()`, so a
+    taken-out job would silently fail to record newly-scheduled hours. Resolved by carrying
+    `job_id` through the whole `regularschedules/` chain and re-fetching a fresh, short-lived
+    `&JobData` at each read point, always dropped before the next mutating call — simpler than a
+    take/reinsert dance, and correct here specifically because nothing in this flow needs to hand
+    out `&mut JobData` to an external API.
+34. **`RegularScheduleCanWorkChecker` clones the resolved `JobData` before running its checker
+    list — a third simultaneous-borrow shape**, on top of 30 and 33.
+    `EmployeeAvailabilityChecker` (one of the ten checkers this wave's factory assembles) holds a
+    `&'a JobData` field for the duration of one check, but `RegularScheduleCanWorkChecker::
+    can_employee_work_shift` also needs `&mut ScheduleModel` (every checker can write a failure
+    note into the model's log). Rust can't alias a `&JobData` borrowed out of `schedule_model`
+    with `&mut ScheduleModel` at the same time. Resolved with a `.cloned()` — cheap and
+    behaviorally identical to Java's live reference, since nothing in this checker list mutates
+    the job's scheduled data (only `ScheduleSaver`, downstream, after every check passes, does
+    that). Also takes the already-taken `&mut EmployeeData` directly from
+    `RegularScheduleSingleShift`'s one take/reinsert scope, rather than Java's own
+    `scheduleModel.getEmployeeList().getEmployeeData(...)` re-lookup — same idiom finding 30
+    established, applied to a second caller.
+35. **`RegularScheduleCanWorkCheckerFactory` collapses Java's Spring-DI checker-class lookup into a
+    plain ordered `Vec<Box<dyn CanWorkChecker>>`**, same idiom as `RotationPlanCheckerFactory`/
+    `SeniorityComparatorFactory` (no bean-lookup shim, since this crate has no DI container) — the
+    list is rebuilt fresh per call (not cached on `self`) specifically because
+    `EmployeeAvailabilityChecker`'s `&JobData` borrow only lives for one check (finding 34).
+36. **`PlannedShiftCreator::create_planned_shift_from_regular_schedule` and
+    `PlannedShiftHelper`/`RegularScheduleEmployeeShiftCreator` take `job_id: i32` explicitly**
+    rather than re-deriving `regularSchedule.getJob(shiftDate)` at every level the way Java does.
+    The caller (`RegularScheduleSingleDate`) already resolved and validated that same id against
+    this exact `regular_schedule`/`shift_date` pair before reaching these calls (via
+    `RegularSchedules::regular_schedules_for_job_and_date`'s own job-match filter), so threading it
+    through is behaviorally identical without reintroducing an `Option`/panic risk for an already-
+    known value.
+37. **`Property.default_shift_category` is now reached by two call sites instead of zero, still
+    deferred.** `engine::misc::employee_shift_creator`'s existing doc already flagged this gap
+    (nothing modeled it, and `PreScheduleProcess` never triggered the fallback);
+    `PlannedShiftCreator::create_planned_shift_from_regular_schedule` and
+    `RegularScheduleEmployeeShiftCreator` (which always passes `None` for `shift_category_id`,
+    Java's explicit `ShiftCategory shiftCategory = null`) both leave it unset too, rather than
+    duplicate the gap undocumented a second time.
+
+38. **`EmployeeFilter` is a trait, not the plain value type Phase 1's finding 3 / `DATA_MODEL.md`
+    §5 expected** — its seven implementations (six unit structs plus `JobLevelEmployeeFilter`,
+    which carries a level) genuinely differ in behavior, so a trait matches Java's polymorphic
+    `EmployeeFilter` interface better than a single enum with a `match`-based body would. The map-
+    keying problem finding 3/§5 anticipated is solved with a companion `EmployeeFilterKey` enum
+    (`Copy`/`Eq`/`Hash`, one variant per concrete filter, `JobLevel(i32)` carrying the level) — a
+    `key()` trait method every impl provides. This is needed because Java's `HashMap` keys these
+    by object identity, and each `JobLevelEmployeeFilter` bean is a distinct instance per job
+    level despite all reporting the same `getName() == "Default"` — keying by name (or address)
+    would either collide across levels or need unsafe pointer comparison. `EmployeeFilterKey` is
+    exactly the plain value type finding 5's map-identity treatment calls for, applied to the key
+    rather than to `EmployeeFilter` itself.
+39. **`JobScheduleLog`/`ScheduleLog` (`engine::model::logging`), blocked since Phase 1 (finding 3),
+    are unblocked and ported for real** — `JobScheduleLog` is keyed by job id, not an owned
+    `JobData` (finding 5's entity-identity-keyed-map treatment, consistent with
+    `ScheduleModel.cleared_employee_shifts_map`); `ScheduleLog::current_planned_shift_log`
+    `.expect()`s a non-empty list, faithful to Java's `IllegalStateException` (finding 7, now
+    resolved the same direction as `EmployeeOvertimeChecker` etc. rather than softened to
+    `Option`) — every real caller (`VariableJobScheduler`, the generators) adds a log immediately
+    before reading it back. Adding `job_schedule_log_map` broke `ScheduleModel`'s
+    `#[derive(Clone, PartialEq)]` (its values now hold `Box<dyn EmployeeFilter>`, neither `Clone`
+    nor `PartialEq`) — removed both derives; nothing ported clones or compares a whole
+    `ScheduleModel` (call sites already compared individual fields), so this cost nothing. Added
+    a manual `Debug` impl for `JobScheduleLog` instead (needed for `ScheduleModel`'s own derived
+    `Debug`), printing everything except the trait-object map values.
+40. **`VariableChecker`/`VariableCanWorkChecker`/`VariableCanWorkCheckerFactory` extend the
+    simultaneous-borrow idiom findings 30/33/34/35 established, applied to a second, larger
+    checker list.** `VariableCanWorkCheckerFactory` adds `EmployeeAvailableHoursChecker` (itself
+    composing `EmployeeMonthlyAvailableHoursChecker`+`EmployeeWeeklyAvailableHoursChecker`, the
+    latter also borrowing `&JobData`) and `EmployeeDayOffRotationPlanChecker`/
+    `EmployeeOvertimeChecker` to the checker list beyond what `RegularScheduleCanWorkCheckerFactory`
+    assembles — same `.cloned()`-the-`JobData`-before-the-checker-list resolution (finding 34),
+    same DI-free `Vec<Box<dyn CanWorkChecker>>` rebuilt per call (finding 35). `VariableChecker`
+    (a plain comparator, not a `CanWorkChecker`) has its own version of the same shape:
+    `PlannedShiftScheduler` resolves and clones the job's `Assignment` once up front, since
+    `VariableChecker::compare_employees` needs `&Assignment` (for `job.sort_order()`) at the same
+    time as the loop needs `&mut ScheduleModel`. `VariableChecker::compare_employees` also always
+    passes `None` for `SeniorityComparator`'s `assignment` parameter (Java passes
+    `plannedShift.getAssignment()`) — this crate's `PlannedShift` only carries `assignment_id:
+    Option<i32>`, and nothing resolves an arbitrary assignment id back to a full `Assignment`
+    (`JobList` only maps *job* ids). `AssignmentOrderComparator`/`AssignmentRankComparator`
+    already treat `None` as an automatic tie, so only those two tie-breakers are silently skipped;
+    every other `JcSortOrderType` variant is unaffected. Flagged as a real, not guessed,
+    divergence — revisit if an assignment-id lookup gets built for another caller.
+41. **`PlannedShiftScheduler` is the hardest file in this wave**: Java holds a running "best
+    employee" candidate across a loop over every unsorted employee, each iteration needing both
+    `&mut ScheduleModel` and `&mut EmployeeData` (finding 30's shape) — but unlike every prior
+    caller of `EmployeeList::take_employee_data`/`add_employee_data`, this loop needs the pattern
+    extended to hold **at most one `EmployeeData` taken out across multiple iterations**, not just
+    within one. Solved by tracking `best: Option<(EmployeeData, EmployeeShift)>`: every employee
+    that loses (fails a check, or is out-competed) is reinserted immediately; a new best displaces
+    the old one (which gets `removeShiftAndCalculate`'d and reinserted on the spot); the final
+    winner is only reinserted once, after `ScheduleSaver::save_schedule`. `EmployeeShiftCreator::
+    create_shift`'s `shiftCategory` fallback (`plannedShift.getJob().getProperty().
+    getDefaultShiftCategory()`) is a third call site left deferred per finding 37 — still nothing
+    models `Property.default_shift_category`.
+42. **`VariableJobSchedulingProcess`'s lazily-built `schedulingMethodMap`** collapses to a `match`
+    over `entity::scheduling_method::SchedulingMethod`'s three fixed variants (new entity, plus a
+    new `Assignment.scheduling_method` field) — same "fixed small map needs no cache" treatment as
+    `ProjectedHoursReducerFactory` (finding 26). An unmapped job (`getSchedulingMethod() == null`,
+    an implicit Java NPE at `.get(...)`) is modeled as `Option::None` and skipped instead of
+    panicking — a deliberate divergence from the literal NPE, flagged rather than silently copied.
+    `scheduleModel.getProgress().setMessage(...)` is dropped, not stubbed — `Progress` isn't
+    modeled in this crate at all (`ScheduleModel`'s own doc already says so).
+43. **`PreScheduledJobProcess::combine_planned_shifts_for_grouped_jobs`/`grouped_jobs` are
+    associated functions, not methods** — unlike every other file in this wave, they never read
+    `self` (`self.variable_job_scheduling_process` is only used by the public
+    `generate_schedules_for_jobs` entry point), so making them `Self::`-qualified keeps them
+    directly unit-testable without constructing the full generator dependency chain just to reach
+    a method that ignores it. Moving shifts between two `JobData`s in the same `JobList` (Java
+    holds two live references; this map only exposes one `&mut JobData` at a time) is done by
+    taking the loser's `planned_shifts` out (`std::mem::take`, leaving it empty in place — matches
+    Java's explicit `.clear()`) before appending them to the group's first job, one
+    `job_data_mut` call at a time rather than two simultaneous ones.
+
+44. **`CancelShiftRequestsService.cancelShiftRequests`'s entire body is commented out in the real
+    Java source** (a `//TODO: need to implement this correctly` block, dated well before this
+    port started) — ported as a real no-op, not a stub awaiting implementation. There's nothing
+    to port; the method genuinely does nothing in production today.
+45. **Step 10's DAOs needed real write-side port traits for the first time** — every prior loader
+    (steps 1-9) only ever *read*. `EmployeeShiftPort` (already existed for `evict`, step 5) grew
+    `bulk_delete_by_shift_id`/`save`/`bulk_delete_employee_shifts_for_jobs_in_current_property`/
+    `employee_schedule_shifts_for_period`; a new `PlannedShiftPort` (`save`/
+    `bulk_delete_planned_shifts_for_current_property`) was added alongside the existing
+    `PlannedShiftQueryPort` rather than folded into it, since the query/write surfaces of
+    `PlannedShiftDAO` have no callers in common (finding 21's "one trait per DAO" rule, applied
+    with a deliberate split when the two halves never meet). `ShiftType.GENERATED`/
+    `PlanType.GENERATED` aren't modeled as enums — both are fixed constants at their one call site
+    each, same "fixed constant, not a field" treatment `entity::planned_shift::PlannedShift`
+    already established for its own undocumented constants, extended here to enum arguments.
+    `SchedulesTimeCardCalculatorPort` (step 6) grew a second method,
+    `calculate_schedule_calc_data_set` — a different real Java overload
+    (`calculateScheduleCalcDataSet`, not `calculateOvertimeForScheduleCalcDataSet`) on the same
+    external class, not a second trait.
+46. **`SaveScheduleSnapshotService`'s `EmployeeShiftCloner` is deferred behind a new
+    `EmployeeShiftClonerPort`**, the same "narrow entity slice" treatment as findings 2/8 rather
+    than the usual "deferred rule/calculation engine" shape (findings 10/16/37): Java's real clone
+    copies ~30 fields (adjustments, errors, punches, pay rates and dollar amounts) this crate's
+    `EmployeeShift`/`PlannedShift` never modeled, since no other ported file reads any of them
+    back. Growing both entities for this one write-only caller would be pure churn for a step that
+    otherwise has real sequencing logic (delete old generated snapshots for the job list's ids,
+    load the current period's scheduled shifts, clone-as-generated, save) — that sequencing is
+    ported for real; only the clone's actual field copying is stubbed. One consequence:
+    `cloneEmployeeShiftAsGenerated`'s own two `setShiftType(GENERATED)` calls (on the cloned
+    `EmployeeShift` and its `PlannedShift`, right after the clone — confirmed by
+    `SaveScheduleSnapshotServiceTest.groovy`'s final assertions) aren't ported either, since
+    `shift_type` isn't a modeled field on either entity (`entity::employee_shift`'s own doc already
+    says so) — nothing ported reads it back, so this is the same "inert until a reader appears"
+    gap as `PlannedShift`'s other unmodeled fixed-constant fields, not a new one.
+47. **`SaveSchedulesService.auditPlannedShiftChanges`'s two `getXPlannedShiftAudits` helpers
+    resolve the "old" side by id, not by full entity, unlike Java.** Java's
+    `getClearedEmployeeShiftsMap()` is `Map<PlannedShift, EmployeeShift>` — real Hibernate-managed
+    entities as both key and value; this crate's `ScheduleModel.cleared_employee_shifts` has
+    always been `HashMap<i32, i32>` (finding 5's entity-identity-keyed-map treatment, decided back
+    at step 5, well before this wave needed the full entities for an audit-trail row). Rather than
+    grow that map into a third shape this late, `PlannedShiftAuditPort::create_modify_audit_*`
+    take the ids directly — a real DAO would resolve them from the DB by id anyway, so nothing is
+    lost, but it's a genuine interface divergence from Java's literal object-reference signature,
+    not just an implementation detail. Also: `getScheduledPlannedShiftAudits`'s `.map(it ->
+    ...it.getPlannedShift().getID()...)` NPEs in Java on a `null` planned shift; every real
+    `new_shift_list` entry always has one (finding 30), but since this is an audit/reporting path
+    rather than core scheduling logic, this port uses `filter_map` (skip, don't panic) instead of
+    the literal `.expect()` this crate uses elsewhere for guaranteed-non-null NPE sites — a
+    deliberate, documented softening, not a guess.
+48. **`SaveScheduleLogService`'s actual XML/gzip serialization (`ScheduleLogWriter`,
+    `java.util.zip.GZIPOutputStream`, and the temp-file round-trip in between) is entirely out of
+    this wave's scope** — `ScheduleLogWriterPort` wraps the three calls
+    (`outputHeader`/`outputScheduleLog`/`outputFooter`) into an in-memory `Vec<u8>` buffer instead
+    of a temp file, and the encoding itself is deferred. What *is* real: `ScheduleModel::
+    job_schedule_logs()` (Phase 2 step 9 had left this sorted-plural accessor unported, flagged in
+    its own doc as deferred to step 10) sorts by job full name case-insensitively, same as
+    `JobList::all_jobs`; the nested per-job, per-filter-key traversal that decides which
+    `ScheduleLog`s get written and in what order is ported for real, not stubbed alongside the
+    encoding. `DateTimeServices.currentDateTime()` becomes `joda_rs::LocalDateTime::now()` called
+    directly, not a port — same "cheap to port faithfully, nothing needs to control it in a test"
+    treatment as `common::java_random::JavaRandom` (finding 23).
+49. **`ScheduleEngine`'s steps 3-4 need the same take/reinsert idiom as `PreScheduleProcess`/
+    `RegularScheduleSingleShift`, one level up.** `ProjectedHoursReducer::reduce_projected_hours`/
+    `EmployeeAvailableHoursBalancer::compute_balance_factor` both take `&ScheduleModel` alongside
+    `&mut JobData` — but here the `&mut JobData` comes from `schedule_model.job_list_mut()` itself,
+    so the aliasing is with the *same* `ScheduleModel` the immutable parameter borrows, not a
+    sibling collection (contrast finding 30's `EmployeeList`/`ScheduleModel` case). Resolved with a
+    new `JobList::take_job_data` (removes and returns one `JobData`, mirroring `EmployeeList::
+    take_employee_data` exactly): each per-job loop iteration takes the job out, calls the reducer/
+    balancer with the now-unaliased `&schedule_model` + `&mut job_data`, then reinserts via the
+    existing `add_job_data`. `adjust_projected_hours_for_jobs`/`compute_balance_factors_for_jobs`
+    are ported as free functions rather than `ScheduleEngine` methods specifically so they're
+    testable without constructing all nine of `ScheduleEngine`'s other collaborators.
+50. **`EmployeeShift` drops `Copy` — a deliberate, user-confirmed structural change touching ~55
+    files.** `ScheduleChecker` needs each shift to carry a live, mutable `errors: Vec<
+    EmployeeShiftError>` (Java: `shift.getErrors().add(...)`, a list the shift owns and every
+    holder of that shift shares by reference). Two options were on the table: keep `EmployeeShift`
+    `Copy`/unchanged and have `ScheduleChecker` hold a side table (`HashMap<shift_id,
+    Vec<EmployeeShiftError>>`) instead, or make `EmployeeShift` own its errors directly and drop
+    `Copy` crate-wide. Chosen (explicitly, after flagging the blast radius): the latter — matches
+    Java's object model exactly, at the cost of fixing up every `.copied()`/implicit-copy call site
+    across Phase 1-2's already-tested files (mechanical: `.copied()` → `.cloned()` on iterators,
+    `*shift` → `shift.clone()` on individual values; `PARITY_AUDIT.md`'s own methodology doesn't
+    call for a step-by-step log of each of the ~12 touched files since none changed behavior, only
+    ownership). `EmployeeShift` also grew `hours_distributions: Vec<HoursDistribution>` in the same
+    wave (`ScheduleHoursDistributionValidator`/`ScheduleCalcDataSet`'s `TimeCard` default methods'
+    first real reader) — see `entity::hours_distribution`'s doc for why `HoursDistribution` itself
+    is only a 3-field slice (`date`/`hours`/`is_premium`) of Java's real 10-field entity.
+51. **`ScheduleEmployee` is not ported.** Nothing in the entire `taps` checkout — not `taps/`'s
+    other `autosched` files, not any other module — constructs or references
+    `autosched.ScheduleEmployee`; it's dead code in the Java source. Confirmed via a full-checkout
+    grep before deciding to skip it, not assumed.
+52. **`ScheduleCalcDataSet`'s `TimeCard`-interface default methods (`hasOvertime`,
+    `getOvertimeForDateRange`, `getTotalPremiumHours`, `getNetHoursForWorkWeek`,
+    `getDistributionHoursForDateRange`) are ported as real sums over `EmployeeShift::
+    hours_distributions`, not stubbed** — resolving the "real calculation this crate hasn't
+    grounded yet" gap this type's doc flagged since Phase 2 step 1. The one piece still not
+    reproduced is Java's `distributionIsPremium(HoursDistribution)`, which classifies a
+    distribution as regular-vs-premium via `TimeCard.getRegularHoursDistributionTypeIds()` — a
+    property-level configuration lookup, not a calculation. `HoursDistribution::is_premium` is a
+    pre-resolved stand-in for that one classification, same "narrow entity slice, defer the
+    classification lookup" treatment as `entity::employee_pay_type`/`entity::scheduling_method`.
+    `Assignment::min_shift`/`max_shift` got the same treatment for a different reason: Java's real
+    `getMinShift()`/`getMaxShift()` are themselves `@Deprecated`, resolving through
+    `InheritedPlannerSettingsService`/`StandardSet` — the `planner` crate's domain, which
+    `scheduler` deliberately doesn't depend on (`PLAN_SCHEDULER.md`) — so they're flat pre-resolved
+    `f64` fields here instead of a re-derived settings-inheritance chain.
+53. **`ScheduleRestrictionRuleChecker` gains its other two Java methods
+    (`runStrictRestrictions`/`runNonStrictRestrictions`), unblocked by `EmployeeShiftError` now
+    existing** (finding 50) — its own doc had left them unported specifically because their return
+    types weren't modeled yet. Rather than adding a `ScheduleCalcDataSet`-based dependency to the
+    existing `ScheduleRestrictionRuleChecker` struct (which the two existing `CanWorkChecker`-only
+    factories never construct), the two methods live on a small sibling type,
+    `ScheduleRestrictionRules`, backed by its own `ScheduleRestrictionRulesPort` — same
+    `RuleUtils`/`RuleImplFactory`/`RuleSet`/`RuleItem`/`ScheduleRestrictionRuleImpl` rule-dispatch
+    machinery kept out of scope, for the same reason as the original method.
+54. **`ScheduleChecker`'s `validateMinHoursOff`/`validateMinShiftLength`/`validateMaxShiftLength`/
+    `validateAgainstTimeOffRequests`/`validateAgainstAvailabilityRequests`/
+    `validateScheduleRestrictionRules` each split into a read pass and a write pass** — Java reads
+    every shift in the dataset while deciding which *other* shift(s) to flag, then mutates in the
+    same loop, which Rust can't do once `self.dataset` needs both an immutable borrow (reading
+    every shift to compute flags) and a mutable one (`shifts_mut()`, applying them) at once. Each
+    method first collects the ids to flag into a `HashSet<i32>`, then a second loop over
+    `shifts_mut()` applies `add_error` to the matching ones — same result, same order-independent
+    outcome (nothing here depends on *which* shift is visited first), just two passes instead of
+    one. `ScheduleChecker` itself holds `&'a mut ScheduleCalcDataSet` (not `&'a ScheduleCalcDataSet`)
+    for exactly this reason — every mutating method needs to reborrow it.
+55. **`ScheduleMatcher.getEmployeesForPlannedShift`'s `List<TPair<ScheduleCalcDataSet, Integer>>`
+    becomes `Vec<(i32, i32)>`** (employee id, weight) rather than carrying the dataset itself —
+    `datasetMap` is already keyed by employee id, so a caller that needs the dataset back looks it
+    up there, and returning the id sidesteps holding a second alias into `datasets` while the
+    ported sort comparator needs to read two entries by id at once. That comparator is ported
+    exactly as Java wrote it — `(pair1, pair2) -> isBetterMatch(...) ? 1 : 0` never returns a
+    negative value, so it was never a strict total order in Java either; preserved as-is
+    (`Ordering::Greater`/`Ordering::Equal`) rather than "fixed," to keep the same resulting order.
+    `ScheduleUtils.createEmployeeShiftFromPlannedShift` is inlined as a free function — its
+    `ShiftCategoryDAO.findByID` round-trips the same id back out, so the DAO call is skipped, and
+    its punch creation isn't modeled (nothing ported reads `EmployeeShift`'s punches).
+
 ## Where the work stands
 
 **Phase 1 ("shared machinery") is complete.** Phase 0 (scaffolding + `DATA_MODEL.md`),
@@ -437,6 +712,166 @@ call-count assertion to preserve.
 blocked by an overlapping time-off request), `cargo build --workspace`/`clippy --all-targets`/
 `fmt --check` all clean.
 
-**Next up per `PLAN_SCHEDULER.md`: Phase 2 step 7**, `PermanentScheduleProcess`. Every step should
-re-check `DATA_MODEL.md` §7's dependency list against what's actually shipped so far — several
-entries (`EmployeeJobStatusChecker`, `AssignmentPort`) are now resolved.
+**Phase 2 steps 7-8 (`PermanentScheduleProcess`/`RegularScheduleProcess` + the shared
+`process/regularschedules/` machinery) are done — merged into one wave (finding 31).** New files:
+`engine::io::regular_schedule_loader::RegularScheduleLoader` (deferred from step 1 per finding 20,
+its first real caller, plus a new `EmployeeRegularPeriodDAOPort`); `engine::misc::
+projected_hours_checker::ProjectedHoursChecker` (thin wrapper, both overloads ported for 1:1
+parity though only one is reached this wave); `engine::misc::planned_shift_matcher::
+PlannedShiftMatcher` and `engine::misc::planned_shift_helper::PlannedShiftHelper` (new, unit-struct
+`PlannedShiftMatcher` since `EmployeeAssignmentChecker::can_employee_work_assignment` is already a
+plain associated function); `PlannedShiftCreator`'s `RegularSchedule` overload (finding 36);
+all seven `process/regularschedules/` files (`EmployeeRegularPeriodComparator` — thin delegation to
+the already-ported `EmployeeSeniorityComparator`; `RegularScheduleCanWorkCheckerFactory`/
+`RegularScheduleCanWorkChecker` — findings 34-35; `RegularScheduleEmployeeShiftCreator`;
+`RegularScheduleSingleShift` — the take/mutate/reinsert point, mirroring `PreScheduleProcess`
+exactly; `RegularScheduleSingleDate` — findings 33 and the early-return/`isPermanent()` hazards
+called out in its own module doc; `RegularScheduleGenerator`); and `PermanentScheduleProcess`/
+`RegularScheduleProcess` themselves. `RegularSchedule`/`RegularSchedules` (`engine::model`, ported
+in the Phase 1 prerequisite wave) needed one correction (finding 32) and one net-new method
+(`regular_schedules_for_job_and_date`) to become real rather than blocked.
+
+Findings 32-37 cover this wave's hard parts: the `assignment_id` optionality bug (32), three
+distinct simultaneous-borrow shapes beyond finding 30's `EmployeeData` case — `job_id`-not-
+`&JobData` in the per-date loop (33), a `JobData` clone for the checker-list construction (34),
+and the DI-free checker factory (35) — plus two `job_id`-threading/deferred-fallback divergences
+from Java's literal re-derivation (36-37).
+
+69 tests, all passing (12 new tests: two end-to-end `RegularScheduleSingleDate` cases proving the
+early-return-not-continue and per-employee `isPermanent()` hazards; a `RegularScheduleCanWorkChecker`
+short-circuit case with `Cell<bool>` spies per finding 26's convention; `PlannedShiftMatcher`
+matching/fallback/no-match cases; `RegularSchedules` filter/sort cases; a `RegularScheduleLoader`
+wiring case), `cargo build --workspace`/`clippy --all-targets`/`fmt --check` all clean.
+
+**Phase 2 step 9 (`process/variable/` + `VariableScheduleProcess`, 23 files — the largest remaining
+pipeline wave) is done.** Ported in dependency order: `comparators/` (`NonPreScheduledJobComparator`/
+`PreScheduledJobComparator`, wired into `JobList::non_pre_scheduled_jobs`/`pre_scheduled_jobs`,
+resolving finding 3's first half); `filters/` (`EmployeeFilter` trait + 7 impls, plus the new
+`EmployeeFilterKey` — finding 38); `generators/` (`VariableSchedulingGenerator` trait,
+`AbstractVariableSchedulingGenerator`'s two helpers as free functions since this crate has no
+inheritance, and the three concrete generators); then the top-level orchestration files
+(`VariableChecker`, `VariableCanWorkChecker`/`Factory`, `PlannedShiftScheduler`,
+`VariableJobScheduler`, `VariableJobSchedulingProcess`, `NonPreScheduledJobProcess`/
+`PreScheduledJobProcess`) and finally `VariableScheduleProcess` itself (`engine::process`, the
+step-9 facade, same shape as `PermanentScheduleProcess`/`RegularScheduleProcess`).
+
+Unblocked, not just ported this wave: `JobList::non_pre_scheduled_jobs`/`pre_scheduled_jobs`
+(finding 3's first half) and `JobScheduleLog`/`ScheduleLog` (`engine::model::logging`, finding 3's
+second half, blocked since Phase 1 — see finding 39). New supporting types: `entity::
+employee_pay_type::EmployeePayType`, `entity::employee_job_status::EmployeeJobStatus.pay_type`
+(the six contract/salaried filters' first real reader), `entity::scheduling_method::
+SchedulingMethod` + `Assignment.scheduling_method` (`VariableJobSchedulingProcess`'s dispatch key),
+and `Property.max_scheduler_passes`/`max_employee_skills`/`max_balance_levels`
+(`AbstractVariableSchedulingGenerator`'s two helpers). Findings 38-43 cover this wave's hard
+parts: the `EmployeeFilter`-trait-plus-`EmployeeFilterKey` design (38), `JobScheduleLog`/
+`ScheduleLog` unblocking and `ScheduleModel` losing its `Clone`/`PartialEq` derives (39), two more
+instances of the simultaneous-borrow family plus a new "can't resolve an assignment id" divergence
+in `VariableChecker` (40), `PlannedShiftScheduler`'s "hold at most one taken-out `EmployeeData`
+across a whole loop" extension of the take/reinsert idiom (41), the DI-map-to-`match` idiom applied
+to `SchedulingMethod` dispatch (42), and `PreScheduledJobProcess`'s grouped-job shift-merging (43).
+
+`process/variable/` had comparatively little Java/Groovy test value to transcribe as
+`java_parity_tests`: `NonPreScheduledJobComparatorTest`/`PreScheduledJobComparatorTest` (real
+value tables, both ported via `rstest`) were the only two with genuine value assertions;
+`JobLevelEmployeeFilterTest`, `VariableJobSchedulerTest`, and the rest of the top-level
+orchestration suite are pure interaction/mock-call-count tests (same shape as finding 24), so
+their outcomes are covered through real state instead — `PlannedShiftScheduler`'s own test proves
+the better-schedule-order employee wins and gets saved; `VariableJobScheduler`'s proves a shift
+that would exceed projected hours is skipped while one that wouldn't gets logged;
+`PreScheduledJobProcess`'s proves grouped jobs' shifts get merged onto the lowest-`order_no` job in
+the group.
+
+112 tests, all passing (43 new tests this wave), `cargo build --workspace`/`clippy -p scheduler
+--all-targets`/`fmt -p scheduler --check` all clean.
+
+**Phase 2 step 10 (`io::SaveSchedulesService`) is done — Phase 2 is now fully complete.**
+`SaveSchedulesService` itself, plus its three collaborators (`CancelShiftRequestsService`,
+`SaveScheduleSnapshotService`, `SaveScheduleLogService`) are all ported. `CancelShiftRequestsService`
+is a real no-op (finding 44 — its Java body is entirely commented out already). `SaveSchedulesService`'s
+own real logic — deleting prior schedules, saving new shifts, the two audit-diffing passes
+(`auditScheduleChanges`'s old-vs-new shift comparison, `auditPlannedShiftChanges`'s cleared-shift
+bookkeeping), clearing the old shift list, recalculating each employee's data set, and the final
+cancel/log/snapshot sequence — is ported for real against grounded `ScheduleModel` state, not
+stubbed; only the actual DAO/external-subsystem calls at the leaves (deletes, saves, audit-row
+creation, the time-card recalculation, alert refresh) go behind new port traits (finding 45).
+`SaveScheduleSnapshotService`'s clone step and `SaveScheduleLogService`'s XML/gzip serialization
+are both genuinely out of scope (findings 46, 48) — same "narrow entity slice"/"deferred external
+subsystem" treatment this crate has used throughout, not new gaps introduced by this wave.
+`ScheduleModel::job_schedule_logs()` (the sorted plural accessor Phase 2 step 9 explicitly deferred
+to this step) and `JobScheduleLog::schedule_log_for_key`/`ShiftList::clear_employee_shifts` are new
+supporting methods this wave's first real reader/writer needed.
+
+All three of step 10's Groovy test files (`SaveSchedulesServiceTest`,
+`SaveScheduleSnapshotServiceTest`, `SaveScheduleLogServiceIntegrationTest`) are either pure
+interaction/mock-call-order tests (same shape as finding 24) or a full DB-backed integration test
+(`BaseWatsonTXSpockIntegrationTest`, no unit-test equivalent this crate can run against) — none
+transcribed as `java_parity_tests`; each service's own `mod tests` covers the same real-state
+outcomes instead (deleted ids, saved shifts, audit call counts, the written report's real fields).
+
+116 tests, all passing (4 new tests this wave), `cargo build --workspace`/`clippy -p scheduler
+--all-targets`/`fmt -p scheduler --check` all clean.
+
+**`ScheduleEngine` (Phase 3's orchestrator) is done.** `generate_schedules` is the straight-line
+10-step pipeline: `ScheduleModelLoader::load` (returning `None` on failure, matching the loader's
+own contract — `Progress` isn't threaded, per `ScheduleModelLoader`'s own doc), each of the other
+nine steps gated exactly as `ScheduleEngine.java` gates them
+(`isRotateDaysOff`/`ScheduleMode::Weekly`/`isBalanceSchedules`/the four `isGenerate*Schedules`
+flags), ending in `SaveSchedulesService::save_schedules`. `rotateDayOffPlans`'s Java body is
+`void` (Hibernate dirty-checking persists the rotation without the `ScheduleModel` ever seeing the
+result); `DayOffPlanRotator::rotate_day_off_plans`'s returned `(Vec<DayOffPlan>, Vec<Employee>)` is
+called and discarded here, matching that void-ness for the in-memory model exactly (finding 49's
+doc). Steps 3-4's per-job loops needed the new `JobList::take_job_data` (finding 49) — otherwise a
+direct translation.
+
+`ScheduleEngineTest`/`ScheduleEngineImplTest`-shaped Groovy tests (if any exist) would be pure
+interaction/mock-call-count tests over nine already-tested collaborators (same shape as finding
+24), so nothing was transcribed; `mod tests` instead covers the two new take/reinsert loops
+directly as free functions (`adjust_projected_hours_for_jobs`/`compute_balance_factors_for_jobs`),
+gating on `ScheduleMode`/`is_balance_schedules` and proving every job survives the round trip — an
+end-to-end `generate_schedules` test would mostly re-verify existing per-step wiring rather than
+new behavior, so it wasn't added.
+
+119 tests, all passing (3 new tests this wave), `cargo build --workspace`/`clippy -p scheduler
+--all-targets`/`fmt -p scheduler --check` all clean.
+
+**`autosched/` (Phase 3's last wave) is done — the `scheduler` crate port is now complete per
+`PLAN_SCHEDULER.md`.** Scoped to full depth (decided with the user ahead of this wave, after
+flagging that `ScheduleChecker`/`ScheduleMatcher` sit on a second aggregate,
+`ScheduleCalcDataSet`, that this crate had deliberately left partial since Phase 2 step 1):
+`ScheduleHoursDistributionValidator` and `ExceedsAvailableHoursConflictValidator` are pure/near-pure
+ports with one new port each (none, and `CurrentUserPort` respectively); `ScheduleChecker` and
+`ScheduleMatcher` are both ported for real against grounded `ScheduleCalcDataSet`/`Employee`/
+`Assignment` state, not stubbed — only the genuinely external leaves (`EmployeeCertificationValidator`
+via `CertificationPort`, the schedule-restriction rule engine via `ScheduleRestrictionRulesPort`,
+`CurrentUser`'s security check via `CurrentUserPort`) stay behind ports, same treatment as every
+other deferred subsystem this crate has used since Phase 1. `AvailPeriod` was already ported
+(a Phase 1 prerequisite, `EmployeeAvailabilityChecker`'s dependency); `ScheduleEmployee` is not
+ported — confirmed dead code, referenced nowhere in the entire `taps` checkout (finding 51).
+
+Getting there required one structural change to already-completed work, confirmed with the user
+first: `EmployeeShift` drops `Copy` to own its errors directly (`errors: Vec<EmployeeShiftError>`,
+matching Java's `shift.getErrors()`), rippling a mechanical `.copied()` → `.cloned()`/`*shift` →
+`shift.clone()` fixup across roughly a dozen Phase 1-2 files (finding 50) — no behavior changed in
+any of them, confirmed by the full existing suite staying green throughout. `ScheduleCalcDataSet`'s
+`TimeCard`-interface default methods (`hasOvertime`, `getOvertimeForDateRange`,
+`getTotalPremiumHours`, `getNetHoursForWorkWeek`, `getDistributionHoursForDateRange`) are now real,
+resolving the "real calculation not grounded yet" gap flagged since Phase 2 step 1 (finding 52).
+`ScheduleRestrictionRuleChecker` gained its other two Java methods via a small sibling type,
+`ScheduleRestrictionRules` (finding 53). Findings 54-55 cover the remaining adaptations: splitting
+`ScheduleChecker`'s six validation passes into a read pass then a write pass (the borrow-checker
+version of Java's single mutate-while-reading loop), and `ScheduleMatcher`'s `TPair` → `(id,
+weight)` tuple plus its intentionally-non-strict sort comparator preserved as-is.
+
+No Groovy/Java test file was found for `ScheduleHoursDistributionValidator`/
+`ExceedsAvailableHoursConflictValidator`/`ScheduleMatcher`; `ScheduleCheckerTest.java` exists but
+depends on test-helper infrastructure not present in this checkout (`TestableScheduleChecker`,
+`LaborTestUtils`, `TestUtils`) — none transcribed as `java_parity_tests`. Each new file's own `mod
+tests` instead proves the same real-state outcomes independently derived from the production
+methods (status/job/overlap/negative-length fatal conflicts, min/max shift length overridable
+errors, home-job/job-not-active/not-active hours-distribution errors, weekly-mode-gated available-
+hours conflicts, job-eligibility filtering, and the `EmployeeType` sort-order branch of
+`isBetterMatch`).
+
+133 tests, all passing (14 new tests this wave), `cargo build --workspace`/`clippy -p scheduler
+--all-targets`/`fmt -p scheduler --check` all clean. This closes out every wave in
+`PLAN_SCHEDULER.md` — Phase 0 through Phase 3, including `autosched/`.

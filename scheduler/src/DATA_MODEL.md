@@ -101,11 +101,34 @@ types. Do not treat this as a complete entity — it isn't.
 | Field (Java getter) | Type | Used by |
 |---|---|---|
 | `getCurrentWeek()` | has `getDateRangeContainingDate(date)` | `ScheduleModel.getWeekForDate` |
+| `getMaxSchedulerPasses()` / `getMaxEmployeeSkills()` (Phase 2 step 9) | `int` | `AbstractVariableSchedulingGenerator.getNumberJobLevels` |
+| `getMaxBalanceLevels()` (Phase 2 step 9) | `int` | `AbstractVariableSchedulingGenerator.performCleanupPasses` |
 
 Also referenced but not cataloged yet (deferred to the wave that first needs them):
-`EmployeeRegularPeriod`, `EmployeeJobStatus`, `EmployeeTimeOff`, `EmployeeType` (enum),
-`WorkClass`, `ScheduleCalcDataSet` (`watson/server/labor/calcshift`), `AvailPeriod`
-(`autosched/AvailPeriod.java`).
+`EmployeeTimeOff`, `WorkClass`, `ScheduleCalcDataSet` (`watson/server/labor/calcshift`),
+`AvailPeriod` (`autosched/AvailPeriod.java`).
+
+#### `EmployeeJobStatus` (Phase 1 prerequisite; `getPayType()` added Phase 2 step 9)
+| Field (Java getter) | Type | Used by |
+|---|---|---|
+| `isHome()` / `isSubOnly()` / `getContractHours()` / `getScheduleOrder()` | various | `process/variable/filters/`, `VariableChecker` |
+| `getPayType()` | `EmployeePayType` enum (`HOURLY`/`PIECE`/`SALARIED_EXEMPT`/`SALARIED_NON_EXEMPT`/`CONTRACT`) — `entity::employee_pay_type::EmployeePayType` | the six `process/variable/filters/` contract/salaried filters |
+
+#### `Assignment` addendum (Phase 2 step 9)
+| Field (Java getter) | Type | Used by |
+|---|---|---|
+| `getSchedulingMethod()` | `SchedulingMethod` enum (`BY_JOB_SCHEDULE_ORDER`/`BY_SENIORITY`/`BY_EMPLOYEE_SET`) — `entity::scheduling_method::SchedulingMethod` | `VariableJobSchedulingProcess`'s dispatch |
+| `getSortOrder()` (already cataloged via `AssignmentSortOrder`, §1 prerequisite) | | `VariableChecker::compare_employees` (second real caller, alongside `EmployeeSeniorityComparator`) |
+
+#### `EmployeeRegularPeriod` (Phase 2 steps 7-8, `RegularSchedule`'s only real caller)
+| Field (Java getter) | Type | Used by |
+|---|---|---|
+| `getEmployee().getID()` | `int` | `RegularSchedules`' constructor (skip-if-absent from `EmployeeList`) |
+| `getJob()` | `Assignment` (nullable) → `Option<i32>` | `RegularSchedule::job` fallback chain |
+| `getAssignment()` | `Assignment` (nullable) → `Option<i32>` | `PlannedShiftMatcher`'s null-check |
+| `getDayOfWeek()` | `joda_rs::DayOfWeek` | day-of-week match |
+| `getStartTime()`/`getEndTime()` | `joda_rs::LocalTime` | `RegularSchedule::date_time_range` |
+| `getDuration()` | `double` | projected-hours gating |
 
 ## 4. `engine/model/` types
 
@@ -212,24 +235,25 @@ shared supertype — `EmployeeShift` and `PlannedShift` are unrelated Java types
 contain `null` planned shifts) — port as filtering `Option<PlannedShift>`/skip-if-absent, not an
 `.unwrap()`.
 
-### `RegularSchedule`
+### `RegularSchedule` — **done** (Phase 2 steps 7-8)
 *Java: `RegularSchedule.java`* — one weekly recurring work period for an employee, derived from an
-`EmployeeRegularPeriod` (not modeled yet).
+`EmployeeRegularPeriod`. `employee_data`/`job(shift_date)` take their `Employee`/id lookups as
+parameters rather than an owned/live reference (`WeeklyAvailableHours`'s pattern — see that
+type's doc), so the ported type carries `employee_id`, not an `EmployeeData` reference.
 
 | Field | Type | Notes |
 |---|---|---|
-| `employee_data` | `EmployeeData` (by id/ref) | |
-| `job` | `Option<Assignment>` | may be null in Java — `get_job(shift_date)` falls back to the employee's *home* job status on that date when null |
-| `assignment` | `Assignment` | distinct from `job` — the regular period's assignment, not necessarily the job leaf |
-| `day_of_week` | `DayOfWeek` (`tbx.core.DayOfWeek`, not `joda`'s) | |
-| `time_range` | `TimeRange` (`tbx.core.timerange.TimeRange`) | built from the period's start/end time |
-| `duration` | `f64` | |
+| `employee_id` | `i32` | flattened, not an owned/live `EmployeeData` reference — see above |
+| `job_id` | `Option<i32>` | may be `None` — `job(shift_date, employee)` falls back to the employee's *home* job status on that date when so |
+| `assignment_id` | `Option<i32>` | **corrected from a non-optional `i32`** — `PlannedShiftMatcher` (this wave's first real consumer) explicitly null-checks it |
+| `day_of_week` | `joda_rs::DayOfWeek` | |
+| `start_time`/`end_time` | `joda_rs::LocalTime` | Java builds an intermediate `TimeRange`; ported as the two raw times directly, no intermediate type |
+| `duration` | `f64` | no `TDouble` rounding involved anywhere downstream of this field |
 
-`get_date_time_range(shift_date)` projects `time_range` onto a concrete date via
-`DateTimeRange.fromTimeRangeOnDate` — the Rust equivalent needs a `joda_rs`/`date_range_rs`
-combinator or a small helper, TBD when ported.
+`date_time_range(shift_date)` projects onto a concrete date via
+`date_range_rs::DateTimeRange::from_time_range_on_date`.
 
-### `RegularSchedules`
+### `RegularSchedules` — **done** (Phase 2 steps 7-8)
 *Java: `RegularSchedules.java`* — all `RegularSchedule`s for a `ScheduleModel` run, built from
 `List<EmployeeRegularPeriod>` at construction (skips periods whose employee isn't in the model's
 `EmployeeList`).
@@ -238,11 +262,13 @@ combinator or a small helper, TBD when ported.
 |---|---|---|
 | `regular_schedules` | `Vec<RegularSchedule>` | |
 
-Depends on `EmployeeJobStatusChecker` (`process/checkers/`, Phase 1) and
-`EmployeeRegularPeriodComparator` (`process/regularschedules/`, Phase 2 step 8) for its core
-method, `get_regular_schedules_for_job_and_date` — filter by day-of-week + job match +
-`canEmployeeWorkJobOnDate`, then sort by seniority. **Cannot be ported before those two land** —
-noted here for completeness of the model catalog, not as a Phase 0 deliverable.
+`regular_schedules_for_job_and_date(schedule_model, job_data, shift_date, active_on_date)` filters
+by day-of-week, job match (explicit-or-fallback; an unresolved job is treated as **not matching**,
+not a panic — Java would NPE on `regularScheduleJob.getID()` here), and
+`EmployeeJobStatusChecker::can_employee_work_job_on_date` (`process/checkers/`, Phase 1), then
+sorts via `EmployeeRegularPeriodComparator` (`process/regularschedules/`, Phase 2 steps 7-8),
+re-fetching each side's `EmployeeData` from `schedule_model` at sort time since `RegularSchedule`
+only carries `employee_id`.
 
 ### `WeeklyAvailableHours`
 *Java: `WeeklyAvailableHours.java`* — per-(employee, job) cache of hours available in a given week,
@@ -313,15 +339,20 @@ easy to off-by-one.
 Audit trail built up during the variable-schedule step (step 9) and surfaced via
 `ScheduleModel.job_schedule_log_map`. All six files are small; cataloged together.
 
-- **`JobScheduleLog`** (`Java: JobScheduleLog.java`) — one per `JobData`; holds an ordered
-  `Vec<EmployeeFilter>` (Phase 1's `process/variable/filters/EmployeeFilter` — not modeled yet) and
-  a `HashMap<EmployeeFilter, ScheduleLog>`, lazily populated by `get_schedule_log` (get-or-insert,
-  same pattern as `EmployeeData.weekly_available_hours_map`). **Blocked on `EmployeeFilter`**
-  (Phase 1) to port meaningfully — the map key is that type.
-- **`ScheduleLog`** — one per `(JobScheduleLog, EmployeeFilter)`; an ordered `Vec<PlannedShiftLog>`.
-  `get_current_planned_shift_log()` panics (`IllegalStateException`) if the list is empty — port as
-  returning `Option`/`Result`, not replicating the panic, unless a caller genuinely expects
-  "always non-empty when called" as an invariant (verify when the calling step is ported).
+- **`JobScheduleLog`** (`Java: JobScheduleLog.java`) — **done** (Phase 2 step 9). One per job id
+  (flattened from `JobData`, not an owned copy — see module doc); holds an ordered
+  `Vec<EmployeeFilterKey>` and a `HashMap<EmployeeFilterKey, ScheduleLog>`, lazily populated by
+  `schedule_log` (get-or-insert, same pattern as `EmployeeData.weekly_available_hours_map`).
+  `process/variable/filters::EmployeeFilter` (Phase 2 step 9) is a trait, not the plain value type
+  this section originally expected — `EmployeeFilterKey` (a small `Copy`/`Eq`/`Hash` enum, one
+  variant per concrete filter, `JobLevel(i32)` carrying the level) is the actual map key, computed
+  from a filter via a `key()` trait method; `ScheduleLog` stores the real `Box<dyn EmployeeFilter>`
+  alongside it. See `PARITY_AUDIT.md`'s Phase 2 step 9 writeup.
+- **`ScheduleLog`** — **done** (Phase 2 step 9). One per `(JobScheduleLog, EmployeeFilterKey)`; an
+  ordered `Vec<PlannedShiftLog>` plus the `Box<dyn EmployeeFilter>` it was created for.
+  `current_planned_shift_log()` panics (`.expect`, matching Java's `IllegalStateException`) if the
+  list is empty — every real call site adds a log for the current shift immediately before reading
+  it back, so this is faithful, not a translation shortcut.
 - **`PlannedShiftLog`** — one per `PlannedShift`; owns an `EmployeesWithConflicts` and a
   `RankedEmployees`, both default-constructed and always present.
 - **`EmployeesWithConflicts`** — parallel `Vec<EmployeeLogEntry>` + `HashMap<EmployeeData,
@@ -364,13 +395,11 @@ initialization) — a Rust `Default` impl mirrors that directly.
 Types referenced by `engine/model/` but owned by other packages, listed so later waves know what
 they're unblocking:
 
-- `process/variable/filters::EmployeeFilter` — unblocks `JobScheduleLog`/`ScheduleLog` logging
-  types.
+- `process/variable/filters::EmployeeFilter` — **done** (Phase 2 step 9); unblocked
+  `JobScheduleLog`/`ScheduleLog` logging types, now also done. See §5.
 - `process/variable/comparators::{NonPreScheduledJobComparator,PreScheduledJobComparator}` —
-  unblocks `JobList.get_non_pre_scheduled_jobs`/`get_pre_scheduled_jobs` sort order.
-- `process/regularschedules::EmployeeRegularPeriodComparator` and
-  `process/checkers::{EmployeeJobStatusChecker,EmployeeCertificationsChecker}` — unblock
-  `RegularSchedules.get_regular_schedules_for_job_and_date`.
+  **done** (Phase 2 step 9); unblocked `JobList::non_pre_scheduled_jobs`/`pre_scheduled_jobs` sort
+  order, now also wired up.
 - `autosched::AvailPeriod` — unblocks `EmployeeData.get_effective_available_hours_for_date`.
 - `watson/server/labor/calcshift::ScheduleCalcDataSet` — unblocks most of `EmployeeData`'s shift/
   time-off/overtime accessors; large enough to warrant its own stub-then-grow treatment like the

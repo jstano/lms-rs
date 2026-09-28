@@ -78,7 +78,7 @@ impl<'a> CalculateDataSet<'a> {
         employee_data.store_pre_schedule_check_overtime(schedule_model.date_range(), self.overtime);
 
         self.adjust_shift_for_lunch(employee_data, employee_shift);
-        employee_data.add_employee_shift(*employee_shift);
+        employee_data.add_employee_shift(employee_shift.clone());
 
         self.distribute_hours_for_data_set(employee_data);
     }

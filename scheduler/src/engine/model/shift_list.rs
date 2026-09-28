@@ -55,4 +55,12 @@ impl ShiftList {
     pub fn add_planned_shift(&mut self, planned_shift: Option<PlannedShift>) {
         self.planned_shifts.push(planned_shift);
     }
+
+    /// `getEmployeeShifts().clear()`. `SaveSchedulesService.clearOldShiftList` (step 10), the
+    /// first caller — only the employee-shift side, matching Java's literal call (the old shift
+    /// list's `planned_shifts` are never populated in the first place; `SchedulePreparationService`
+    /// only ever adds employee shifts to `old_shift_list`).
+    pub fn clear_employee_shifts(&mut self) {
+        self.employee_shifts.clear();
+    }
 }

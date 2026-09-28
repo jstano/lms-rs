@@ -18,7 +18,7 @@ use joda_rs::{DayOfWeek, LocalDate};
 pub struct RegularSchedule {
     employee_id: i32,
     job_id: Option<i32>,
-    assignment_id: i32,
+    assignment_id: Option<i32>,
     day_of_week: DayOfWeek,
     start_time: joda_rs::LocalTime,
     end_time: joda_rs::LocalTime,
@@ -53,8 +53,8 @@ impl RegularSchedule {
         })
     }
 
-    /// `getAssignment()`.
-    pub fn assignment_id(&self) -> i32 {
+    /// `getAssignment()` — `null` in Java when the period has no assignment.
+    pub fn assignment_id(&self) -> Option<i32> {
         self.assignment_id
     }
 

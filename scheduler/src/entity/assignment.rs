@@ -14,6 +14,7 @@ use crate::entity::assignment_sort_order::AssignmentSortOrder;
 use crate::entity::planned_shift_sorting_method::PlannedShiftSortingMethod;
 use crate::entity::projected_hours_reduction_method::ProjectedHoursReductionMethod;
 use crate::entity::rotation_plan::RotationPlan;
+use crate::entity::scheduling_method::SchedulingMethod;
 use joda_rs::DayOfWeek;
 
 /// A job / labor-structure node. `Assignment`.
@@ -32,6 +33,9 @@ pub struct Assignment {
     rotation_plan: Option<RotationPlan>,
     job_rotation_plan: Option<RotationPlan>,
     projected_hours_reduction_method: Option<ProjectedHoursReductionMethod>,
+    scheduling_method: Option<SchedulingMethod>,
+    min_shift: f64,
+    max_shift: f64,
 }
 
 impl Assignment {
@@ -62,6 +66,9 @@ impl Assignment {
             rotation_plan: None,
             job_rotation_plan: None,
             projected_hours_reduction_method: None,
+            scheduling_method: None,
+            min_shift: 0.0,
+            max_shift: 0.0,
         }
     }
 
@@ -91,6 +98,31 @@ impl Assignment {
         self
     }
 
+    /// `setSchedulingMethod(SchedulingMethod)` — `VariableJobSchedulingProcess`'s dispatch key
+    /// (Phase 2 step 9).
+    #[must_use]
+    pub fn with_scheduling_method(mut self, scheduling_method: SchedulingMethod) -> Self {
+        self.scheduling_method = Some(scheduling_method);
+        self
+    }
+
+    /// `getMinShift()` — Java's real getter is `@Deprecated`, resolving through
+    /// `InheritedPlannerSettingsService`/`StandardSet` (the `planner` crate's domain, which
+    /// `scheduler` deliberately doesn't depend on — `PLAN_SCHEDULER.md`). Modeled as a flat,
+    /// pre-resolved value, same treatment as `job_rotation_plan`/`projected_hours_reduction_method`.
+    #[must_use]
+    pub fn with_min_shift(mut self, min_shift: f64) -> Self {
+        self.min_shift = min_shift;
+        self
+    }
+
+    /// `getMaxShift()` — see [`with_min_shift`](Self::with_min_shift).
+    #[must_use]
+    pub fn with_max_shift(mut self, max_shift: f64) -> Self {
+        self.max_shift = max_shift;
+        self
+    }
+
     /// `getID()`.
     pub fn id(&self) -> i32 {
         self.id
@@ -100,6 +132,11 @@ impl Assignment {
     /// `JobList.getAllJobs()`/`ScheduleModel.getJobScheduleLogs()`.
     pub fn full_name(&self) -> &str {
         &self.full_name
+    }
+
+    /// `getSchedulingMethod()`.
+    pub fn scheduling_method(&self) -> Option<SchedulingMethod> {
+        self.scheduling_method
     }
 
     /// `isBalanceSchedules()`.
@@ -116,6 +153,16 @@ impl Assignment {
     /// `getMinDaysOff()` — same nullable-override shape as `min_hours_off`.
     pub fn min_days_off(&self) -> Option<i32> {
         self.min_days_off
+    }
+
+    /// `getMinShift()`.
+    pub fn min_shift(&self) -> f64 {
+        self.min_shift
+    }
+
+    /// `getMaxShift()`.
+    pub fn max_shift(&self) -> f64 {
+        self.max_shift
     }
 
     /// `getParentAssignment().getID()`.

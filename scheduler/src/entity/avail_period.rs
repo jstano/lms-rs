@@ -1,15 +1,18 @@
 //! Port of `com.unifocus.watson.server.scheduler.autosched.AvailPeriod`.
 //!
 //! Ground truth: `taps/src/java/com/unifocus/watson/server/scheduler/autosched/AvailPeriod.java`.
-//! Only the fields `EmployeeData.getEffectiveAvailableHoursForDate` and
-//! `EmployeeAvailabilityChecker` read are modeled.
+//! `request_type` was added for `ScheduleChecker` (Phase 3's `autosched` wave, its first real
+//! reader) — `EmployeeData.getEffectiveAvailableHoursForDate`/`EmployeeAvailabilityChecker` only
+//! ever needed the time range and duration.
 
+use crate::entity::employee_avail_type::EmployeeAvailType;
 use date_range_rs::DateTimeRange;
 use joda_rs::LocalDateTime;
 
 /// A block of time an employee is (or isn't) available to work. `AvailPeriod`.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct AvailPeriod {
+    request_type: EmployeeAvailType,
     start_date_time: LocalDateTime,
     end_date_time: LocalDateTime,
     duration: f64,
@@ -17,15 +20,22 @@ pub struct AvailPeriod {
 
 impl AvailPeriod {
     pub fn new(
+        request_type: EmployeeAvailType,
         start_date_time: LocalDateTime,
         end_date_time: LocalDateTime,
         duration: f64,
     ) -> Self {
         Self {
+            request_type,
             start_date_time,
             end_date_time,
             duration,
         }
+    }
+
+    /// `getRequestType()`.
+    pub fn request_type(&self) -> EmployeeAvailType {
+        self.request_type
     }
 
     /// `getStartDateTime()`.

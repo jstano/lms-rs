@@ -25,10 +25,18 @@ pub trait DayOffPlanPort {
     fn find_all_for_property(&self, property_id: i32) -> Vec<DayOffPlan>;
 }
 
-/// `SchedulesTimeCardCalculator.calculateOvertimeForScheduleCalcDataSet(ScheduleCalcDataSet)`.
-/// `CalculateDataSet.distributeHoursForDataSet`'s dependency.
+/// `SchedulesTimeCardCalculator`, narrowed to the two overloads this crate calls.
+/// `calculate_overtime_for_schedule_calc_data_set` is `CalculateDataSet.distributeHoursForDataSet`'s
+/// dependency (Phase 2 step 6); `calculate_schedule_calc_data_set` is
+/// `SaveSchedulesService.recalculateDataSets`'s (step 10) — a different, real Java overload
+/// (`calculateScheduleCalcDataSet`, not `calculateOvertimeForScheduleCalcDataSet`), added here per
+/// `PARITY_AUDIT.md` finding 21's "one trait per DAO/subsystem" rule rather than a second trait
+/// for the same external class.
 pub trait SchedulesTimeCardCalculatorPort {
     fn calculate_overtime_for_schedule_calc_data_set(&self, data_set: &mut ScheduleCalcDataSet);
+
+    /// `calculateScheduleCalcDataSet(ScheduleCalcDataSet)`.
+    fn calculate_schedule_calc_data_set(&self, data_set: &mut ScheduleCalcDataSet);
 }
 
 /// `ScheduleLunchRunner.runRules(ScheduleCalcDataSet, EmployeeShift)`.
