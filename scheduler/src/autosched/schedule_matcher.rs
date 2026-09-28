@@ -355,9 +355,11 @@ mod tests {
     use crate::entity::assignment::Assignment;
     use crate::entity::assignment_sort_order::AssignmentSortOrder;
     use crate::entity::employee::Employee;
+    use crate::entity::employee_assignment::EmployeeAssignment;
     use crate::entity::employee_job_status::EmployeeJobStatus;
     use crate::entity::employee_shift::EmployeeShift;
     use crate::entity::employee_shift_error::EmployeeShiftError;
+    use crate::entity::employee_time_off::EmployeeTimeOff;
     use crate::entity::employee_type::EmployeeType;
     use crate::entity::jc_sort_order_type::JcSortOrderType;
     use crate::entity::work_class::WorkClass;
@@ -460,6 +462,91 @@ mod tests {
             None,
         )
         .with_end_date_time(date.at_time(LocalTime::of(17, 0, 0)))
+    }
+
+    /// A more configurable employee for the `is_better_match` sort-order tests below — each one
+    /// varies exactly one of hire date / seniority date / rank / fulltime / assignments, holding
+    /// everything else (active status, one job status for `job_id`) constant.
+    #[allow(clippy::too_many_arguments)]
+    fn employee_with(
+        id: i32,
+        name: &str,
+        job_id: i32,
+        date: LocalDate,
+        hire_date: Option<LocalDate>,
+        seniority_date: LocalDate,
+        rank: i32,
+        fulltime: bool,
+        employee_assignments: Vec<EmployeeAssignment>,
+    ) -> Employee {
+        Employee::new(
+            id,
+            name,
+            EmployeeType::Regular,
+            Some(40.0),
+            WorkClass::new(40.0, fulltime),
+            None,
+            None,
+            hire_date,
+            employee_assignments,
+            vec![EmployeeJobStatus::new(
+                job_id,
+                None,
+                date,
+                date,
+                true,
+                rank,
+                seniority_date,
+                0.0,
+                false,
+                0,
+            )],
+        )
+        .with_status(vec![crate::entity::employee_status::EmployeeStatus::new(
+            date,
+            date,
+            crate::entity::employee_status_type::EmployeeStatusType::Active,
+        )])
+    }
+
+    fn prior_shift(id: i32, job_id: i32, date: LocalDate) -> EmployeeShift {
+        EmployeeShift::new(id, date, date.at_time(LocalTime::of(9, 0, 0)), job_id, None)
+            .with_end_date_time(date.at_time(LocalTime::of(17, 0, 0)))
+            .with_net_hours(8.0)
+    }
+
+    fn make_matcher<'a>(
+        time_card_calculator: &'a NoOpTimeCardCalculator,
+        exceeds: &'a ExceedsAvailableHoursConflictValidator<'a>,
+        restrictions: &'a ScheduleRestrictionRules<'a>,
+        certifications: &'a FakeCertifications,
+        assignments: &'a FakeAssignments,
+    ) -> ScheduleMatcher<'a> {
+        ScheduleMatcher::new(
+            None,
+            time_card_calculator,
+            ScheduleCheckerDeps {
+                exceeds_hours_validator: exceeds,
+                schedule_restriction_rules: restrictions,
+                certifications,
+                assignments,
+            },
+        )
+    }
+
+    fn job_with_sort_order(job_id: i32, sort_order: Vec<AssignmentSortOrder>) -> Assignment {
+        Assignment::new(
+            job_id,
+            "Job",
+            false,
+            None,
+            None,
+            None,
+            false,
+            sort_order,
+            Vec::new(),
+            None,
+        )
     }
 
     #[test]
@@ -588,5 +675,661 @@ mod tests {
             Some(&permanent_dataset),
             Some(&regular_dataset),
         ));
+    }
+
+    #[test]
+    fn eligible_employees_are_scheduled_and_ranked_then_the_added_shift_is_removed_afterward() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(job_id, job_with_sort_order(job_id, Vec::new()))]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut dataset1 = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default())
+            .with_date_range(DateRange::new(date, date));
+        dataset1.set_employee(employee(1, "One", EmployeeType::Regular, job_id, date));
+
+        let mut dataset2 = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default())
+            .with_date_range(DateRange::new(date, date));
+        dataset2.set_employee(employee(2, "Two", EmployeeType::Regular, job_id, date));
+
+        let mut datasets = HashMap::from([(1, dataset1), (2, dataset2)]);
+
+        let ranked = matcher.employees_for_planned_shift(
+            &planned_shift(job_id, date),
+            0,
+            false,
+            &mut datasets,
+        );
+
+        let ranked_ids: Vec<i32> = ranked.iter().map(|(id, _)| *id).collect();
+        assert!(ranked_ids.contains(&1));
+        assert!(ranked_ids.contains(&2));
+        assert!(datasets[&1].shifts().is_empty());
+        assert!(datasets[&2].shifts().is_empty());
+    }
+
+    #[test]
+    fn employees_with_overlapping_approved_time_off_are_excluded_unless_included() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(job_id, job_with_sort_order(job_id, Vec::new()))]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let time_off = EmployeeTimeOff::new(
+            date.at_time(LocalTime::of(0, 0, 0)),
+            date.at_time(LocalTime::of(23, 59, 0)),
+        );
+
+        let mut excluding_dataset =
+            ScheduleCalcDataSet::new(Vec::new(), vec![time_off], Default::default())
+                .with_date_range(DateRange::new(date, date));
+        excluding_dataset.set_employee(employee(
+            1,
+            "OnTimeOff",
+            EmployeeType::Regular,
+            job_id,
+            date,
+        ));
+        let mut excluding_datasets = HashMap::from([(1, excluding_dataset)]);
+
+        let excluded = matcher.employees_for_planned_shift(
+            &planned_shift(job_id, date),
+            0,
+            false,
+            &mut excluding_datasets,
+        );
+        assert!(excluded.is_empty());
+
+        let mut including_dataset =
+            ScheduleCalcDataSet::new(Vec::new(), vec![time_off], Default::default())
+                .with_date_range(DateRange::new(date, date));
+        including_dataset.set_employee(employee(
+            1,
+            "OnTimeOff",
+            EmployeeType::Regular,
+            job_id,
+            date,
+        ));
+        let mut including_datasets = HashMap::from([(1, including_dataset)]);
+
+        let included = matcher.employees_for_planned_shift(
+            &planned_shift(job_id, date),
+            0,
+            true,
+            &mut including_datasets,
+        );
+        assert!(included.iter().any(|(id, _)| *id == 1));
+    }
+
+    #[test]
+    fn balance_schedules_prefers_the_employee_scheduled_longer_ago_on_the_same_job() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 3, 1);
+        let job = Assignment::new(
+            job_id,
+            "Job",
+            true,
+            None,
+            None,
+            None,
+            false,
+            Vec::new(),
+            Vec::new(),
+            None,
+        );
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(job_id, job)]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut scheduled_long_ago = ScheduleCalcDataSet::new(
+            vec![prior_shift(1, job_id, date.minus_days(30))],
+            Vec::new(),
+            Default::default(),
+        );
+        scheduled_long_ago.set_employee(employee(
+            1,
+            "LongAgo",
+            EmployeeType::Regular,
+            job_id,
+            date,
+        ));
+
+        let mut scheduled_recently = ScheduleCalcDataSet::new(
+            vec![prior_shift(2, job_id, date.minus_days(5))],
+            Vec::new(),
+            Default::default(),
+        );
+        scheduled_recently.set_employee(employee(2, "Recent", EmployeeType::Regular, job_id, date));
+
+        let mut no_history = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        no_history.set_employee(employee(
+            3,
+            "NoHistory",
+            EmployeeType::Regular,
+            job_id,
+            date,
+        ));
+
+        let shift = planned_shift(job_id, date);
+
+        assert!(matcher.is_better_match(
+            &shift,
+            Some(&scheduled_long_ago),
+            Some(&scheduled_recently)
+        ));
+        assert!(!matcher.is_better_match(
+            &shift,
+            Some(&scheduled_recently),
+            Some(&scheduled_long_ago)
+        ));
+        assert!(matcher.is_better_match(&shift, Some(&no_history), Some(&scheduled_recently)));
+    }
+
+    #[test]
+    fn is_better_match_returns_false_when_either_dataset_or_employee_is_missing() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(job_id, job_with_sort_order(job_id, Vec::new()))]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut with_employee =
+            ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        with_employee.set_employee(employee(1, "One", EmployeeType::Regular, job_id, date));
+        let without_employee = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+
+        let shift = planned_shift(job_id, date);
+
+        assert!(!matcher.is_better_match(&shift, None, Some(&with_employee)));
+        assert!(!matcher.is_better_match(&shift, Some(&with_employee), None));
+        assert!(!matcher.is_better_match(&shift, Some(&without_employee), Some(&with_employee)));
+    }
+
+    #[test]
+    fn is_better_match_returns_false_when_the_job_is_not_found() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::new(),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut employee1 = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        employee1.set_employee(employee(1, "One", EmployeeType::Regular, job_id, date));
+        let mut employee2 = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        employee2.set_employee(employee(2, "Two", EmployeeType::Regular, job_id, date));
+
+        assert!(!matcher.is_better_match(
+            &planned_shift(job_id, date),
+            Some(&employee1),
+            Some(&employee2)
+        ));
+    }
+
+    #[test]
+    fn is_better_match_hire_date_prefers_the_earlier_hire_date() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::HireDate)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut earlier = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        earlier.set_employee(employee_with(
+            1,
+            "Earlier",
+            job_id,
+            date,
+            Some(LocalDate::of(2010, 1, 1)),
+            date,
+            0,
+            true,
+            Vec::new(),
+        ));
+        let mut later = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        later.set_employee(employee_with(
+            2,
+            "Later",
+            job_id,
+            date,
+            Some(LocalDate::of(2020, 1, 1)),
+            date,
+            0,
+            true,
+            Vec::new(),
+        ));
+
+        let shift = planned_shift(job_id, date);
+        assert!(matcher.is_better_match(&shift, Some(&earlier), Some(&later)));
+        assert!(!matcher.is_better_match(&shift, Some(&later), Some(&earlier)));
+    }
+
+    #[test]
+    fn is_better_match_skill_date_prefers_the_earlier_seniority_date() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::SkillDate)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut senior = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        senior.set_employee(employee_with(
+            1,
+            "Senior",
+            job_id,
+            date,
+            None,
+            LocalDate::of(2010, 1, 1),
+            0,
+            true,
+            Vec::new(),
+        ));
+        let mut junior = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        junior.set_employee(employee_with(
+            2,
+            "Junior",
+            job_id,
+            date,
+            None,
+            LocalDate::of(2020, 1, 1),
+            0,
+            true,
+            Vec::new(),
+        ));
+
+        let shift = planned_shift(job_id, date);
+        assert!(matcher.is_better_match(&shift, Some(&senior), Some(&junior)));
+        assert!(!matcher.is_better_match(&shift, Some(&junior), Some(&senior)));
+    }
+
+    #[test]
+    fn is_better_match_skill_rank_prefers_the_lower_rank() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::SkillRank)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut top_rank = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        top_rank.set_employee(employee_with(
+            1,
+            "Top",
+            job_id,
+            date,
+            None,
+            date,
+            1,
+            true,
+            Vec::new(),
+        ));
+        let mut low_rank = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        low_rank.set_employee(employee_with(
+            2,
+            "Low",
+            job_id,
+            date,
+            None,
+            date,
+            5,
+            true,
+            Vec::new(),
+        ));
+
+        let shift = planned_shift(job_id, date);
+        assert!(matcher.is_better_match(&shift, Some(&top_rank), Some(&low_rank)));
+        assert!(!matcher.is_better_match(&shift, Some(&low_rank), Some(&top_rank)));
+    }
+
+    #[test]
+    fn is_better_match_assignment_rank_prefers_the_lower_rank() {
+        let job_id = 1;
+        let assignment_id = 5;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::AssignmentRank)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut top_rank = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        top_rank.set_employee(employee_with(
+            1,
+            "Top",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            vec![EmployeeAssignment::new(assignment_id, 1, 1, true)],
+        ));
+        let mut low_rank = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        low_rank.set_employee(employee_with(
+            2,
+            "Low",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            vec![EmployeeAssignment::new(assignment_id, 1, 5, true)],
+        ));
+
+        let shift = planned_shift(job_id, date).with_assignment_id(Some(assignment_id));
+        assert!(matcher.is_better_match(&shift, Some(&top_rank), Some(&low_rank)));
+        assert!(!matcher.is_better_match(&shift, Some(&low_rank), Some(&top_rank)));
+    }
+
+    #[test]
+    fn is_better_match_assignment_rank_falls_back_to_order_no_when_ranks_are_equal() {
+        let job_id = 1;
+        let assignment_id = 5;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::AssignmentRank)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut top_order = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        top_order.set_employee(employee_with(
+            1,
+            "Top",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            vec![EmployeeAssignment::new(assignment_id, 1, 2, true)],
+        ));
+        let mut low_order = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        low_order.set_employee(employee_with(
+            2,
+            "Low",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            vec![EmployeeAssignment::new(assignment_id, 5, 2, true)],
+        ));
+
+        let shift = planned_shift(job_id, date).with_assignment_id(Some(assignment_id));
+        assert!(matcher.is_better_match(&shift, Some(&top_order), Some(&low_order)));
+        assert!(!matcher.is_better_match(&shift, Some(&low_order), Some(&top_order)));
+    }
+
+    #[test]
+    fn is_better_match_fulltime_prefers_fulltime_employees() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::Fulltime)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut fulltime = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        fulltime.set_employee(employee_with(
+            1,
+            "Fulltime",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            Vec::new(),
+        ));
+        let mut parttime = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        parttime.set_employee(employee_with(
+            2,
+            "Parttime",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            false,
+            Vec::new(),
+        ));
+
+        let shift = planned_shift(job_id, date);
+        assert!(matcher.is_better_match(&shift, Some(&fulltime), Some(&parttime)));
+        assert!(!matcher.is_better_match(&shift, Some(&parttime), Some(&fulltime)));
+    }
+
+    #[test]
+    fn is_better_match_default_orders_by_name() {
+        let job_id = 1;
+        let date = LocalDate::of(2024, 1, 1);
+        let assignments = FakeAssignments {
+            by_id: HashMap::from([(
+                job_id,
+                job_with_sort_order(
+                    job_id,
+                    vec![AssignmentSortOrder::new(JcSortOrderType::Default)],
+                ),
+            )]),
+        };
+        let current_user = FakeCurrentUser;
+        let certifications = FakeCertifications;
+        let rules = FakeRestrictionRules;
+        let time_card_calculator = NoOpTimeCardCalculator;
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+        let matcher = make_matcher(
+            &time_card_calculator,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        let mut alice = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        alice.set_employee(employee_with(
+            1,
+            "Alice",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            Vec::new(),
+        ));
+        let mut bob = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default());
+        bob.set_employee(employee_with(
+            2,
+            "Bob",
+            job_id,
+            date,
+            None,
+            date,
+            0,
+            true,
+            Vec::new(),
+        ));
+
+        let shift = planned_shift(job_id, date);
+        assert!(matcher.is_better_match(&shift, Some(&alice), Some(&bob)));
+        assert!(!matcher.is_better_match(&shift, Some(&bob), Some(&alice)));
     }
 }

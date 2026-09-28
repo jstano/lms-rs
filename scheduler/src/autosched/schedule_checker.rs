@@ -621,19 +621,23 @@ fn is_open_for_editing(calculation_start_date: Option<LocalDate>, date: LocalDat
 
 #[cfg(test)]
 mod tests {
-    //! `ScheduleCheckerTest.java` (`taps/.../autosched/ScheduleCheckerTest.java`) relies on helper
+    //! `ScheduleCheckerTest.java` (`taps/taps/src/test/.../autosched/ScheduleCheckerTest.java`,
+    //! not present under `lms/scheduler`, which has no `src/test` at all) relies on helper
     //! infrastructure not present in this checkout (`TestableScheduleChecker`, `LaborTestUtils`,
-    //! `TestUtils`), so nothing from it is transcribed as `java_parity_tests` — same "helper
-    //! infrastructure unavailable" treatment as other crates' undertested Groovy suites. Cases
-    //! below cover the same real-state outcomes that test asserts (status/job/overlap/negative-
-    //! length fatal conflicts, min/max shift length overridable errors) independently derived from
-    //! the production methods.
+    //! `TestUtils`), so none of it is transcribed verbatim as `java_parity_tests`. Every outcome it
+    //! asserts is covered below instead, independently derived from the production methods:
+    //! status/job/assignment/overlap/negative-length fatal conflicts, min/max-shift-length and
+    //! min-hours-off overridable errors (including the "earlier shift" propagation
+    //! `getPrintableConflicts` does via `find_closest_shift_after`), and the certification-error
+    //! wiring (`testEmployeeWithInvalidCertificationsReturnsFatalError`, verified at the
+    //! [`CertificationPort`] boundary since the real certification logic lives behind that port).
 
     use super::*;
     use crate::autosched::ports::CertificationPort;
     use crate::engine::process::checkers::schedule_restriction_rule_checker::ScheduleRestrictionRulesPort;
     use crate::entity::assignment::Assignment;
     use crate::entity::employee::Employee;
+    use crate::entity::employee_assignment::EmployeeAssignment;
     use crate::entity::employee_status::EmployeeStatus;
     use crate::entity::employee_status_type::EmployeeStatusType;
     use crate::entity::employee_type::EmployeeType;
@@ -890,5 +894,240 @@ mod tests {
 
         assert!(dataset.shifts()[0].has_error(ShiftErrorType::MinShiftLength));
         assert!(dataset.shifts()[1].has_error(ShiftErrorType::MaxShiftLength));
+    }
+
+    /// Port of `ScheduleCheckerTest.testJobViolation` (`taps/taps/src/test/.../autosched/
+    /// ScheduleCheckerTest.java`), found in the fuller `taps/taps` checkout, not `lms/scheduler`
+    /// (which has no `src/test` at all). Java flips one shift's job id between an active and an
+    /// inactive job on the same `EmployeeShift`; `EmployeeShift` here is immutable, so this uses
+    /// two shifts instead of a mutated one.
+    #[test]
+    fn job_violation_when_shift_job_is_not_an_active_job_for_the_employee() {
+        let harness = Harness::new(1, 0.0, 0.0);
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&harness.current_user);
+        let restrictions = ScheduleRestrictionRules::new(&harness.rules);
+
+        let date = LocalDate::of(2024, 1, 1);
+        let employee = Employee::new(
+            1,
+            "Employee",
+            EmployeeType::Regular,
+            Some(40.0),
+            WorkClass::new(40.0, true),
+            None,
+            None,
+            None,
+            Vec::new(),
+            vec![crate::entity::employee_job_status::EmployeeJobStatus::new(
+                1, None, date, date, true, 0, date, 0.0, false, 0,
+            )],
+        )
+        .with_status(vec![EmployeeStatus::new(
+            date,
+            date,
+            EmployeeStatusType::Active,
+        )]);
+
+        let mut dataset = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default())
+            .with_date_range(DateRange::new(date, date));
+        dataset.set_employee(employee);
+
+        let shift_for_other_job =
+            EmployeeShift::new(1, date, date.at_time(LocalTime::of(9, 0, 0)), 200, None)
+                .with_end_date_time(date.at_time(LocalTime::of(17, 0, 0)))
+                .with_net_hours(8.0);
+        let shift_for_own_job =
+            EmployeeShift::new(2, date, date.at_time(LocalTime::of(9, 0, 0)), 1, None)
+                .with_end_date_time(date.at_time(LocalTime::of(17, 0, 0)))
+                .with_net_hours(8.0);
+
+        let checker = harness.checker(&mut dataset, &exceeds, &restrictions);
+
+        assert!(
+            checker
+                .fatal_conflicts(&shift_for_other_job)
+                .contains(&"res_jobViolation".to_string())
+        );
+        assert!(
+            !checker
+                .fatal_conflicts(&shift_for_own_job)
+                .contains(&"res_jobViolation".to_string())
+        );
+    }
+
+    /// Port of `ScheduleCheckerTest.testAssignmentViolation` — same "two shifts instead of a
+    /// mutated one" adaptation as the job-violation test above.
+    #[test]
+    fn assignment_violation_when_shift_assignment_is_not_active_for_the_employee() {
+        let harness = Harness::new(1, 0.0, 0.0);
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&harness.current_user);
+        let restrictions = ScheduleRestrictionRules::new(&harness.rules);
+
+        let date = LocalDate::of(2024, 1, 1);
+        let employee = Employee::new(
+            1,
+            "Employee",
+            EmployeeType::Regular,
+            Some(40.0),
+            WorkClass::new(40.0, true),
+            None,
+            None,
+            None,
+            vec![EmployeeAssignment::new(1, 1, 0, true)],
+            Vec::new(),
+        )
+        .with_status(vec![EmployeeStatus::new(
+            date,
+            date,
+            EmployeeStatusType::Active,
+        )]);
+
+        let mut dataset = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default())
+            .with_date_range(DateRange::new(date, date));
+        dataset.set_employee(employee);
+
+        let shift_for_other_assignment =
+            EmployeeShift::new(1, date, date.at_time(LocalTime::of(9, 0, 0)), 1, Some(200))
+                .with_end_date_time(date.at_time(LocalTime::of(17, 0, 0)))
+                .with_net_hours(8.0);
+        let shift_for_own_assignment =
+            EmployeeShift::new(2, date, date.at_time(LocalTime::of(9, 0, 0)), 1, Some(1))
+                .with_end_date_time(date.at_time(LocalTime::of(17, 0, 0)))
+                .with_net_hours(8.0);
+
+        let checker = harness.checker(&mut dataset, &exceeds, &restrictions);
+
+        assert!(
+            checker
+                .fatal_conflicts(&shift_for_other_assignment)
+                .contains(&"res_assignmentViolation".to_string())
+        );
+        assert!(
+            !checker
+                .fatal_conflicts(&shift_for_own_assignment)
+                .contains(&"res_assignmentViolation".to_string())
+        );
+    }
+
+    /// Port of `ScheduleCheckerTest.testMinHoursOff`. Java's assertion that the *earlier* shift
+    /// also reports `MIN_HOURS_OFF` isn't a second violation on that shift — it's
+    /// `getPrintableConflicts` propagating the following shift's error back via
+    /// `find_closest_shift_after`, matching this file's own doc comment on that method.
+    #[test]
+    fn min_hours_off_violation_flags_the_close_shift_and_propagates_back_to_the_earlier_one() {
+        let harness = Harness::new(1, 0.0, 0.0);
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&harness.current_user);
+        let restrictions = ScheduleRestrictionRules::new(&harness.rules);
+
+        let date = LocalDate::of(2024, 1, 1);
+        let next_date = date.plus_days(1);
+
+        let employee = Employee::new(
+            1,
+            "Employee",
+            EmployeeType::Regular,
+            Some(40.0),
+            WorkClass::new(40.0, true),
+            Some(6.0),
+            None,
+            None,
+            Vec::new(),
+            Vec::new(),
+        )
+        .with_status(vec![EmployeeStatus::new(
+            date,
+            next_date,
+            EmployeeStatusType::Active,
+        )]);
+
+        let shift1 = shift(1, date, LocalTime::of(8, 0, 0), LocalTime::of(10, 0, 0));
+        let shift2 = shift(2, date, LocalTime::of(15, 0, 0), LocalTime::of(20, 0, 0));
+        let shift3 = shift(
+            3,
+            next_date,
+            LocalTime::of(12, 0, 0),
+            LocalTime::of(20, 0, 0),
+        );
+
+        let mut dataset =
+            ScheduleCalcDataSet::new(vec![shift1, shift2, shift3], Vec::new(), Default::default())
+                .with_date_range(DateRange::new(date, next_date));
+        dataset.set_employee(employee);
+
+        {
+            let mut checker = harness.checker(&mut dataset, &exceeds, &restrictions);
+            checker.populate_overridable_shift_errors(true, true);
+        }
+
+        let shifts = dataset.shifts().to_vec();
+        let mut checker = harness.checker(&mut dataset, &exceeds, &restrictions);
+
+        assert!(
+            checker
+                .printable_conflicts(&shifts[0], true)
+                .contains(&ShiftErrorType::MinHoursOff.resource_key().to_string())
+        );
+        assert!(
+            checker
+                .printable_conflicts(&shifts[1], true)
+                .contains(&ShiftErrorType::MinHoursOff.resource_key().to_string())
+        );
+        assert!(
+            !checker
+                .printable_conflicts(&shifts[2], true)
+                .contains(&ShiftErrorType::MinHoursOff.resource_key().to_string())
+        );
+    }
+
+    /// Port of `ScheduleCheckerTest.testEmployeeWithInvalidCertificationsReturnsFatalError`.
+    /// Java builds real expired `EmployeeCertification`/`EmployeeJobStatus` rows and lets
+    /// production certification logic derive the error key; that logic lives behind
+    /// [`CertificationPort`] here (see this file's module doc), so the port is verified at the
+    /// port boundary instead — a fake that returns the expired-cert key exercises the same
+    /// `fatal_conflicts` wiring Java's test does.
+    #[test]
+    fn certification_violation_for_an_employee_with_an_expired_certification() {
+        struct FakeExpiredCertification;
+        impl CertificationPort for FakeExpiredCertification {
+            fn certification_error_key(
+                &self,
+                _employee: &Employee,
+                _job_id: i32,
+                _shift_range: &DateRange,
+            ) -> Option<&'static str> {
+                Some("res_certificationExpiredError")
+            }
+        }
+
+        let current_user = FakeCurrentUser { can_exceed: false };
+        let certifications = FakeExpiredCertification;
+        let rules = FakeRestrictionRules;
+        let assignments = FakeAssignments {
+            by_id: HashMap::new(),
+        };
+
+        let exceeds = ExceedsAvailableHoursConflictValidator::new(&current_user);
+        let restrictions = ScheduleRestrictionRules::new(&rules);
+
+        let date = LocalDate::of(2024, 1, 1);
+        let mut dataset = ScheduleCalcDataSet::new(Vec::new(), Vec::new(), Default::default())
+            .with_date_range(DateRange::new(date, date));
+        dataset.set_employee(active_employee(date));
+
+        let s = shift(1, date, LocalTime::of(9, 0, 0), LocalTime::of(17, 0, 0));
+        let checker = ScheduleChecker::new(
+            &mut dataset,
+            None,
+            &exceeds,
+            &restrictions,
+            &certifications,
+            &assignments,
+        );
+
+        assert!(
+            checker
+                .fatal_conflicts(&s)
+                .contains(&"res_certificationExpiredError".to_string())
+        );
     }
 }
