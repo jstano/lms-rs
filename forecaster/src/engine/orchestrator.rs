@@ -624,4 +624,381 @@ mod tests {
         let written = store.written.borrow();
         assert_eq!(written.len(), 1, "only the first matching Monday should be zeroed, matching Java's break");
     }
+
+    // --- run_forecast / process_kbis / process_kbi -----------------------------------------
+
+    use crate::analyzers::{KbiStatSnapshot, PercentOfBaseLookupPort, RegressionLookupPort, StatisticalDispatch, TaesLookupPort};
+    use crate::formula::MarketSegmentType;
+    use crate::io::{FinancialYearPeriodPort, FnyPeriod, KbiLoaderPort};
+    use crate::kbi::CalculatedKbiData;
+    use crate::KbiId as Kid;
+
+    /// No-op stand-ins for the port traits `compute_kbi_value` only reaches for `Statistical`/
+    /// `PercentOfBase` KBIs or formula functions that hit the network — none of which these tests
+    /// exercise (every KBI here is `Input` or a formula-less `Calculated`).
+    struct Noop;
+
+    impl FormulaContext for Noop {
+        fn kbi_id_for_code(&self, _code: &str) -> Result<Option<Kid>, ForecasterError> {
+            Ok(None)
+        }
+        fn read_kbi_stat_value(&self, _kbi_id: Kid, _date: LocalDate, _stat_type: KbiStatType) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn arrivals_total(&self, _segment: MarketSegmentType, _date: LocalDate, _day_offset: i32, _stat_type: KbiStatType) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn departures_total(&self, _segment: MarketSegmentType, _date: LocalDate, _day_offset: i32, _stat_type: KbiStatType) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn guests_total(&self, _segment: MarketSegmentType, _date: LocalDate, _day_offset: i32, _stat_type: KbiStatType) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn rooms_total(&self, _segment: MarketSegmentType, _date: LocalDate, _day_offset: i32, _stat_type: KbiStatType) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn revenue_total(&self, _revenue_center_name: &str, _units: &str, _date: LocalDate, _day_offset: i32, _stat_type: KbiStatType) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn config_rooms(&self) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+        fn past_average(&self, _kbi_id: Kid, _number_data_points: i32, _date: LocalDate) -> Result<f64, ForecasterError> {
+            Ok(0.0)
+        }
+    }
+
+    impl StatisticalDispatch for Noop {
+        fn absolute_day_index(&self, _date: LocalDate) -> Result<usize, ForecasterError> {
+            Ok(0)
+        }
+    }
+
+    impl RegressionLookupPort for Noop {
+        fn days_out(&self) -> Result<i32, ForecasterError> {
+            Ok(0)
+        }
+        fn find_season_id(&self, _date: LocalDate) -> Result<i32, ForecasterError> {
+            Ok(0)
+        }
+        fn find_environment_id(&self, _kbi_id: Kid, _date: LocalDate, _actual_env: bool) -> Result<i32, ForecasterError> {
+            Ok(0)
+        }
+        fn is_global_environment(&self, _date: LocalDate) -> Result<bool, ForecasterError> {
+            Ok(false)
+        }
+        fn ignore_environment_dow(&self, _environment_id: i32) -> Result<bool, ForecasterError> {
+            Ok(false)
+        }
+        fn min_stat_date(&self, _kbi_id: Kid) -> Result<LocalDate, ForecasterError> {
+            Ok(LocalDate::of(2020, 1, 1))
+        }
+        fn read_kbi_stat_value(&self, _kbi_id: Kid, _date: LocalDate, _stat_type: Option<KbiStatType>) -> Result<Option<f64>, ForecasterError> {
+            Ok(None)
+        }
+        fn read_kbi_value(&self, _kbi_id: Kid, _date: LocalDate, _stat_type: KbiStatType) -> Result<Option<f64>, ForecasterError> {
+            Ok(None)
+        }
+        fn read_kbi_override_value(&self, _kbi_id: Kid, _date: LocalDate) -> Result<Option<f64>, ForecasterError> {
+            Ok(None)
+        }
+        fn read_kbi_stat_data(&self, _kbi_id: Kid, _date: LocalDate) -> Result<KbiStatSnapshot, ForecasterError> {
+            Ok(KbiStatSnapshot { est: None, adj: None, act: None, fst: None })
+        }
+        fn is_taes_kbi(&self, _kbi_id: Kid, _date: LocalDate) -> Result<bool, ForecasterError> {
+            Ok(false)
+        }
+        fn is_actual_mode(&self) -> bool {
+            false
+        }
+    }
+
+    impl TaesLookupPort for Noop {
+        fn recent_actuals(&self, _kbi_id: Kid, _property_id: PropertyId, _requested_date: LocalDate) -> Result<Option<(Vec<i32>, LocalDate)>, ForecasterError> {
+            Ok(None)
+        }
+        fn should_log_taes_calculation(&self) -> bool {
+            false
+        }
+        fn insert_taes_calculation_log(&self, _kbi_id: Kid, _date: LocalDate, _message: &str) {}
+    }
+
+    impl PercentOfBaseLookupPort for Noop {
+        fn read_base_kbi_value(&self, _base_kbi_id: Kid, _date: LocalDate) -> Result<Option<f64>, ForecasterError> {
+            Ok(None)
+        }
+    }
+
+    impl KbiLoaderPort for Noop {
+        fn rooms_and_departures_flags(&self, _kbi_id: Kid) -> Result<(bool, bool), ForecasterError> {
+            Ok((false, false))
+        }
+        fn revenue_center_period_id(&self, _kbi_id: Kid) -> Result<Option<i32>, ForecasterError> {
+            Ok(None)
+        }
+        fn days_open(&self, _property_id: PropertyId, _period_id: i32, _standard_set_id: StandardSetId) -> Result<HashMap<i32, bool>, ForecasterError> {
+            Ok(HashMap::new())
+        }
+        fn load_kbi_percents(&self, _kbi_id: Kid, _kbi_config_id: KbiConfigId, _kbi_mode_code: &str) -> Result<Vec<crate::analyzers::KbiPercent>, ForecasterError> {
+            Ok(vec![])
+        }
+    }
+
+    impl FinancialYearPeriodPort for Noop {
+        fn fny_period(&self, _date: LocalDate) -> Result<Option<FnyPeriod>, ForecasterError> {
+            Ok(None)
+        }
+        fn financial_year_period_count(&self) -> Result<i32, ForecasterError> {
+            Ok(0)
+        }
+    }
+
+    struct FakeKbiSet {
+        kbi_set_id: i32,
+        kbis: Vec<Kbi>,
+    }
+
+    impl KbiSetPort for FakeKbiSet {
+        fn kbi_set_id_for_standard_set(&self, _standard_set_id: StandardSetId) -> Result<i32, ForecasterError> {
+            Ok(self.kbi_set_id)
+        }
+        fn load_kbi_list(&self, _property_id: PropertyId, _kbi_set_id: i32) -> Result<Vec<Kbi>, ForecasterError> {
+            Ok(self.kbis.clone())
+        }
+    }
+
+    fn calculated(id: i32, is_rooms: bool, is_revenue: bool) -> Kbi {
+        Kbi::Calculated(CalculatedKbiData {
+            base: record(id, KbiType::Calculated, is_rooms, is_revenue),
+            formula_text: None,
+        })
+    }
+
+    fn kbi_list_with_kbis(kbis: Vec<Kbi>) -> KbiList {
+        KbiList::new(kbis)
+    }
+
+    #[test]
+    fn skip_respects_an_optional_kbi_id_filter() {
+        let kbi = Kbi::Input(record(1, KbiType::Input, false, false));
+        assert!(!skip_if_kbi_is_not_supposed_to_be_generated(&kbi, None));
+        assert!(!skip_if_kbi_is_not_supposed_to_be_generated(&kbi, Some(&[KbiId(1), KbiId(2)])));
+        assert!(skip_if_kbi_is_not_supposed_to_be_generated(&kbi, Some(&[KbiId(2)])));
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn ports<'a>(
+        stat_reader: &'a FakeStore,
+        stat_writer: &'a FakeStore,
+        market_segments: &'a FakeMarketSegments,
+        revenue_centers: &'a FakeRevenueCenters,
+        noop: &'a Noop,
+    ) -> ForecastPorts<'a> {
+        ForecastPorts {
+            kbi_set: noop_kbi_set(),
+            stat_reader,
+            stat_writer,
+            kbi_loader: noop,
+            fny: noop,
+            formula_ctx: noop,
+            stat_dispatch: noop,
+            regression: noop,
+            taes: noop,
+            percent_of_base: noop,
+            market_segments,
+            revenue_centers,
+        }
+    }
+
+    fn noop_kbi_set() -> &'static FakeKbiSet {
+        // Only needed by `run_forecast`, not `process_kbis` — leaked once per test binary is fine.
+        Box::leak(Box::new(FakeKbiSet { kbi_set_id: 1, kbis: vec![] }))
+    }
+
+    fn empty_market_segments() -> FakeMarketSegments {
+        FakeMarketSegments(vec![])
+    }
+
+    fn empty_revenue_centers() -> FakeRevenueCenters {
+        FakeRevenueCenters { rows: vec![], plan: None, dates: vec![], period_days: vec![] }
+    }
+
+    #[test]
+    fn process_kbis_rooms_mode_only_processes_rooms_kbis() {
+        let date = LocalDate::of(2026, 1, 5);
+        let store = FakeStore::new();
+        let noop = Noop;
+        let market_segments = empty_market_segments();
+        let revenue_centers = empty_revenue_centers();
+        let p = ports(&store, &store, &market_segments, &revenue_centers, &noop);
+
+        let kbi_list = kbi_list_with(vec![
+            record(1, KbiType::Input, true, false),
+            record(2, KbiType::Input, false, false),
+        ]);
+        let mut reader_writer = KbiReaderWriter::new(ForecastMode::Rooms);
+
+        process_kbis(&kbi_list, &mut reader_writer, ForecastMode::Rooms, date, date, None, PropertyId(1), KbiMode::Labor, &p).unwrap();
+
+        let written = store.written.borrow();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].kbi_id, KbiId(1));
+    }
+
+    #[test]
+    fn process_kbis_revenue_mode_includes_dangling_kbis() {
+        let date = LocalDate::of(2026, 1, 5);
+        let store = FakeStore::new();
+        let noop = Noop;
+        let market_segments = empty_market_segments();
+        let revenue_centers = empty_revenue_centers();
+        let p = ports(&store, &store, &market_segments, &revenue_centers, &noop);
+
+        let kbi_list = kbi_list_with(vec![
+            record(1, KbiType::Input, false, true),  // revenue-center KBI
+            record(2, KbiType::Input, false, false), // dangling (neither rooms nor revenue)
+            record(3, KbiType::Input, true, false),  // rooms-only: excluded
+        ]);
+        let mut reader_writer = KbiReaderWriter::new(ForecastMode::Revenue);
+
+        process_kbis(&kbi_list, &mut reader_writer, ForecastMode::Revenue, date, date, None, PropertyId(1), KbiMode::Labor, &p).unwrap();
+
+        let written = store.written.borrow();
+        let processed: std::collections::HashSet<i32> = written.iter().map(|d| d.kbi_id.0).collect();
+        assert_eq!(processed, std::collections::HashSet::from([1, 2]));
+    }
+
+    #[test]
+    fn process_kbis_update_modes_process_calculated_and_percent_of_base_only() {
+        let date = LocalDate::of(2026, 1, 5);
+        let noop = Noop;
+        let market_segments = empty_market_segments();
+        let revenue_centers = empty_revenue_centers();
+
+        let kbi_list = kbi_list_with_kbis(vec![
+            calculated(1, false, false),
+            Kbi::PercentOfBase(crate::kbi::PercentOfBaseKbiData {
+                base: record(2, KbiType::PercentOfBase, false, false),
+                base_kbi_id: None,
+            }),
+            Kbi::Input(record(3, KbiType::Input, false, false)),
+        ]);
+
+        for mode in [ForecastMode::UpdateSys, ForecastMode::UpdateFst, ForecastMode::UpdateAct] {
+            let store = FakeStore::new();
+            let p = ports(&store, &store, &market_segments, &revenue_centers, &noop);
+            let mut reader_writer = KbiReaderWriter::new(mode);
+            process_kbis(&kbi_list, &mut reader_writer, mode, date, date, None, PropertyId(1), KbiMode::Labor, &p).unwrap();
+            let written = store.written.borrow();
+            let processed: std::collections::HashSet<i32> = written.iter().map(|d| d.kbi_id.0).collect();
+            assert_eq!(processed, std::collections::HashSet::from([1, 2]), "mode {mode:?}");
+        }
+    }
+
+    #[test]
+    fn process_kbis_actual_mode_processes_only_calculated_not_percent_of_base() {
+        // `ForecastThread.processKBIs`'s literal ACTUAL branch is only reachable by calling this
+        // function directly with `mode == Actual` — `run_forecast` always normalizes ACTUAL to
+        // UPDATE_ACT before this point, matching Java's `if (mode == ACTUAL) mode = UPDATE_ACT`.
+        let date = LocalDate::of(2026, 1, 5);
+        let store = FakeStore::new();
+        let noop = Noop;
+        let market_segments = empty_market_segments();
+        let revenue_centers = empty_revenue_centers();
+        let p = ports(&store, &store, &market_segments, &revenue_centers, &noop);
+
+        let kbi_list = kbi_list_with_kbis(vec![
+            calculated(1, false, false),
+            Kbi::PercentOfBase(crate::kbi::PercentOfBaseKbiData {
+                base: record(2, KbiType::PercentOfBase, false, false),
+                base_kbi_id: None,
+            }),
+        ]);
+        let mut reader_writer = KbiReaderWriter::new(ForecastMode::Actual);
+
+        process_kbis(&kbi_list, &mut reader_writer, ForecastMode::Actual, date, date, None, PropertyId(1), KbiMode::Labor, &p).unwrap();
+
+        let written = store.written.borrow();
+        let processed: Vec<i32> = written.iter().map(|d| d.kbi_id.0).collect();
+        assert_eq!(processed, vec![1]);
+    }
+
+    #[test]
+    fn process_kbis_respects_the_kbi_id_filter() {
+        let date = LocalDate::of(2026, 1, 5);
+        let store = FakeStore::new();
+        let noop = Noop;
+        let market_segments = empty_market_segments();
+        let revenue_centers = empty_revenue_centers();
+        let p = ports(&store, &store, &market_segments, &revenue_centers, &noop);
+
+        let kbi_list = kbi_list_with(vec![record(1, KbiType::Input, true, false), record(2, KbiType::Input, true, false)]);
+        let mut reader_writer = KbiReaderWriter::new(ForecastMode::Rooms);
+
+        process_kbis(
+            &kbi_list,
+            &mut reader_writer,
+            ForecastMode::Rooms,
+            date,
+            date,
+            Some(&[KbiId(2)]),
+            PropertyId(1),
+            KbiMode::Labor,
+            &p,
+        )
+        .unwrap();
+
+        let written = store.written.borrow();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].kbi_id, KbiId(2));
+    }
+
+    #[test]
+    fn run_forecast_normalizes_actual_mode_and_returns_success() {
+        let date = LocalDate::of(2026, 1, 5);
+        let store = FakeStore::new();
+        let noop = Noop;
+        let market_segments = empty_market_segments();
+        let revenue_centers = empty_revenue_centers();
+        let kbi_set = FakeKbiSet {
+            kbi_set_id: 7,
+            kbis: vec![calculated(1, false, false)],
+        };
+
+        let params = ForecastParams {
+            mode: ForecastMode::Actual,
+            start_date: date,
+            end_date: date,
+            standard_set_id: StandardSetId(1),
+            property_id: PropertyId(1),
+            kbi_mode: KbiMode::Labor,
+            kbi_ids: None,
+            period_start_year: 2026,
+        };
+        let p = ForecastPorts {
+            kbi_set: &kbi_set,
+            stat_reader: &store,
+            stat_writer: &store,
+            kbi_loader: &noop,
+            fny: &noop,
+            formula_ctx: &noop,
+            stat_dispatch: &noop,
+            regression: &noop,
+            taes: &noop,
+            percent_of_base: &noop,
+            market_segments: &market_segments,
+            revenue_centers: &revenue_centers,
+        };
+
+        let outcome = run_forecast(&params, &p).unwrap();
+        assert_eq!(outcome, ForecastOutcome { success: true });
+
+        // `ForecastMode::Actual` set act_value via the UPDATE_ACT-normalized reader/writer, not
+        // the literal ACTUAL branch (which would also set act_value, so this only distinguishes
+        // that *a* write happened; `process_kbis_actual_mode_*` above covers the mode-selection
+        // difference directly).
+        let written = store.written.borrow();
+        assert_eq!(written.len(), 1);
+        assert_eq!(written[0].act_value(), Some(0.0));
+    }
 }
