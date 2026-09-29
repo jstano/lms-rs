@@ -7,11 +7,16 @@ in the `taps` Java monorepo, to scope what a future persistence layer needs to l
 `planner` (175 entities), `taps` (417, legacy `watson.server.hibernate.entity.*` + `eventlabor`),
 `tippool` (153, mostly duplicate/override copies of watson entities), and `framework`
 (2 base classes). The newer `rms/timekeeping` and `rms/employeeattendance` modules are
-**not JPA** — they're hexagonal/JDBC adapters with table names buried in raw SQL, not annotations.
+**also Hibernate-backed** — their `*RepositoryImpl` classes use Hibernate's `Criteria` API
+against the same legacy `@Entity` classes, just accessed through a repository-pattern
+wrapper instead of Spring Data (corrected below — an earlier pass wrongly called these
+raw JDBC/jOOQ).
 
-Almost none of the watson-domain `@Entity` classes carry an explicit `@Table(name=...)` —
-Hibernate defaults to the class simple name as the table name. Real table names need
-confirming against migration DDL, not just Java source.
+Confirmed via follow-up pass: no `.hbm.xml` files exist, and the underscore naming
+strategy is never enabled for this domain, so **the table name is always the literal,
+unmodified entity class simple name** (PascalCase) unless an explicit `@Table(name=...)`
+overrides it. Known override: `JobLaborData` → table `JobclassLaborData` (see planner
+section).
 
 ---
 
@@ -31,8 +36,13 @@ confirming against migration DDL, not just Java source.
 | shift_category.rs | `ShiftCategory` | tippool |
 | property.rs | `Property` | taps |
 | planned_shift.rs | `PlannedShift` | planner |
-| accrual_transaction.rs | not JPA — lives in newer `rms/timekeeping/domain/benefits` JDBC module | — |
-| time_card.rs, holiday.rs, calc_data_set_stat.rs, flsa_data.rs, time_clock_result.rs, punch_log.rs | **no `@Entity` match found** — likely computed in-memory or table names buried in the newer adapter modules | — |
+| accrual_transaction.rs | `AccrualTransaction` (table `AccrualTransaction`), read via `AccrualTransactionRepositoryImpl` in `rms/timekeeping/adapter_persistence_jpa/benefits` — same table as the legacy entity, not a new one | taps |
+| holiday.rs | `Holiday` (table `Holiday`) | taps |
+| calc_data_set_stat.rs | `HoursDistributionType` (table `HoursDistributionType`), newer module `rms/timekeeping/domain/hoursdistribution` | taps |
+| punch_log.rs | `RawPunchLog` (table `RawPunchLog`) | taps |
+| time_card.rs | **confirmed: not persisted** — `TimeCard` is a Java *interface* in `rms/timekeeping/domain/timecard/`; `ScheduleCalcDataSet` is one implementation, assembled at runtime | — |
+| flsa_data.rs | **confirmed: computed in-memory** — `watson.server.labor.calcshift.flsacalculations`, no `@Entity` | — |
+| time_clock_result.rs | **unconfirmed** — no Java class by this name found anywhere in `taps`; may be a Rust-only aggregate type | — |
 
 ## scheduler
 
@@ -49,7 +59,9 @@ Shares the core (`Employee`, `EmployeeShift`, `EmployeeJobStatus`, `HoursDistrib
 | employee_status.rs | `EmployeeStatus`, `EmployeeStatusReason` | planner |
 | employee_time_off.rs | `EmployeeTimeOff` | tippool |
 | assignment_sort_order.rs | `AssignmentSortOrder` | planner |
-| pre_schedule.rs, schedule_calc_data_set.rs | **no match found** — likely staging/derived data | — |
+| pre_schedule.rs | `PreSchedule` (table `PreSchedule`) | taps |
+| pre_schedule_jobclass.rs | `PreScheduleJobclass` (table `PreScheduleJobclass`) | taps |
+| schedule_calc_data_set.rs | **confirmed: computed in-memory** — `ScheduleCalcDataSet implements TimeCard`, no `@Entity`; built at runtime from underlying entity data | — |
 
 ## forecaster
 
@@ -66,7 +78,7 @@ No entity dir — driven by `io::ports` traits in `forecaster/src/io/ports.rs`:
 
 | Rust struct | Java entity | Module |
 |---|---|---|
-| job.rs / job_shift.rs / job_min_max_coverage.rs | `MasterJob`, `JobLaborData`, `AssignmentMinMaxCoverage` | taps/planner |
+| job.rs / job_shift.rs / job_min_max_coverage.rs | `MasterJob` (table `MasterJob`), `JobLaborData` (**table `JobclassLaborData`** — explicit override, does not match class name), `AssignmentMinMaxCoverage` | taps/planner |
 | work_content.rs | `WorkContent`, `WorkContentDetail` | planner |
 | recurring_task_standard.rs | `RecurringTaskStandard` | tippool |
 | salaried_standard.rs | `SalariedStandard` | planner |
@@ -74,21 +86,32 @@ No entity dir — driven by `io::ports` traits in `forecaster/src/io/ports.rs`:
 | shift_standard.rs | `ShiftRelatedStandard(Value)`, `ShiftRelatedRange` | planner |
 | environment.rs | `Environment` | planner |
 | planner_settings.rs | `PropertyPlannerSettings`, `AssignmentPlannerSettings` | planner |
-| distribution_schedule/pattern/method.rs, business_driver*.rs, meal_break.rs | **no direct match found** — needs a follow-up pass | — |
+| meal_break.rs / non_meal_break.rs | **confirmed: not separate tables** — plain `Serializable` value classes (`watson.common.labor.breaks`), embedded as columns on `AssignmentPlannerSettings` | — |
+| distribution_method.rs | **confirmed: enum**, not a table — `watson.common.enums.DistributionMethod`, used as a column value type on entities like `HoursDistribution`/`TORDistribution` | — |
+| distribution_schedule.rs / distribution_pattern.rs, business_driver.rs / business_driver_values.rs | **unresolved — likely reference-implementation-only.** Zero hits in the real `taps` codebase; these names only exist in the bundled `lms-rs/planner/java/` folder, which is a hand-written teaching/reference implementation (`com.stano.planner.engine.*`), not production taps source. If real persistence is needed for these concepts, that mapping doesn't exist in taps yet and needs product input, not more code archaeology. | — |
 
 ## timeclock, timeoff, ta
 
 These crates are just stub `lib.rs` files — no domain code yet. Likely Java sources
 identified but not yet mapped:
 
-- **timeoff**: `TimeOffRequest`, `TimeOffRequestDistribution`, `TimeOffRequestType`,
-  `TimeOffStatusStatDate` (newer `rms/timeoff` module), plus legacy
-  `EmployeeTimeOff`/`EmployeeTimeOffType`.
+All three read/write the **same underlying legacy tables** already listed under
+`workrules`/`scheduler` above — the newer `rms/*` modules are a repository-pattern
+wrapper over the existing schema, not new tables:
+
+- **timeoff**: `rms/timeoff/domain/entities.TimeOffRequest` → table **`EmployeeTimeOff`**;
+  `TimeOffRequestDistribution` → table **`TORDistribution`**; `TimeOffRequestType` →
+  table **`EmployeeTimeOffType`**; `TimeOffStatusStatDate` — plain value object, no
+  `@Entity`, not persisted.
 - **timeclock**: `TimeClock`, `TimeClockAssignmentRestriction`,
-  `EmployeeTimeClockRestriction`, `TKCode` (planner) + `AssignmentTKCode` (newer non-JPA
-  `timekeeping` module).
-- **ta**: `rms/employeeattendance/domain/points`, `.../events` — entirely non-JPA; tables
-  live in raw SQL inside `PointsRepositoryImpl`/`AttendanceEventRepositoryImpl`.
+  `EmployeeTimeClockRestriction`, `TKCode` (all in `planner/.../hibernate/entity/`, table
+  name = class name) + `AssignmentTKCode` (`rms/timekeeping/domain/assignmenttimekeepingcode`)
+  — plain value object, no `@Entity`, not persisted.
+- **ta**: `rms.employeeattendance.domain.points.Points` (via `PointsRepositoryImpl`) →
+  table **`EmployeePoints`**; `rms.employeeattendance.domain.events.AttendanceEvent` (via
+  `AttendanceEventRepositoryImpl`) → table **`EmployeeEvent`**; `EventDocumentTemplate`
+  (via `EventDocumentTemplateRepositoryImpl`) → table **`EmployeeEventDocumentTemplate`**.
+  All Hibernate-backed, not raw SQL.
 
 ## Shared core (3+ crates)
 
@@ -96,14 +119,23 @@ identified but not yet mapped:
 `HoursDistribution`, `Assignment` — good candidates for one shared persistence module
 rather than per-crate duplication.
 
-## Gaps / follow-up needed
+## Follow-up pass results
 
-1. Almost no watson entities have explicit `@Table(name=...)` — real table names need
-   confirming against migration DDL.
-2. Several Rust structs (`TimeCard`, `FlsaData`, `Holiday`, `BusinessDriver*`,
-   `PreSchedule`, etc.) have no matching `@Entity` — likely computed in-memory, or
-   persisted via the newer JDBC/jOOQ adapter modules instead.
-3. `AccrualTransaction` and points/attendance data live in the newer hexagonal modules
-   (JDBC, not Hibernate) — a follow-up pass through `*RepositoryImpl.java`/`*Sql.java`
-   files in `rms/timekeeping` and `rms/employeeattendance` would pin down real table
-   names for these gaps.
+1. **Table naming resolved.** No `.hbm.xml` files exist and the underscore naming
+   strategy is never enabled for this domain, so table name = entity class simple name
+   verbatim (PascalCase), confirmed against 48 entities with explicit `@Table`. Only
+   known exception found: `JobLaborData` → `JobclassLaborData`.
+2. **Unmatched structs resolved** (see inline entries above for `holiday.rs`,
+   `calc_data_set_stat.rs`, `punch_log.rs`, `pre_schedule.rs`,
+   `pre_schedule_jobclass.rs`, `meal_break.rs`, `distribution_method.rs`). Confirmed
+   genuinely non-persisted (computed at runtime): `time_card.rs`, `flsa_data.rs`,
+   `schedule_calc_data_set.rs`. Still unresolved: `time_clock_result.rs` (no Java
+   counterpart found — possibly Rust-only), and `distribution_schedule.rs` /
+   `distribution_pattern.rs` / `business_driver*.rs` (exist only in the bundled
+   `planner/java/` reference implementation, not in real `taps` source — not a taps
+   entity to find, a product-design question to resolve).
+3. **Correction:** the newer `rms/timekeeping` and `rms/employeeattendance` modules are
+   **not** raw JDBC/jOOQ — their repositories use Hibernate `Criteria` against the same
+   legacy `@Entity` classes. `AccrualTransaction`, `EmployeePoints`, `EmployeeEvent`,
+   `EmployeeEventDocumentTemplate`, `EmployeeTimeOff`, `TORDistribution`,
+   `EmployeeTimeOffType` are all real Hibernate-backed tables, not new schema to design.
