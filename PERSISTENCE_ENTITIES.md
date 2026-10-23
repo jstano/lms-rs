@@ -139,3 +139,15 @@ rather than per-crate duplication.
    legacy `@Entity` classes. `AccrualTransaction`, `EmployeePoints`, `EmployeeEvent`,
    `EmployeeEventDocumentTemplate`, `EmployeeTimeOff`, `TORDistribution`,
    `EmployeeTimeOffType` are all real Hibernate-backed tables, not new schema to design.
+
+## Renames (Java concept → Rust/lms-rs concept)
+
+Naming decisions made in the Rust port that diverge from the Java source names above.
+Kept here so the mapping tables elsewhere in this doc can be read against current
+lms-rs naming.
+
+| Java (taps) | lms-rs | Notes |
+|---|---|---|
+| `KBI` / `KBIConfig` / `KBIStat` / `KBISet` | `business_driver` | forecaster's KBI concept renamed to business driver in the port |
+| `Assignment` | `labor_structure` | renamed across workrules/scheduler/planner |
+| `MasterJob` / jobclass-* | `job` | "jobclass" terminology in Java collapsed to `job` in lms-rs |
