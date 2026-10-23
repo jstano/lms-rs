@@ -1,0 +1,2503 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<database xmlns="http://stano.com/database"
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+          xsi:schemaLocation="http://stano.com/database http://schema.stano.com/schema.xsd">
+
+   <!-- ===== Shared core (used by 3+ crates) ===== -->
+
+   <table name="employee" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="pay_group_id" type="int" required="true"/>
+         <column name="emp_id" type="varchar" length="25" required="true"/>
+         <column name="last_name" type="varchar" length="50" required="true"/>
+         <column name="first_name" type="varchar" length="50" required="true"/>
+         <column name="middle_name" type="varchar" length="25"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="employee_type_code" type="enum" length="1" required="true" enumType="EmployeeType"/>
+         <column name="hire_date" type="date" required="true"/>
+         <column name="seniority_date" type="date" required="true"/>
+         <column name="work_class_id" type="int" required="true"/>
+         <column name="emp_class_id" type="int"/>
+         <column name="sec_emp_class_id" type="int"/>
+         <column name="birth_date" type="date"/>
+         <column name="alt_emp_id" type="varchar" length="25"/>
+         <column name="payroll_emp_id" type="varchar" length="25"/>
+         <column name="gender" type="enum" length="1" enumType="GenderType"/>
+         <column name="tipped" type="enum" length="1" enumType="TippedType"/>
+         <column name="hours_available" type="decimal" length="9" scale="2" minValue="0.0" maxValue="80.0"/>
+         <column name="min_hours_off" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="min_days_off" type="short" minValue="0" maxValue="7"/>
+         <column name="day_off_plan_id" type="int"/>
+         <column name="current_pattern_no" type="short"/>
+         <column name="photograph" type="binary"/>
+         <column name="address" type="varchar" length="50"/>
+         <column name="address2" type="varchar" length="50"/>
+         <column name="city" type="varchar" length="50"/>
+         <column name="state_id" type="int"/>
+         <column name="zip" type="varchar" length="25"/>
+         <column name="home_phone" type="varchar" length="25"/>
+         <column name="mobile_phone" type="varchar" length="25"/>
+         <column name="other_phone" type="varchar" length="25"/>
+         <column name="email" type="varchar" length="254"/>
+         <column name="emergency_contact" type="varchar" length="50"/>
+         <column name="emergency_phone" type="varchar" length="25"/>
+         <column name="orientation_date" type="date"/>
+         <column name="eligible_401k_date" type="date"/>
+         <column name="enrolled_401k_date" type="date"/>
+         <column name="next_review_date" type="date"/>
+         <column name="last_review_date" type="date"/>
+         <column name="marital_status" type="enum" length="1" enumType="MaritalStatusType"/>
+         <column name="num_dependents" type="short"/>
+         <column name="ada" type="varchar" length="100"/>
+         <column name="locale" type="varchar" length="10"/>
+         <column name="extra_data" type="varchar" length="25"/>
+         <column name="password" type="varchar" length="50"/>
+         <column name="clock_admin" type="boolean" required="true"/>
+         <column name="bypass_biometric" type="boolean" required="true"/>
+         <column name="auto_punch_mode" type="boolean" required="true"/>
+         <column name="pin" type="varchar" length="200"/>
+         <column name="watson_user_id" type="int"/>
+         <column name="portal_user_id" type="int"/>
+         <column name="flags" type="int"/>
+         <column name="private_schedules" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="pay_group_id"/>
+            <column name="emp_id"/>
+         </unique>
+         <index include="name">
+            <column name="property_id"/>
+            <column name="id"/>
+            <column name="emp_id"/>
+         </index>
+         <index>
+            <column name="portal_user_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="day_off_plan_id" table="day_off_plan" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="employee_shift" lockEscalation="disable" data="true" exportDataColumn="shift_date" compress="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="shift_date" type="date" required="true"/>
+         <column name="shift_type_code" type="enum" length="1" required="true" enumType="ShiftType"/>
+         <column name="shift_category_id" type="int" required="true"/>
+         <column name="source" type="enum" length="1" required="true" enumType="ShiftSourceType"/>
+         <column name="created_on_dt" type="datetime" required="true"/>
+         <column name="labor_structure_id" type="int"/>
+         <column name="worked_hours" type="decimal" length="9" scale="4"/>
+         <column name="adj_hours" type="decimal" length="9" scale="4"/>
+         <column name="net_hours" type="decimal" length="9" scale="4"/>
+         <column name="avg_rate" type="decimal" length="9" scale="4"/>
+         <column name="net_dollars" type="decimal" length="9" scale="2"/>
+         <column name="reg_hours" type="decimal" length="9" scale="4"/>
+         <column name="reg_rate" type="decimal" length="9" scale="4"/>
+         <column name="reg_dollars" type="decimal" length="9" scale="2"/>
+         <column name="auto_ot_hours" type="decimal" length="9" scale="4"/>
+         <column name="adj_ot_hours" type="decimal" length="9" scale="4"/>
+         <column name="ot_hours" type="decimal" length="9" scale="4"/>
+         <column name="ot_rate" type="decimal" length="9" scale="4"/>
+         <column name="ot_dollars" type="decimal" length="9" scale="2"/>
+         <column name="auto_dt_hours" type="decimal" length="9" scale="4"/>
+         <column name="adj_dt_hours" type="decimal" length="9" scale="4"/>
+         <column name="dt_hours" type="decimal" length="9" scale="4"/>
+         <column name="dt_rate" type="decimal" length="9" scale="4"/>
+         <column name="dt_dollars" type="decimal" length="9" scale="2"/>
+         <column name="banked_hours" type="decimal" length="9" scale="4"/>
+         <column name="start_time" type="datetime"/>
+         <column name="end_time" type="datetime"/>
+         <column name="emp_approved_dt" type="datetime"/>
+         <column name="mgr_approved_dt" type="datetime"/>
+         <column name="mgr_approved_by" type="int"/>
+         <column name="check_id" type="int"/>
+         <column name="planned_shift_id" type="int"/>
+         <column name="notes" type="varchar" length="400"/>
+         <column name="overlap" type="boolean" required="true"/>
+         <column name="flags" type="int"/>
+         <column name="reallocated_from_adjustment_id" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="shift_type_code"/>
+            <column name="employee_id"/>
+            <column name="shift_date"/>
+            <column name="shift_category_id"/>
+            <column name="id"/>
+         </unique>
+         <index compress="true">
+            <column name="employee_id"/>
+            <column name="shift_date"/>
+         </index>
+         <index>
+            <column name="planned_shift_id"/>
+         </index>
+         <index>
+            <column name="reallocated_from_adjustment_id"/>
+         </index>
+         <index compress="true" include="id,employee_id">
+            <column name="shift_type_code"/>
+            <column name="start_time"/>
+         </index>
+         <index compress="true">
+            <column name="shift_category_id"/>
+            <column name="job_id"/>
+            <column name="shift_date"/>
+            <column name="shift_type_code"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="shift_category_id" table="shift_category" column="id" type="cascade"/>
+         <relation src="planned_shift_id" table="planned_shift" column="id" type="setnull"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_job_status" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="schedule_order" type="short" required="true"/>
+         <column name="seniority_date" type="date" required="true"/>
+         <column name="rank" type="short" minValue="1" maxValue="10000" required="true"/>
+         <column name="sub_only" type="boolean" required="true"/>
+         <column name="pay_type_code" type="enum" enumType="EmployeePayType" required="true"/>
+         <column name="annual_based" type="boolean" required="true"/>
+         <column name="home" type="boolean" required="true"/>
+         <column name="start_date" type="date" required="true"/>
+         <column name="end_date" type="date" required="true"/>
+         <column name="pay_rate_reason_id" type="int"/>
+         <column name="hourly_rate" type="decimal" length="9" scale="4"/>
+         <column name="annual_rate" type="decimal" length="19" scale="4"/>
+         <column name="piece_rate" type="decimal" length="9" scale="4"/>
+         <column name="salary_dist_id" type="int"/>
+         <column name="contract_hours" type="decimal" length="9" scale="2"/>
+         <column name="contract_days" type="decimal" length="9" scale="2"/>
+         <column name="reconcile_code_id" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="start_date"/>
+            <column name="employee_id"/>
+            <column name="end_date"/>
+            <column name="job_id"/>
+         </unique>
+         <index include="property_id,employee_id,job_id,schedule_order">
+            <column name="start_date"/>
+            <column name="end_date"/>
+         </index>
+         <index>
+            <column name="employee_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="property">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="short_name" type="varchar" length="25" required="true"/>
+         <column name="code" type="varchar" length="25" required="true"/>
+         <column name="alt_code" type="varchar" length="25" required="true"/>
+         <column name="number_rooms" type="short" required="true" minValue="0" maxValue="20000"/>
+         <column name="period_start_date" type="date" required="true"/>
+         <column name="period_end_date" type="date" required="true"/>
+         <column name="week_end_day" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="weeks_out" type="short" required="true" minValue="1" maxValue="4"/>
+         <column name="pay_period_type_code" type="enum" length="2" required="true" enumType="PayPeriodType"/>
+         <column name="pay_period_start_day_of_month" type="int" required="true" minValue="1" maxValue="31"/>
+         <column name="current_pp_end_date" type="date"/>
+         <column name="planning_period_type" type="enum" length="2" required="true" enumType="DateRangeType"/>
+         <column name="planning_period_start_day_of_month" type="int" required="true" minValue="1" maxValue="31"/>
+         <column name="employee_id_generator" type="enum" length="1" required="true" enumType="EmployeeIDGeneratorType"/>
+         <column name="min_employee_id_length" type="short" required="true" minValue="1" maxValue="25"/>
+         <column name="max_employee_id_length" type="short" required="true" minValue="4" maxValue="25"/>
+         <column name="punch_id_method" type="enum" length="10" required="true" enumType="PunchIDMethodType"/>
+         <column name="max_employee_skills" type="short" required="true" minValue="1" maxValue="100"/>
+         <column name="start_of_day" type="time" required="true"/>
+         <column name="financial_year_type_code" type="enum" length="1" required="true" enumType="FinancialYearType"/>
+         <column name="financial_year_start_date" type="date" required="true"/>
+         <column name="schedule_state_code" type="enum" length="1" required="true" enumType="ScheduleStateType"/> <!-- Deprecated - now on SchedulingLaborStructureLog table -->
+         <column name="period_length" type="int" required="true"/>
+         <column name="periods_per_hour" type="int" required="true"/>
+         <column name="periods_per_day" type="int" required="true"/>
+         <column name="schedule_mode" type="enum" length="1" required="true" enumType="ScheduleModeType"/>
+         <column name="time_zone_id" type="varchar" length="50"/>
+         <column name="show_on_reports" type="boolean" required="true"/>
+         <column name="fst_variance_from" type="short" minValue="0" maxValue="100"/>
+         <column name="fst_variance_to" type="short" minValue="0" maxValue="100"/>
+         <column name="std_variance_from" type="short" minValue="0" maxValue="100"/>
+         <column name="std_variance_to" type="short" minValue="0" maxValue="100"/>
+         <column name="ot_percentage" type="short" minValue="0" maxValue="100"/>
+         <column name="default_locale" type="varchar" length="10" required="true" default="'en-US'"/>
+         <column name="default_shift_category_id" type="int"/>
+         <column name="forecast_standard_set_id" type="int"/>
+         <column name="analysis_standard_set_id" type="int"/>
+         <column name="planning_period_end_date" type="date"/>
+         <column name="calendar_plan_id" type="int"/>
+         <column name="state_id" type="int"/>
+         <column name="region_id" type="int"/>
+         <column name="brand_id" type="int"/>
+         <column name="portfolio_id" type="int"/>
+         <column name="fte_factor" type="decimal" length="9" scale="2"/>
+         <column name="ot_rate" type="decimal" length="9" scale="2"/>
+         <column name="dt_rate" type="decimal" length="9" scale="2"/>
+         <column name="license" type="binary"/>
+         <column name="enable_uftc_restrictions" type="boolean" required="true"/>
+         <column name="enable_uftc_can_change_jobs" type="boolean" required="true"/>
+         <column name="punch_to_schedule_method" type="enum" length="2" required="true" enumType="PunchToScheduleMethod"/>
+         <column name="prompt_to_enter_tips" type="boolean" required="true"/>
+         <column name="punch_to_sched_pre_grace_min" type="int" minValue="0"/>
+         <column name="punch_to_sched_post_grace_min" type="int" minValue="0"/>
+         <column name="edit_revenue_interface_columns" type="boolean" required="true" default="true"/>
+         <column name="active" type="boolean" required="true" default="true"/>
+         <column name="labor_standards_locked" type="boolean" required="true"/>
+         <column name="use_actual_flows_for_standard_hours" type="boolean" required="true" default="true"/>
+         <column name="max_scheduler_passes" type="int" required="true"/>
+         <column name="max_balance_levels" type="int" required="true"/>
+         <column name="default_pay_group_id" type="int"/>
+         <column name="weather_location_id" type="int"/>
+         <column name="revenue_center_forecast_accuracy_moderate_threshold" type="short" required="true" default="10" minValue="1" maxValue="100"/>
+         <column name="revenue_center_forecast_accuracy_critical_threshold" type="short" required="true" default="20" minValue="1" maxValue="100"/>
+         <column name="market_segment_forecast_accuracy_moderate_threshold" type="short" required="true" default="10" minValue="1" maxValue="100"/>
+         <column name="market_segment_forecast_accuracy_critical_threshold" type="short" required="true" default="20" minValue="1" maxValue="100"/>
+         <column name="temperature_scale" type="enum" length="1" required="true" enumType="TemperatureScaleType" default="'F'"/>
+         <column name="client_id" type="int" required="false"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="name"/>
+            <column name="client_id"/>
+         </unique>
+         <unique>
+            <column name="code"/>
+            <column name="client_id"/>
+         </unique>
+         <unique>
+            <column name="alt_code"/>
+            <column name="client_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="default_shift_category_id" table="shift_category" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="planned_shift" lockEscalation="disable" data="true" exportDataColumn="shift_date" compress="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="shift_type" type="enum" length="1" required="true" enumType="PlanType"/>
+         <column name="shift_date" type="date" required="true"/>
+         <column name="date_shift_generated_from" type="date" required="true"/>
+         <column name="start_date_time" type="datetime" required="true"/>
+         <column name="end_date_time" type="datetime" required="true"/>
+         <column name="duration" type="decimal" length="9" scale="4" required="true"/>
+         <column name="source" type="enum" length="1" required="true" enumType="ShiftSourceType"/>
+         <column name="labor_structure_id" type="int"/>
+         <column name="work_content_log_id" type="int"/>
+         <column name="shift_category_id" type="int" required="true"/>
+         <column name="planned_event_id" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="shift_type"/>
+            <column name="job_id"/>
+            <column name="shift_date"/>
+            <column name="start_date_time"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="planned_event_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="setnull"/>
+         <relation src="shift_category_id" table="shift_category" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="hours_distribution" data="true" exportDataColumn="date">
+      <columns>
+         <column name="property_id" type="int" required="true"/>
+         <column name="hours_distribution_type_id" type="int" required="true"/>
+         <column name="shift_id" type="int" required="true"/>
+         <column name="date" type="date" required="true"/>
+         <column name="original_hours" type="decimal" length="9" scale="4"/>
+         <column name="hours" type="decimal" length="9" scale="4"/>
+         <column name="base_rate" type="decimal" length="9" scale="4"/>
+         <column name="premium_rate" type="decimal" length="9" scale="4"/>
+         <column name="total_costs" type="decimal" length="9" scale="2"/>
+         <column name="hours_rule_item_id" type="int"/>
+         <column name="rate_rule_item_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="property_id"/>
+            <column name="date"/>
+            <column name="hours_distribution_type_id"/>
+            <column name="shift_id"/>
+         </primary>
+         <index>
+            <column name="shift_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="hours_distribution_type_id" table="hours_distribution_type" column="id" type="cascade"/>
+         <relation src="shift_id" table="employee_shift" column="id" type="cascade"/>
+         <relation src="hours_rule_item_id" table="rule_item" column="id" type="setnull"/>
+         <relation src="rate_rule_item_id" table="rule_item" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="labor_structure">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="parent_labor_structure_id" type="int"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="code" type="varchar" length="25" required="true"/>
+         <column name="abbrev" type="varchar" length="25"/>
+         <column name="level_id" type="int"/>
+
+         <!-- misc columns -->
+         <column name="job_class_id" type="int"/>
+         <column name="job_category_id" type="int"/>
+         <column name="event_labor" type="boolean" required="true"/>
+         <column name="exclude_from_payroll_export" type="boolean" required="true"/>
+         <column name="last_published_date_time" type="datetime"/>
+         <column name="last_published_week_end_date" type="date"/>
+         <column name="flags" type="int"/>
+         <column name="pay_code" type="varchar" length="50"/>
+         <column name="workers_comp_class" type="varchar" length="25"/>
+         <column name="publishable" type="boolean" required="true" default="true"/>
+         <column name="requires_approval" type="boolean" required="true" default="false"/>
+         <column name="notes" type="text"/>
+         <column name="fst_variance_from" type="short" minValue="0" maxValue="100"/>
+         <column name="fst_variance_to" type="short" minValue="0" maxValue="100"/>
+         <column name="std_variance_from" type="short" minValue="0" maxValue="100"/>
+         <column name="std_variance_to" type="short" minValue="0" maxValue="100"/>
+         <column name="ot_percentage" type="short" minValue="0" maxValue="100"/>
+         <column name="show_on_dashboard" type="boolean" default="true" required="true"/>
+         <column name="labor_cost_percentage_business_driver_id" type="int"/>
+         <column name="unifocus_job_category" type="varchar" length="50"/>
+
+         <!-- scheduling columns -->
+         <column name="planned_shift_sorting_method" type="enum" length="2" enumType="PlannedShiftSortingMethod"/>
+         <column name="projected_hours_reduction_method" type="enum" length="2" enumType="ProjectedHoursReductionMethod"/>
+         <column name="scheduling_method" type="enum" length="1" required="true" enumType="SchedulingMethod"/>
+         <column name="balance_schedules" type="boolean" required="true"/>
+         <column name="min_hours_off" type="decimal" length="9" scale="4" minValue="0.0" maxValue="24.0"/>
+         <column name="min_days_off" type="short" minValue="0" maxValue="7"/>
+         <column name="day_order" type="char" length="13"/>
+         <column name="rotation_plan_id" type="int"/>
+         <column name="job_rotation_plan_id" type="int"/>
+         <column name="departmental_seniority" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="parent_labor_structure_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="parent_labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="rotation_plan_id" table="rotation_plan" column="id" type="setnull"/>
+         <relation src="job_rotation_plan_id" table="rotation_plan" column="id" type="setnull"/>
+         <relation src="job_class_id" table="job" column="id" type="setnull"/>
+         <relation src="labor_cost_percentage_business_driver_id" table="business_driver" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <!-- ===== workrules ===== -->
+
+   <table name="employee_shift_punch" exportDataColumn="punch_time" data="true" compress="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="employee_shift_id" type="int" required="true"/>
+         <column name="punch_type_code" type="enum" length="8" required="true" enumType="PunchType"/>
+         <column name="raw_punch" type="varchar" length="100" required="true"/>
+         <column name="punch_time" type="datetime" required="true"/>
+         <column name="adj_time" type="datetime" required="true"/>
+         <column name="rounded_time" type="datetime" required="true"/>
+         <column name="badge_no" type="varchar" length="25" required="true"/>
+         <column name="source" type="enum" length="1" required="true" enumType="PunchSourceType"/>
+         <column name="rounded" type="enum" length="1" enumType="RoundedType"/>
+         <column name="time_clock_id" type="int"/>
+         <column name="latitude" type="decimal" length="10" scale="8"/>
+         <column name="longitude" type="decimal" length="11" scale="8"/>
+         <column name="accuracy" type="decimal" length="19" scale="2"/>
+         <column name="auto_punch_mode" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="employee_shift_id"/>
+            <column name="rounded_time"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="employee_shift_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_shift_id" table="employee_shift" column="id" type="cascade"/>
+         <relation src="time_clock_id" table="time_clock" column="id" type="setnull"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="earning_type">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="processor_code" type="varchar" length="20" required="true"/>
+         <column name="uom" type="enum" length="1" required="true" enumType="UOMType"/>
+         <column name="type" type="enum" length="1" required="true" enumType="EarningTypeType"/>
+         <column name="accrual_frequency" type="enum" length="1" required="true" enumType="AccrualFrequencyType" default="'P'"/>
+         <column name="earning_category_id" type="int"/>
+         <column name="include_in_ot_calcs" type="boolean" required="true"/>
+         <column name="include_in_base_pay" type="boolean" required="true"/>
+         <column name="include_in7_i" type="boolean"/>
+         <column name="include_in_benefit_calcs" type="boolean" required="true"/>
+         <column name="exclude_from_payroll_export" type="boolean" required="true"/>
+         <column name="export_as_costs" type="boolean" required="true"/>
+         <column name="include_in_gross_sales" type="boolean" required="true"/>
+         <column name="include_in_tips" type="boolean" required="true"/>
+         <column name="include_in_work_rules" type="boolean" required="true"/>
+         <column name="include_in_earnings_wizard" type="boolean" required="true"/>
+         <column name="include_in_banked_hours" type="boolean" required="true"/>
+         <column name="include_in_time_off" type="boolean"/>
+         <column name="include_in_worked_hours" type="boolean" required="true"/>
+         <column name="include_in_salary_distribution" type="boolean" required="true"/>
+         <column name="include_in_mobile" type="boolean" required="true"/>
+         <column name="include_in_reallocation" type="boolean" required="true"/>
+         <column name="reallocate_accrual_premium_only" type="boolean" required="true"/>
+         <column name="pay_at_least_min_wage" type="boolean" required="true"/>
+         <column name="round_on_export" type="boolean" required="true"/>
+         <column name="reverse_processor_code" type="varchar" length="20"/>
+         <column name="pay_no" type="char" length="1"/>
+         <column name="tax_frequency" type="char" length="1"/>
+         <column name="payroll_bucket" type="char" length="1"/>
+         <column name="min_hours" type="decimal" length="19" scale="2"/>
+         <column name="min_dollars" type="decimal" length="19" scale="2"/>
+         <column name="max_hours" type="decimal" length="19" scale="2"/>
+         <column name="max_dollars" type="decimal" length="19" scale="2"/>
+         <column name="max_balance" type="decimal" length="19" scale="2"/>
+         <column name="max_negative_balance" type="decimal" length="19" scale="2"/>
+         <column name="minimum_approval_level" type="byte" required="true" default="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_earning" data="true" exportDataColumn="earning_date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="earning_type_id" type="int" required="true"/>
+         <column name="earning_date" type="date" required="true"/>
+         <column name="pay_date" type="date" required="true"/>
+         <column name="source" type="enum" length="1" required="true" enumType="EarningSourceType"/>
+         <column name="hours" type="decimal" length="9" scale="4"/>
+         <column name="rate" type="decimal" length="9" scale="4"/>
+         <column name="dollars" type="decimal" length="9" scale="2"/>
+         <column name="total_dollars" type="decimal" length="9" scale="2"/>
+         <column name="note" type="varchar" length="400"/>
+         <column name="check_id" type="int"/>
+         <column name="shift_id" type="int"/>
+         <column name="rule_item_id" type="int"/>
+         <column name="tip_sub_pool_id" type="int"/>
+         <column name="tor_distribution_id" type="int"/>
+         <column name="reallocated_from_adjustment_id" type="int"/>
+         <column name="approval_level" type="byte"/>
+         <column name="approved_on_dt" type="datetime"/>
+         <column name="approved_by" type="int"/>
+         <column name="import_id" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="earning_date"/>
+            <column name="employee_id"/>
+            <column name="job_id"/>
+            <column name="earning_type_id"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="shift_id"/>
+         </index>
+         <index>
+            <column name="check_id"/>
+         </index>
+         <index>
+            <column name="tip_sub_pool_id"/>
+         </index>
+         <index>
+            <column name="reallocated_from_adjustment_id"/>
+         </index>
+         <index>
+            <column name="tor_distribution_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="earning_type_id" table="earning_type" column="id" type="cascade"/>
+         <relation src="shift_id" table="employee_shift" column="id" type="cascade"/>
+         <relation src="rule_item_id" table="rule_item" column="id" type="setnull"/>
+         <relation src="tor_distribution_id" table="tor_distribution" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="rule_set">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="description" type="text" required="true"/>
+         <column name="rule_type_code" type="enum" length="2" required="true" enumType="RuleType"/>
+         <column name="req_approval" type="boolean" required="true"/>
+         <column name="salience" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="rule_item">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="rule_set_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="rule_class_code" type="varchar" length="50" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="rule_set_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="rule_set_id" table="rule_set" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="labor_structure_pay_rate" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="effective_date" type="date" required="true"/>
+         <column name="hourly_rate" type="decimal" length="9" scale="4"/>
+         <column name="min_wage" type="decimal" length="9" scale="4"/>
+         <column name="tip_rate" type="decimal" length="9" scale="4"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="labor_structure_id"/>
+            <column name="effective_date"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="shift_category">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="code" type="varchar" length="1" required="true"/>
+         <column name="training_shift_category_id" type="int"/>
+         <column name="include_in_productivity" type="boolean" required="true"/>
+         <column name="training_shift" type="boolean" required="true"/>
+         <column name="contract_shift" type="boolean" required="true" default="false"/>
+         <column name="auto_sync_scheduled_hours" type="boolean" required="true"/>
+         <column name="auto_calculate_costs" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="property_id"/>
+            <column name="code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="training_shift_category_id" table="shift_category" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="accrual_transaction" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="pay_group_id" type="int" required="true"/>
+         <column name="as_of_date" type="date" required="true"/>
+         <column name="earning_type_id" type="int" required="true"/>
+         <column name="pay_period_end_date" type="date" required="true"/>
+         <column name="un_applied_hours" type="decimal" length="19" scale="4" required="true"/>
+         <column name="used" type="decimal" length="19" scale="4" required="true"/>
+         <column name="accrued" type="decimal" length="19" scale="4" required="true"/>
+         <column name="running_accrued" type="decimal" length="19" scale="4" required="true"/>
+         <column name="expired_hours" type="decimal" length="19" scale="4" required="true"/>
+         <column name="worked_hours" type="decimal" length="19" scale="4" required="true"/>
+         <column name="starting_running_balance" type="decimal" length="19" scale="4" required="true"/>
+         <column name="ending_running_balance" type="decimal" length="19" scale="4" required="true"/>
+         <column name="starting_total_balance" type="decimal" length="19" scale="4" required="true"/>
+         <column name="ending_total_balance" type="decimal" length="19" scale="4" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="pay_period_end_date"/>
+            <column name="pay_group_id"/>
+            <column name="as_of_date"/>
+            <column name="employee_id"/>
+            <column name="earning_type_id"/>
+         </unique>
+         <index>
+            <column name="employee_id"/>
+            <column name="pay_period_end_date"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="earning_type_id" table="earning_type" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="holiday">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="holiday_date" type="date" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="holiday_type_id" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="holiday_date"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="hours_distribution_type" noExport="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="processor_code" type="varchar" length="20" required="true"/>
+         <column name="premium" type="boolean" required="true"/>
+         <column name="factor" type="decimal" length="9" scale="2" required="true" default="1.0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <initialData>
+         <sql>insert into hours_distribution_type (name,processor_code,premium,factor) values ('Regular','REG','N',1.0)</sql>
+         <sql>insert into hours_distribution_type (name,processor_code,premium,factor) values ('Overtime','OT','Y',1.5)</sql>
+         <sql>insert into hours_distribution_type (name,processor_code,premium,factor) values ('Double Time','DT','Y',2.0)</sql>
+      </initialData>
+   </table>
+
+   <table name="raw_punch_log" data="true" exportDataColumn="punch_date_time">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="time_clock_id" type="int"/>
+         <column name="punch_date_time" type="datetime"/>
+         <column name="punch_type_code" type="enum" length="8" enumType="PunchType"/>
+         <column name="badge_no" type="varchar" length="25"/>
+         <column name="raw_data" type="varchar" length="100"/>
+         <column name="insert_date_time" type="datetime" required="true" default="CURRENT_TIMESTAMP"/>
+         <column name="extra_data" type="varchar" length="50"/>
+         <column name="offline" type="boolean" required="true"/>
+         <column name="override" type="boolean" required="true"/>
+         <column name="reject" type="boolean" required="true"/>
+         <column name="labor_structure_id" type="int"/>
+         <column name="employee_id" type="int"/>
+         <column name="reject_reason_key" type="varchar" length="25"/>
+         <column name="accepted_on_dt" type="datetime"/>
+         <column name="accepted_by_user_id" type="int"/>
+         <column name="correction" type="boolean" required="true"/>
+         <column name="latitude" type="decimal" length="10" scale="8"/>
+         <column name="longitude" type="decimal" length="11" scale="8"/>
+         <column name="accuracy" type="decimal" length="19" scale="2"/>
+         <column name="auto_punch_mode" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="correction"/>
+            <column name="employee_id"/>
+            <column name="punch_date_time"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="property_id"/>
+            <column name="employee_id"/>
+         </index>
+         <index>
+            <column name="reject"/>
+            <column name="employee_id"/>
+            <column name="punch_date_time"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="time_clock_id" table="time_clock" column="id" type="cascade"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="setnull"/>
+         <relation src="employee_id" table="employee" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <!-- ===== scheduler ===== -->
+
+   <table name="employee_availability" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="day_no" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="request_type_code" type="enum" length="2" required="true" enumType="EmployeeAvailType"/>
+         <column name="start_time" type="time" required="true"/>
+         <column name="end_time" type="time" required="true"/>
+         <column name="duration" type="decimal" length="9" scale="2" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="employee_id"/>
+            <column name="day_no"/>
+            <column name="request_type_code"/>
+            <column name="start_time"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="day_off_plan">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="number_weeks" type="short" required="true" minValue="1" maxValue="14"/>
+         <column name="last_rotated" type="date"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="day_off_pattern">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="day_off_plan_id" type="int" required="true"/>
+         <column name="pattern_no" type="short" required="true"/>
+         <column name="sun_off" type="boolean" required="true"/>
+         <column name="mon_off" type="boolean" required="true"/>
+         <column name="tue_off" type="boolean" required="true"/>
+         <column name="wed_off" type="boolean" required="true"/>
+         <column name="thu_off" type="boolean" required="true"/>
+         <column name="fri_off" type="boolean" required="true"/>
+         <column name="sat_off" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+      </keys>
+      <relations>
+         <relation src="day_off_plan_id" table="day_off_plan" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="rotation_plan">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="weekly_rotation" type="boolean" required="true"/>
+         <column name="rotate_interval" type="short" required="true" minValue="1" maxValue="100"/>
+         <column name="rotate_every_day" type="boolean" required="true"/>
+         <column name="apply_to_regular_employees" type="boolean" required="true"/>
+         <column name="apply_to_permanent_employees" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="schedule_group">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_regular_period" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="day_no" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="period_type_code" type="enum" length="1" required="true" enumType="EmployeePeriodType"/>
+         <column name="start_time" type="time" required="true"/>
+         <column name="end_time" type="time" required="true"/>
+         <column name="duration" type="decimal" length="9" scale="2" required="true"/>
+         <column name="job_id" type="int"/>
+         <column name="labor_structure_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="employee_id"/>
+            <column name="day_no"/>
+            <column name="start_time"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="job_id" table="labor_structure" column="id" type="setnull"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="employee_status" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="start_date" type="date" required="true"/>
+         <column name="end_date" type="date" required="true"/>
+         <column name="status_type_code" type="enum" length="1" required="true" enumType="EmployeeStatusType"/>
+         <column name="status_reason_id" type="int"/>
+         <column name="note" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="employee_id"/>
+            <column name="start_date"/>
+            <column name="status_type_code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="status_reason_id" table="employee_status_reason" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="employee_status_reason">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="code" type="varchar" length="25" required="true"/>
+         <column name="processor_code" type="varchar" length="25" required="true"/>
+         <column name="reason_type" type="enum" length="1" required="true" enumType="StatusReasonType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="property_id"/>
+            <column name="code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_time_off" data="true" exportDataColumn="start_date_time">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="start_date_time" type="datetime" required="true"/>
+         <column name="end_date_time" type="datetime" required="true"/>
+         <column name="full_day" type="boolean" required="true"/>
+         <column name="hours_requested" type="decimal" length="19" scale="2" required="true"/>
+         <column name="time_off_type_id" type="int" required="true"/>
+         <column name="status" type="enum" length="1" required="true" enumType="TimeOffStatusType"/>
+         <column name="entered_on" type="datetime" required="true"/>
+         <column name="status_changed_on" type="datetime"/>
+         <column name="status_changed_by_user_id" type="int"/>
+         <column name="entered_by_user_id" type="int"/>
+         <column name="employee_comment" type="varchar" length="255"/>
+         <column name="manager_comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="employee_id"/>
+            <column name="start_date_time"/>
+            <column name="id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="time_off_type_id" table="employee_time_off_type" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="labor_structure_sort_order">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="order_no" type="int" required="true"/>
+         <column name="sort_order_code" type="enum" length="2" required="true" enumType="JCSortOrderType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="labor_structure_id"/>
+            <column name="order_no"/>
+            <column name="sort_order_code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="pre_schedule" data="true" exportDataColumn="schedule_date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="schedule_date" type="date" required="true"/>
+         <column name="start_date_time" type="datetime" required="true"/>
+         <column name="end_date_time" type="datetime" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="shift_category_id" type="int" required="true"/>
+         <column name="labor_structure_id" type="int"/>
+         <column name="comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="employee_id"/>
+            <column name="schedule_date"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="pre_schedule_job">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="order_no" type="short" required="true" minValue="1"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="group_no" type="short"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="order_no"/>
+            <column name="job_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <!-- ===== forecaster ===== -->
+
+   <table name="business_driver">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="code" type="varchar" length="25" required="true"/>
+         <column name="show_in_module" type="enum" length="1" required="true" enumType="ShowInModuleType"/>
+         <column name="master_business_driver_code_id" type="int"/>
+         <column name="unit_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="property_id"/>
+            <column name="code"/>
+         </unique>
+         <index>
+            <column name="master_business_driver_code_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_config">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_id" type="int" required="true"/>
+         <column name="business_driver_set_id" type="int" required="true"/>
+         <column name="business_driver_type_code" type="enum" length="1" required="true" enumType="BusinessDriverType"/>
+         <column name="is_env" type="boolean" required="true"/>
+         <column name="is_primary" type="boolean" required="true"/>
+         <column name="notes" type="varchar" length="200"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_id"/>
+            <column name="business_driver_set_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+         <relation src="business_driver_set_id" table="business_driver_set" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_config_formula">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_config_id" type="int" required="true"/>
+         <column name="mode" type="enum" length="1" required="true" enumType="BusinessDriverModeType"/>
+         <column name="formula_text" type="text"/>
+         <column name="formula_code" type="binary"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_config_id"/>
+            <column name="mode"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_config_id" table="business_driver_config" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_config_percent">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_config_id" type="int" required="true"/>
+         <column name="mode" type="enum" length="1" required="true" enumType="BusinessDriverModeType"/>
+         <column name="base_business_driver_config_id" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_config_id"/>
+            <column name="mode"/>
+            <column name="base_business_driver_config_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_config_id" table="business_driver_config" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="base_business_driver_config_id" table="business_driver_config" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_config_regression">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_config_id" type="int" required="true"/>
+         <column name="mode" type="enum" length="1" required="true" enumType="BusinessDriverModeType"/>
+         <column name="day_no" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="related_business_driver_config_no" type="short" required="true" minValue="1" maxValue="500"/>
+         <column name="related_business_driver_config_id" type="int" required="true"/>
+         <column name="operation_type_code" type="enum" length="1" required="true" enumType="BusinessDriverOperationType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_config_id"/>
+            <column name="mode"/>
+            <column name="day_no"/>
+            <column name="related_business_driver_config_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_config_id" table="business_driver_config" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="related_business_driver_config_id" table="business_driver_config" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_config_statistical">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_config_id" type="int" required="true"/>
+         <column name="mode" type="enum" length="1" required="true" enumType="BusinessDriverModeType"/>
+         <column name="day_no" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="type_code" type="enum" length="1" required="true" enumType="BusinessDriverStatType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_config_id"/>
+            <column name="mode"/>
+            <column name="day_no"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_config_id" table="business_driver_config" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_config_taes">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_config_id" type="int" required="true"/>
+         <column name="mode" type="enum" length="1" required="true" enumType="BusinessDriverModeType"/>
+         <column name="day_no" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="related_business_driver_config_id" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_config_id"/>
+            <column name="mode"/>
+            <column name="day_no"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_config_id" table="business_driver_config" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="related_business_driver_config_id" table="business_driver_config" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_labor_config">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_id" type="int" required="true"/>
+         <column name="business_driver_set_id" type="int" required="true"/>
+         <column name="labor_business_driver_type_code" type="enum" length="1" required="true" enumType="BusinessDriverType"/>
+         <column name="business_driver_class_code" type="enum" length="1" required="true" enumType="BusinessDriverClassType"/>
+         <column name="flow_plan_id" type="int"/>
+         <column name="act_flow_plan_id" type="int"/>
+         <column name="show_in_wizard" type="boolean" required="true"/>
+         <column name="show_in_reforecast" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_id"/>
+            <column name="business_driver_set_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+         <relation src="business_driver_set_id" table="business_driver_set" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="flow_plan_id" table="flow_plan" column="id" type="setnull"/>
+         <relation src="act_flow_plan_id" table="flow_plan" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_set">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="password" type="varchar" length="100"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="business_driver_stat" lockEscalation="disable" data="true" exportDataColumn="stat_date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="business_driver_id" type="int" required="true"/>
+         <column name="stat_date" type="date" required="true"/>
+         <column name="est_value" type="decimal" length="19" scale="4"/>
+         <column name="fst_value" type="decimal" length="19" scale="4"/>
+         <column name="adj_value" type="decimal" length="19" scale="4"/>
+         <column name="act_value" type="decimal" length="19" scale="4"/>
+         <column name="fst_mape_inclusive" type="short"/>
+         <column name="fst_mad_inclusive" type="int"/>
+         <column name="adj_mape_inclusive" type="short"/>
+         <column name="adj_mad_inclusive" type="int"/>
+         <column name="fst_mape_exclusive" type="short"/>
+         <column name="fst_mad_exclusive" type="int"/>
+         <column name="adj_mape_exclusive" type="short"/>
+         <column name="adj_mad_exclusive" type="int"/>
+         <column name="last_date_time_accuracy_calculated" type="datetime"/>
+         <column name="last_date_time_forecast_calculated" type="datetime"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="stat_date"/>
+            <column name="business_driver_id"/>
+         </unique>
+         <index>
+            <column name="business_driver_id"/>
+            <column name="stat_date"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="fny_period" exportDataColumn="year">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="year" type="short" required="true"/>
+         <column name="per1_start_date" type="date"/>
+         <column name="per1_end_date" type="date"/>
+         <column name="per2_end_date" type="date"/>
+         <column name="per3_end_date" type="date"/>
+         <column name="per4_end_date" type="date"/>
+         <column name="per5_end_date" type="date"/>
+         <column name="per6_end_date" type="date"/>
+         <column name="per7_end_date" type="date"/>
+         <column name="per8_end_date" type="date"/>
+         <column name="per9_end_date" type="date"/>
+         <column name="per10_end_date" type="date"/>
+         <column name="per11_end_date" type="date"/>
+         <column name="per12_end_date" type="date"/>
+         <column name="per13_end_date" type="date"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="year"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="env_stat" data="true" exportDataColumn="env_date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="business_driver_id" type="int" required="true"/>
+         <column name="env_date" type="date" required="true"/>
+         <column name="forecast_env_id" type="int"/>
+         <column name="actual_env_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="business_driver_id"/>
+            <column name="env_date"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+         <relation src="forecast_env_id" table="environment" column="id" type="setnull"/>
+         <relation src="actual_env_id" table="environment" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="environment">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="day_of_week" type="int" minValue="1" maxValue="7"/>
+         <column name="ignore_dow" type="boolean" required="true"/>
+         <column name="system_env" type="boolean" required="true"/>
+         <column name="comment" type="varchar" length="255"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="revenue_center">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="revenue_center_period">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="revenue_center_id" type="int" required="true"/>
+         <column name="period_no" type="short" required="true" minValue="1" maxValue="96"/>
+         <column name="period_name" type="varchar" length="50" required="true"/>
+         <column name="business_driver_id" type="int"/>
+         <column name="unit_id" type="int"/>
+         <column name="forecast_accuracy_moderate_threshold" type="short" minValue="1" maxValue="100"/>
+         <column name="forecast_accuracy_critical_threshold" type="short" minValue="1" maxValue="100"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="revenue_center_id"/>
+            <column name="period_name"/>
+         </unique>
+         <unique>
+            <column name="revenue_center_id"/>
+            <column name="period_no"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="revenue_center_id" table="revenue_center" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="business_driver_id" table="business_driver" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="revenue_center_period_day">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="revenue_center_period_standard_set_id" type="int" required="true"/>
+         <column name="day_no" type="short" required="true" minValue="1" maxValue="7"/>
+         <column name="start_time" type="time"/>
+         <column name="end_time" type="time"/>
+         <column name="capacity" type="int" minValue="0" maxValue="9999"/>
+         <column name="retention" type="time"/>
+         <column name="utilization" type="int" minValue="0" maxValue="100"/>
+         <column name="is_open" type="boolean" required="true"/>
+         <column name="min_volume" type="int" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="revenue_center_period_standard_set_id"/>
+            <column name="day_no"/>
+         </unique>
+      </keys>
+      <relations/>
+   </table>
+
+   <table name="flow_plan">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="code" type="varchar" length="25" required="true"/>
+         <column name="start_date" type="date" required="true"/>
+         <column name="end_date" type="date" required="true"/>
+         <column name="sun_flow_pattern_id" type="int"/>
+         <column name="mon_flow_pattern_id" type="int"/>
+         <column name="tue_flow_pattern_id" type="int"/>
+         <column name="wed_flow_pattern_id" type="int"/>
+         <column name="thu_flow_pattern_id" type="int"/>
+         <column name="fri_flow_pattern_id" type="int"/>
+         <column name="sat_flow_pattern_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="property_id"/>
+            <column name="code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="flow_pattern_actual" data="true" exportDataColumn="stat_date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="flow_pattern_id" type="int" required="true"/>
+         <column name="stat_date" type="date" required="true"/>
+         <column name="period_no" type="short" required="true" minValue="1" maxValue="1440"/>
+         <column name="actual_value" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="flow_pattern_id"/>
+            <column name="stat_date"/>
+            <column name="period_no"/>
+         </unique>
+      </keys>
+      <relations/>
+   </table>
+
+   <table name="flow_pattern_period">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="flow_pattern_id" type="int" required="true"/>
+         <column name="period_no" type="short" required="true" minValue="1" maxValue="1440"/>
+         <column name="pattern_value" type="decimal" length="19" scale="4" required="true"/>
+         <column name="actual_value" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="flow_pattern_id"/>
+            <column name="period_no"/>
+         </unique>
+      </keys>
+      <relations/>
+   </table>
+
+   <table name="market_segment">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="market_group_id" type="int" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="ms_type_code" type="enum" length="2" required="true" enumType="MarketSegmentType"/>
+         <column name="rooms_business_driver_id" type="int" required="true"/>
+         <column name="arrivals_business_driver_id" type="int"/>
+         <column name="guests_business_driver_id" type="int"/>
+         <column name="departures_business_driver_id" type="int"/>
+         <column name="arrivals_calculated" type="boolean" required="true"/>
+         <column name="guests_calculated" type="boolean" required="true"/>
+         <column name="forecast_accuracy_moderate_threshold" type="short" minValue="1" maxValue="100"/>
+         <column name="forecast_accuracy_critical_threshold" type="short" minValue="1" maxValue="100"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="market_group_id"/>
+            <column name="ms_type_code"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="market_group_id" table="market_group" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="rooms_business_driver_id" table="business_driver" column="id" type="cascade"/>
+         <relation src="arrivals_business_driver_id" table="business_driver" column="id" type="setnull" disableUsageChecking="true"/>
+         <relation src="guests_business_driver_id" table="business_driver" column="id" type="setnull" disableUsageChecking="true"/>
+         <relation src="departures_business_driver_id" table="business_driver" column="id" type="setnull" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="market_group">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="show_in_module" type="enum" length="1" required="true" enumType="ShowInModuleType"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <!-- ===== planner ===== -->
+
+   <table name="job" noExport="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="master_department_id" type="int" required="true"/>
+         <column name="master_business_driver_id" type="int"/>
+         <column name="productivity_unit_code" type="enum" length="2" enumType="ProductivityUnitType"/>
+         <column name="short_name" type="varchar" length="50"/>
+         <column name="sort_order" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="master_department_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="master_department_id"/>
+            <column name="short_name"/>
+         </unique>
+      </keys>
+      <relations/>
+   </table>
+
+   <table name="job_labor_data" data="true" exportDataColumn="stat_date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="stat_date" type="date" required="true"/>
+         <column name="forecast_hours" type="decimal" length="19" scale="2"/>
+         <column name="standard_hours" type="decimal" length="19" scale="2"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="job_id"/>
+            <column name="stat_date"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="labor_structure_min_max_coverage">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="environment_id" type="int" required="true"/>
+
+         <!-- comma separated integers, in 5 minute periods starting at midnight -->
+         <!-- "1:2,1:2,1:2  BOTH MIN and MAX set-->
+         <!-- "1:0,1:0,1:0 MIN but no MAX -->
+         <!-- "0:2,0:2,0:2 MAX but no MIN -->
+         <column name="staff_values" type="text" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="labor_structure_id"/>
+            <column name="standard_set_id"/>
+            <column name="environment_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="environment_id" table="environment" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="work_content" data="true" compress="true" exportDataColumn="earliest_start_date_time">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="labor_structure_id" type="int"/>
+         <column name="work_content_type" type="enum" length="1" required="true" enumType="WorkContentType"/>
+         <column name="shift_type" type="enum" length="1" required="true" enumType="PlanType"/>
+         <column name="shift_date" type="date" required="true"/>
+         <column name="work_content_log_id" type="int"/>
+
+         <!-- window -->
+         <!-- should these 2 columns be required? -->
+         <column name="earliest_start_date_time" type="datetime"/>
+         <column name="latest_end_date_time" type="datetime"/>
+
+         <column name="preferred_start_date_time" type="datetime"/>
+
+         <!-- for EL work, these might be null? -->
+         <column name="calculated_start_date_time" type="datetime"/>
+         <column name="calculated_end_date_time" type="datetime"/>
+
+         <column name="calculated_hours" type="decimal" length="9" scale="2" required="true"/>
+         <column name="adjusted_hours" type="decimal" length="9" scale="2" required="true"/>
+
+         <column name="locked" type="boolean" required="true"/>
+
+         <!-- only one of these is used at one time -->
+         <column name="task_standard_id" type="int"/>
+         <column name="setup_task_standard_id" type="int"/>
+         <column name="tear_down_task_standard_id" type="int"/>
+
+         <!-- potentially used iff TaskStandardID is used -->
+         <column name="linked_task_standard_id" type="int"/>
+
+         <column name="description" type="varchar" length="100"/>
+         <column name="min_number_employees" type="int"/>
+         <column name="min_skill_level" type="int"/>
+         <column name="distributed_to_date_time" type="datetime"/>
+         <column name="calculated_priority" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="job_id"/>
+            <column name="earliest_start_date_time"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="job_id"/>
+            <column name="work_content_type"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="work_content_detail" data="true" compress="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="work_content_id" type="int" required="true"/>
+         <column name="work_content_detail_type" type="enum" length="1" required="true" enumType="WorkContentDetailType"/>
+         <column name="total_hours" type="decimal" length="9" scale="2" required="true"/>
+         <column name="business_driver_id" type="int"/>
+         <column name="resource_id" type="int"/>
+         <column name="notes" type="text"/>
+         <column name="task_standard_id" type="int" required="false"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="property_id"/>
+            <column name="work_content_id"/>
+            <column name="work_content_detail_type"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="work_content_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="work_content_id" table="work_content" column="id" type="cascade"/>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="recurring_task_standard">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="initial_date" type="date" required="true"/>
+         <column name="frequency_type" type="enum" length="1" enumType="FrequencyTypeEnum" required="true"/>
+
+         <!-- type == DAILY -->
+         <column name="daily_interval" type="int"/>
+
+         <!-- type == WEEKLY -->
+         <column name="weekly_interval" type="int"/>
+         <column name="weekly_days_of_week" type="varchar" length="25"/>
+         <!-- int ??? -->
+
+         <!-- type == MONTHLY -->
+         <!--
+         D = Day n of every n months
+         W = nth week of every n months
+         -->
+         <column name="monthly_interval_type" type="enum" length="1" enumType="MonthlyIntervalEnum"/>
+
+         <!-- Day N of Month (1-31) -->
+         <column name="monthly_day_of_month" type="int"/>
+
+         <!-- The 2nd Tuesday of Month -->
+         <!-- 1st, 2nd, 3rd, 4th, last -->
+         <column name="monthly_every_nth_week" type="int" minValue="1" maxValue="5"/>
+         <column name="monthly_day_of_week" type="int" minValue="1" maxValue="7"/>
+         <!-- 1=Sunday ... 7=Saturday -->
+
+         <column name="monthly_selected_months" type="varchar" length="50"/>
+         <!-- 1,3,12 where 1=Jan and 12=Dec -->
+
+         <!--
+         S - During Shift
+         O - Single Occurrence
+         M - Multiple Occurrences at Intervals
+         -->
+         <column name="occurrence_type" type="enum" length="1" enumType="OccurrenceEnum"/>
+
+         <column name="occurs_during_shift_id" type="int"/>
+
+         <!-- Single occurrence time of day -->
+         <column name="occurs_at_time" type="time"/>
+
+         <!-- Hours between interval -->
+         <column name="occurs_every_n_hours" type="decimal" length="9" scale="2"/>
+         <!-- Time of day to start recurrence -->
+         <column name="occurs_starting_at_time" type="time"/>
+         <!-- Time of day to end recurrence -->
+         <column name="occurs_ending_at_time" type="time"/>
+
+         <!-- FIXED or VARIABLE -->
+         <column name="duration_type" type="enum" length="1" enumType="DurationTypeEnum"/>
+         <column name="fixed_hours" type="decimal" length="9" scale="2"/>
+         <column name="business_driver_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="labor_structure_id"/>
+            <column name="standard_set_id"/>
+            <column name="name"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="salaried_standard">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="labor_structure_shift_id" type="int" required="true"/>
+         <column name="salary_mode" type="enum" length="1" enumType="SalaryModeEnum" required="true"/>
+         <column name="hours_per_week" type="decimal" length="9" scale="2"/>
+         <column name="vacation_hours_per_year" type="decimal" length="9" scale="2"/>
+         <column name="hours_per_year" type="decimal" length="9" scale="2"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="labor_structure_id"/>
+            <column name="standard_set_id"/>
+            <column name="labor_structure_shift_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="spread_standard">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="labor_structure_shift_id" type="int" required="true"/>
+         <column name="business_driver_id" type="int" required="true"/>
+         <column name="spread_standard_type" type="enum" length="2" enumType="SpreadStandardTypeEnum" required="true" default="'F'"/>
+         <column name="units" type="enum" length="2" enumType="UnitsEnum"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="labor_structure_id"/>
+            <column name="standard_set_id"/>
+            <column name="labor_structure_shift_id"/>
+            <column name="business_driver_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="spread_standard_range">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="spread_standard_id" type="int" required="true"/>
+         <column name="from_volume" type="int" required="true" minValue="0"/>
+         <column name="to_volume" type="int" required="true" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="spread_standard_id"/>
+            <column name="from_volume"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="spread_standard_id" table="spread_standard" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="spread_standard_value">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="spread_standard_range_id" type="int" required="true"/>
+         <column name="environment_id" type="int" required="true"/>
+         <!-- comma separated integers, in 5 minute periods starting at midnight -->
+         <column name="spread_values" type="text" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="spread_standard_range_id"/>
+            <column name="environment_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="spread_standard_range_id" table="spread_standard_range" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="environment_id" table="environment" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="shift_related_standard">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="labor_structure_shift_id" type="int" required="true"/>
+         <column name="business_driver_id" type="int" required="true"/>
+         <column name="work_type" type="enum" length="1" enumType="WorkTypeEnum" required="true"/>
+         <column name="units" type="enum" length="2" enumType="UnitsEnum" required="true"/>
+         <column name="distribution_method" type="enum" length="1" enumType="DistributionMethodEnum" required="true"/>
+         <column name="non_flowed_distribution_method" type="enum" length="1" enumType="NonFlowedDistributionMethodEnum"/>
+         <column name="flow_plan_id" type="int"/>
+         <column name="ignore_retention" type="boolean" required="true"/>
+         <column name="earliest_work_start_time" type="time"/>
+         <column name="latest_work_end_time" type="time"/>
+         <column name="name" type="varchar" length="50"/>
+         <column name="suppress_value" type="int" required="true" minValue="0" default="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="labor_structure_id"/>
+            <column name="standard_set_id"/>
+            <column name="labor_structure_shift_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="business_driver_id" table="business_driver" column="id" type="cascade"/>
+         <relation src="flow_plan_id" table="flow_plan" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="shift_related_standard_value">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="shift_related_range_id" type="int" required="true"/>
+         <column name="environment_id" type="int" required="true"/>
+         <column name="value" type="decimal" length="19" scale="4" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="shift_related_range_id"/>
+            <column name="environment_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="shift_related_range_id" table="shift_related_range" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="environment_id" table="environment" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="shift_related_range">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="shift_related_standard_id" type="int" required="true"/>
+         <column name="from_volume" type="int" required="true" minValue="0"/>
+         <column name="to_volume" type="int" required="true" minValue="0"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="shift_related_standard_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="shift_related_standard_id" table="shift_related_standard" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <table name="property_planner_settings">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="period_length" type="int"/>
+         <column name="min_shift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="max_shift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="rounding_threshold_below_one" type="decimal" length="9" scale="2"/>
+         <column name="rounding_threshold_above_one" type="decimal" length="9" scale="2"/>
+         <column name="meal_break_after" type="decimal" length="9" scale="2"/>
+         <column name="meal_break_length" type="decimal" length="9" scale="2"/>
+         <column name="non_meal_break_every" type="decimal" length="9" scale="2"/>
+         <column name="non_meal_break_length" type="decimal" length="9" scale="2"/>
+         <column name="generate_long_shifts" type="boolean"/>
+         <column name="limit_shift_to_max_shift" type="boolean"/>
+         <column name="truncate_max_coverage" type="boolean"/>
+         <column name="default_non_flowed_distribution_method" type="enum" length="1" enumType="DefaultNonFlowedDistributionMethodEnum"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="standard_set_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="labor_structure_planner_settings">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="standard_set_id" type="int" required="true"/>
+         <column name="standard_type" type="enum" length="1" enumType="StandardTypeEnum"/>
+         <column name="period_length" type="int"/>
+         <column name="min_shift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="max_shift" type="decimal" length="9" scale="2" minValue="0.0" maxValue="24.0"/>
+         <column name="rounding_threshold_below_one" type="decimal" length="9" scale="2"/>
+         <column name="rounding_threshold_above_one" type="decimal" length="9" scale="2"/>
+         <column name="meal_break_after" type="decimal" length="9" scale="2"/>
+         <column name="meal_break_length" type="decimal" length="9" scale="2"/>
+         <column name="non_meal_break_every" type="decimal" length="9" scale="2"/>
+         <column name="non_meal_break_length" type="decimal" length="9" scale="2"/>
+         <column name="generate_long_shifts" type="boolean" default="null"/>
+         <column name="limit_shift_to_max_shift" type="boolean" default="null"/>
+         <column name="truncate_max_coverage" type="boolean" default="null"/>
+         <column name="default_non_flowed_distribution_method" type="enum" length="1" enumType="DefaultNonFlowedDistributionMethodEnum"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="labor_structure_id"/>
+            <column name="standard_set_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+      </relations>
+   </table>
+
+   <!-- ===== timeclock / timeoff / ta ===== -->
+
+   <table name="tor_distribution" data="true" exportDataColumn="date">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="time_off_request_id" type="int" required="true"/>
+         <column name="date" type="date" required="true"/>
+         <column name="hours" type="decimal" length="9" scale="2" required="true"/>
+         <column name="job_id" type="int" required="true"/>
+         <column name="earning_type_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="time_off_request_id"/>
+            <column name="date"/>
+            <column name="job_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="time_off_request_id" table="employee_time_off" column="id" type="cascade"/>
+         <relation src="job_id" table="labor_structure" column="id" type="cascade"/>
+         <relation src="earning_type_id" table="earning_type" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_time_off_type" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="25" required="true"/>
+         <column name="default_earning_type_id" type="int"/>
+         <column name="sort_order" type="int" required="true" default="0"/>
+         <column name="include_in_mobile" type="boolean" default="true" required="true"/>
+         <column name="color" type="varchar" length="7"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="default_earning_type_id" table="earning_type" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="time_clock">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="50" required="true"/>
+         <column name="code" type="varchar" length="25" required="true"/>
+         <column name="clock_type_code" type="enum" length="10" required="true" enumType="ClockType"/>
+         <column name="active" type="boolean" required="true"/>
+         <column name="connection_type" type="enum" length="1" required="true" enumType="ConnectionType"/>
+         <column name="com_port" type="int"/>
+         <column name="baud_rate" type="int"/>
+         <column name="phone_no" type="varchar" length="25"/>
+         <column name="modem_init_str" type="varchar" length="100"/>
+         <column name="ip_address" type="varchar" length="255"/>
+         <column name="ip_port" type="int"/>
+         <column name="tz_id" type="varchar" length="50"/>
+         <column name="reader_id" type="int"/>
+         <column name="last_polled_dt" type="datetime"/>
+         <column name="current_version" type="int"/>
+         <column name="required_version" type="int"/>
+         <column name="last_updated_on" type="datetime"/>
+         <column name="last_heartbeat_dt" type="datetime"/>
+         <column name="latitude" type="decimal" length="9" scale="6"/>
+         <column name="longitude" type="decimal" length="9" scale="6"/>
+         <column name="radius" type="decimal" length="7" scale="2"/>
+         <column name="image_version" type="varchar" length="100"/>
+         <column name="gps_validation_mode" type="enum" length="1" required="true" enumType="GPSValidationModeType" default="'A'"/>
+         <column name="activation_code" type="varchar" length="200"/>
+         <column name="api_secret" type="varchar" length="200"/>
+         <column name="display_employee_points" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+         <unique>
+            <column name="property_id"/>
+            <column name="code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="time_clock_labor_structure_restriction">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="time_clock_id" type="int" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+         <column name="in_punch_allowed" type="boolean" required="true"/>
+         <column name="break_punch_allowed" type="boolean" required="true"/>
+         <column name="back_punch_allowed" type="boolean" required="true"/>
+         <column name="out_punch_allowed" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="time_clock_id"/>
+            <column name="labor_structure_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="time_clock_id" table="time_clock" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_time_clock_restriction" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="time_clock_id" type="int" required="true"/>
+         <column name="in_punch_allowed" type="boolean" required="true"/>
+         <column name="break_punch_allowed" type="boolean" required="true"/>
+         <column name="back_punch_allowed" type="boolean" required="true"/>
+         <column name="out_punch_allowed" type="boolean" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="employee_id"/>
+            <column name="time_clock_id"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="time_clock_id" table="time_clock" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="tk_code">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="tk_code" type="varchar" length="255" required="true"/>
+         <column name="shift_category_id" type="int" required="true"/>
+         <column name="labor_structure_id" type="int" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="tk_code"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+         <relation src="labor_structure_id" table="labor_structure" column="id" type="cascade" disableUsageChecking="true"/>
+         <relation src="shift_category_id" table="shift_category" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+   <table name="employee_points" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="points_date" type="date" required="true"/>
+         <column name="duration" type="decimal" length="19" scale="2"/>
+         <column name="punch_type_code" type="enum" length="8" enumType="PunchType"/>
+         <column name="points" type="decimal" length="19" scale="2" required="true"/>
+         <column name="points_type_code" type="varchar" length="25" required="true"/>
+         <column name="actual_shift_id" type="int"/>
+         <column name="schedule_shift_id" type="int"/>
+         <column name="rule_item_id" type="int"/>
+         <column name="note" type="varchar" length="100"/>
+         <column name="created_by_user_id" type="int"/>
+         <column name="created_on_date_time" type="datetime"/>
+         <column name="status" type="enum" length="1" required="true" default="'P'" enumType="EmployeePointStatus"/>
+         <column name="status_changed_by_user_id" type="int"/>
+         <column name="status_changed_on" type="datetime"/>
+         <column name="reason_excused_id" type="int"/>
+      </columns>
+      <keys>
+         <primary cluster="false">
+            <column name="id"/>
+         </primary>
+         <unique cluster="true">
+            <column name="employee_id"/>
+            <column name="points_date"/>
+            <column name="id"/>
+         </unique>
+         <index>
+            <column name="actual_shift_id"/>
+         </index>
+         <index>
+            <column name="schedule_shift_id"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="actual_shift_id" table="employee_shift" column="id" type="donothing"/>
+         <relation src="schedule_shift_id" table="employee_shift" column="id" type="donothing"/>
+         <relation src="rule_item_id" table="rule_item" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="employee_event" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="employee_id" type="int" required="true"/>
+         <column name="event_date" type="date" required="true"/>
+         <column name="secondary_event_date" type="date"/>
+         <column name="emp_event_type_code" type="varchar" length="25" required="true"/>
+         <column name="rule_item_id" type="int"/>
+         <column name="points" type="decimal" length="19" scale="2"/>
+         <column name="note" type="varchar" length="100"/>
+         <column name="created_by_user_id" type="int"/>
+         <column name="created_on_date_time" type="datetime"/>
+         <column name="related_events_and_points" type="text" required="true" default="'{&quot;employeeEventIds&quot;:[],&quot;employeePointIds&quot;:[]}'"/>
+         <column name="status" type="enum" length="1" required="true" default="'P'" enumType="EmployeeEventStatus"/>
+         <column name="status_changed_by_user_id" type="int"/>
+         <column name="status_changed_on" type="datetime"/>
+         <column name="reason_excused_id" type="int"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <index>
+            <column name="employee_id"/>
+            <column name="event_date"/>
+         </index>
+      </keys>
+      <relations>
+         <relation src="employee_id" table="employee" column="id" type="cascade"/>
+         <relation src="rule_item_id" table="rule_item" column="id" type="setnull"/>
+      </relations>
+   </table>
+
+   <table name="employee_event_document_template" data="true">
+      <columns>
+         <column name="id" type="sequence" required="true"/>
+         <column name="property_id" type="int" required="true"/>
+         <column name="name" type="varchar" length="255" required="true"/>
+         <column name="export_file_name" type="varchar" length="255" required="true"/>
+         <column name="template" type="varchar" length="4000" required="true"/>
+      </columns>
+      <keys>
+         <primary>
+            <column name="id"/>
+         </primary>
+         <unique>
+            <column name="property_id"/>
+            <column name="name"/>
+         </unique>
+      </keys>
+      <relations>
+         <relation src="property_id" table="property" column="id" type="cascade"/>
+      </relations>
+   </table>
+
+</database>
