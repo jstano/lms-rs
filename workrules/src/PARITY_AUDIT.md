@@ -149,6 +149,58 @@ lesson, read the Java before estimating any of these.
 `shift_time_window_utility.rs`, pulled forward by `schedulelunch` (see its
 section); the rest of that subpackage is untouched.
 
+### Remaining work by product module
+
+Grouped by `RuleType::modules()` (`rules/rule_type.rs`), which says which
+licensed module each rule type belongs to. This is the licensing metadata, not
+a check of how the `scheduler` crate consumes rules.
+
+**Scheduling-only types**
+
+| Type | Rules | State |
+|---|---:|---|
+| `ScheduleRestriction` | 6 | 5 done, 1 deferred |
+| `ScheduleLabel` | 5 | not started |
+| `ScheduleLabelAddendum` | 3 | not started |
+| `ScheduleChangeValidation` | 3 | not started |
+| `ScheduleLunch` | 3 | done |
+
+Remaining: 11 rules in three families, plus the deferred `ScheduleRestriction`
+rule, each family needing its own runner.
+
+**Both modules (T&A and Scheduling)**
+
+- `ShiftDiffOt` — 1 rule, not started (see the unverified-identity note above).
+- `EmployeeAlert` — 7 rules, not started, plus the `ActualsAlertRuleImpl` and
+  `ScheduleAlertRuleImpl` impls.
+- `HoursDistribution`, `RegularRate`, `OvertimeRate`, `DoubleTimeRate` — done,
+  except the deferred `AnnualSalaryOverHoursRegRateRuleImpl`.
+
+**T&A-only types not yet ported (~130 catalogue rules)**
+
+- Prioritized, 43 rules: `ShiftCorrection` 3, `DailyDifferential` 9,
+  `WeeklyDifferential` 8, `ShiftDifferential` 23.
+- Other T&A, ~47 rules: `PostCalc` 8, `PostPunch` 9, `HolidayEligibility` 12,
+  `MealPunch` 2, `ReconcileEmployee` 2, `ClosePayPeriod` 2, `EmployeeEvent` 3,
+  `TimeOffDistribution` 3, `TimeOffEarning` 3 (plus `EmployeeAlert` above).
+- Benefits and points, ~40 rules: `BenefitAccrual` 15, `BenefitExpiration` 7,
+  `EmployeePoints` 18. The metadata files these under T&A, but `Module` also
+  has separate Benefits and Attendance entries, so whether they count toward
+  "T&A complete" is a scoping decision, not settled here.
+
+**Likely minimum for T&A + Scheduling** (~100 rules plus runners; benefits,
+points, alerts and time-off can be deferred):
+
+1. Finish scheduling: `ScheduleLabel`, `ScheduleLabelAddendum`,
+   `ScheduleChangeValidation`, the deferred `ScheduleRestriction` rule,
+   `ShiftDiffOt`.
+2. The four prioritized T&A families: `ShiftCorrection` and the three
+   differential types.
+3. The payroll-calculation and punch-lifecycle types: `PostCalc`, `PostPunch`,
+   `HolidayEligibility`, `MealPunch`, `ReconcileEmployee`, `ClosePayPeriod`.
+4. The runner layer (see below), unported for nine of the eleven finished
+   families.
+
 ### Runner inventory
 
 Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
