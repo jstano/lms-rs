@@ -45,7 +45,7 @@ see "Test backing" below for why.
 | 4 | `schedulelunch` — 3 of 3 rules | **done** |
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
-| 4 | `dailyearning` — 9 rules + runner | **scoped, not yet ported** — see "Scoping — `dailyearning`" |
+| 4 | `dailyearning` — 4 of 9 rules (slice 1) + shared surface | **in progress** — see "`dailyearning` — slice 1" |
 | 4+ | `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
@@ -54,7 +54,7 @@ see "Test backing" below for why.
 
 ## Where the work stands
 
-**1,610 tests, 493 of them transcribed Java assertions.** Clippy clean,
+**1,650 tests, 501 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -308,7 +308,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Eighty-five so far, listed at the end of the section that introduced them. The
+Eighty-eight so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -331,6 +331,7 @@ resolves anywhere in the file.
 | 72–75 | `schedulelunch` |
 | 76–79 | `shiftadjustment` |
 | 80–85 | `shiftcorrection` |
+| 86–88 | `dailyearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3466,3 +3467,64 @@ plus `NoDaily`, `MinDailyHours`, `MinDailyWorkedHours`, `NoDailyHoursWithLabel`
 siblings together"); (2) `MinimumHoursWorked`, `DaysWorked`,
 `DailySalariedAllowance`, `Anniversary`; (3) `HolidayDifferential` and the
 runner.
+
+## `dailyearning` — slice 1
+
+The shared surface and four rules: `NoDailyEarning`, `MinDailyHoursEarning`,
+`MinDailyWorkedHoursEarning`, `NoDailyHoursWithLabelEarning`. **40 tests, 8 of
+them transcribed Java assertions** (5 of `MinDailyHoursEarningRuleImplTest`, 3
+of `NoDailyHoursWithLabelEarningRuleImplTest`). `NoDaily` and
+`MinDailyWorkedHours` have no Groovy spec; their tests are written from the
+Java. The config specs' name/class/property-sheet assertions have no
+counterpart here (the port has no property sheets); their default-value and
+validation behaviour is covered by `config.rs`'s own tests.
+
+New surface: `EmployeeStatusType`, `EmployeeStatus`, `EmployeeScheduleLabel`,
+`Employee::{with_statuses, status_for_date, is_active_on_date}`,
+`TimeCard::{schedule_labels, schedule_label_for_date}`, and the family's
+`DailyEarningRule` trait with its shared helpers (`should_not_run_for_date`,
+`original_hours_on_day`, `schedule_label_matches`, `earning_rate_home_job`).
+The three paying rules each take `EarningTypePort`, `EmployeeEarningPort` and
+`MinWagePort`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `NoDailyEarningRuleImpl` | no spec |
+| `MinDailyHoursEarningRuleImpl` | 5/5 |
+| `MinDailyWorkedHoursEarningRuleImpl` | no spec — behaviour tests written from the Java |
+| `NoDailyHoursWithLabelEarningRuleImpl` | 3/3 |
+
+### Findings
+
+- **`MinDailyHoursEarningRuleImplTest."rule is not run if employee is not
+  active on date"` is vacuous.** It terminates the employee on `today` and
+  runs `today`; `isActiveOnDate` counts a terminated employee *on the
+  termination day*, so the rule does run, and no earning follows only because
+  the card has no shifts. The port's version runs the day after, so the
+  inactivity is what withholds the earning.
+- **The label-gated rules measure hours differently from the shift rules.**
+  They sum `originalHours` over distributions dated that day, not shift
+  `netHours`; a day with distributions on another date does not count.
+- **`MinDailyWorkedHoursEarningRuleImpl` backfills from the wrong config**
+  (confirmed by test): an unset `rateFactor` prices the earning at 0.
+- **`MinDailyHoursEarningRuleImpl` never calls `calcAndSetTotalDollars`
+  itself**; the totals are right only because `setHours`/`setRate`/
+  `setDollars` each recompute it.
+
+### Deliberate divergences (continued)
+
+86. **`Employee::is_active_on_date` reads a new `statuses` list; an employee
+    built without statuses is inactive on every date.** Java's `Employee`
+    always has them. Existing fixtures that never set statuses are unaffected
+    because no earlier rule asks.
+
+87. **A missing earning type, home job, or employee skips the day instead of
+    throwing.** Java dereferences `earningTypeDAO.findByID(...)`,
+    `getHomeEmployeeJobStatus(date)` and `timeCard.getEmployee()` unchecked.
+    Same stance as divergence 83.
+
+88. **The day's hours are summed with a plain left fold, not
+    `DoubleStream.sum()`.** Java's stream sum uses Kahan compensation; the two
+    can differ in the last bit over many distributions. Every threshold
+    comparison here (`> 0`, `>= minQualifyingHours`, `== 0.0`) is exact, so a
+    one-ulp difference would matter only at a boundary no fixture reaches.

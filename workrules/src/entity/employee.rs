@@ -10,7 +10,9 @@
 //! What rules do need is the job statuses (to find the rate in force on a date)
 //! and the employee-level rule sets, which are the first step of resolution.
 
+use crate::common::enums::employee_status_type::EmployeeStatusType;
 use crate::entity::employee_job_status::EmployeeJobStatus;
+use crate::entity::employee_status::EmployeeStatus;
 use crate::entity::rule_set::RuleSet;
 use crate::rules::rule_type::RuleType;
 use date_range_rs::DateRange;
@@ -28,6 +30,7 @@ pub struct Employee {
     birth_date: Option<LocalDate>,
     pay_group_id: Option<i32>,
     employee_job_statuses: Vec<EmployeeJobStatus>,
+    statuses: Vec<EmployeeStatus>,
     rule_sets: Vec<RuleSet>,
 }
 
@@ -49,6 +52,7 @@ impl Employee {
             birth_date: None,
             pay_group_id: None,
             employee_job_statuses,
+            statuses: Vec::new(),
             rule_sets: Vec::new(),
         }
     }
@@ -72,6 +76,39 @@ impl Employee {
         self.seniority_date = seniority_date;
         self.birth_date = birth_date;
         self
+    }
+
+    /// Attach the employment intervals. `setStatus()`.
+    #[must_use]
+    pub fn with_statuses(mut self, statuses: Vec<EmployeeStatus>) -> Self {
+        self.statuses = statuses;
+        self
+    }
+
+    /// The first employment interval covering a date. `getStatusForDate(LocalDate)`.
+    pub fn status_for_date(&self, date: LocalDate) -> Option<&EmployeeStatus> {
+        self.statuses
+            .iter()
+            .find(|status| status.contains_date(date))
+    }
+
+    /// Was the employee working on `date`? `isActiveOnDate(LocalDate)`.
+    ///
+    /// `ACTIVE` and `REHIRE` count; `LEAVE_OF_ABSENCE` does not; `TERMINATED`
+    /// counts **only on the termination day itself** (the status's start date),
+    /// so the last day's work can still be paid. `TRANSFERRED` and no status at
+    /// all are inactive. An employee built without statuses is therefore
+    /// inactive on every date.
+    pub fn is_active_on_date(&self, date: LocalDate) -> bool {
+        match self.status_for_date(date) {
+            None => false,
+            Some(status) => match status.status_type() {
+                EmployeeStatusType::Active | EmployeeStatusType::Rehire => true,
+                EmployeeStatusType::LeaveOfAbsence => false,
+                EmployeeStatusType::Terminated => status.start_date() == date,
+                EmployeeStatusType::Transferred => false,
+            },
+        }
     }
 
     /// Attach the pay group. `setPayGroup()`.
@@ -390,5 +427,60 @@ mod tests {
             None,
         );
         assert_eq!(dated.hire_date(), Some(LocalDate::of(2008, 3, 1)));
+    }
+
+    mod active_on_date {
+        use super::*;
+        use crate::common::enums::employee_status_type::EmployeeStatusType as T;
+        use crate::entity::employee_status::EmployeeStatus;
+
+        fn on(day: i32) -> LocalDate {
+            LocalDate::of(2014, 5, day)
+        }
+
+        fn with(status: T) -> Employee {
+            Employee::new(1, 1, "Pat", Vec::new()).with_statuses(vec![EmployeeStatus::new(
+                on(5),
+                on(10),
+                status,
+            )])
+        }
+
+        #[test]
+        fn active_and_rehire_count_across_the_interval() {
+            for status in [T::Active, T::Rehire] {
+                let e = with(status);
+                assert!(e.is_active_on_date(on(5)) && e.is_active_on_date(on(10)));
+                assert!(!e.is_active_on_date(on(4)) && !e.is_active_on_date(on(11)));
+            }
+        }
+
+        #[test]
+        fn leave_of_absence_and_transfer_never_count() {
+            for status in [T::LeaveOfAbsence, T::Transferred] {
+                assert!(!with(status).is_active_on_date(on(7)));
+            }
+        }
+
+        #[test]
+        fn terminated_counts_only_on_the_termination_day() {
+            let e = with(T::Terminated);
+            assert!(e.is_active_on_date(on(5)));
+            assert!(!e.is_active_on_date(on(6)));
+        }
+
+        #[test]
+        fn no_statuses_means_never_active() {
+            assert!(!Employee::new(1, 1, "Pat", Vec::new()).is_active_on_date(on(7)));
+        }
+
+        #[test]
+        fn the_first_matching_interval_wins() {
+            let e = Employee::new(1, 1, "Pat", Vec::new()).with_statuses(vec![
+                EmployeeStatus::new(on(1), on(10), T::LeaveOfAbsence),
+                EmployeeStatus::new(on(5), on(10), T::Active),
+            ]);
+            assert!(!e.is_active_on_date(on(7)));
+        }
     }
 }

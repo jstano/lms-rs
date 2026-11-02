@@ -88,6 +88,7 @@ use crate::entity::calc_data_set_stat::CalcDataSetStat;
 use crate::entity::employee::Employee;
 use crate::entity::employee_earning::EmployeeEarning;
 use crate::entity::employee_job_status::EmployeeJobStatus;
+use crate::entity::employee_schedule_label::EmployeeScheduleLabel;
 use crate::entity::employee_shift::EmployeeShift;
 use crate::entity::flsa_data::FlsaData;
 use crate::entity::hours_distribution::HoursDistribution;
@@ -146,6 +147,18 @@ pub trait TimeCard {
 
     /// The employee's scheduled shifts. `getSchedules()`.
     fn schedules(&self) -> &[EmployeeShift];
+
+    /// The labels on the employee's days. `getScheduleLabels()`.
+    fn schedule_labels(&self) -> &[EmployeeScheduleLabel];
+
+    /// The first label on a date, if any. `getScheduleLabelForDate(LocalDate)`.
+    ///
+    /// Several labels may share a date; Java takes the first in list order.
+    fn schedule_label_for_date(&self, date: LocalDate) -> Option<&EmployeeScheduleLabel> {
+        self.schedule_labels()
+            .iter()
+            .find(|label| label.date() == date)
+    }
 
     /// The employee's earnings. `getEarnings()`.
     fn earnings(&self) -> &[EmployeeEarning];
@@ -575,6 +588,7 @@ pub struct TimeCardData {
     employee: Option<Employee>,
     shifts: Vec<EmployeeShift>,
     schedules: Vec<EmployeeShift>,
+    schedule_labels: Vec<EmployeeScheduleLabel>,
     earnings: Vec<EmployeeEarning>,
     hours_distribution_types: Vec<HoursDistributionType>,
     flsa_data_map: HashMap<LocalDate, FlsaData>,
@@ -605,6 +619,7 @@ impl Default for TimeCardData {
             employee: None,
             shifts: Vec::new(),
             schedules: Vec::new(),
+            schedule_labels: Vec::new(),
             earnings: Vec::new(),
             hours_distribution_types: Vec::new(),
             flsa_data_map: HashMap::new(),
@@ -629,6 +644,13 @@ impl TimeCardData {
     /// An empty card — see [`Default`] for the state it starts in.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Attach the schedule labels. `getScheduleLabels()`.
+    #[must_use]
+    pub fn with_schedule_labels(mut self, labels: Vec<EmployeeScheduleLabel>) -> Self {
+        self.schedule_labels = labels;
+        self
     }
 
     /// Attach the employee.
@@ -758,6 +780,10 @@ impl TimeCard for TimeCardData {
 
     fn schedules(&self) -> &[EmployeeShift] {
         &self.schedules
+    }
+
+    fn schedule_labels(&self) -> &[EmployeeScheduleLabel] {
+        &self.schedule_labels
     }
 
     fn earnings(&self) -> &[EmployeeEarning] {

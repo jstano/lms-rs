@@ -21,6 +21,7 @@ pub mod earning_source;
 pub mod employee_calculation_mode;
 pub mod employee_event_type;
 pub mod employee_pay_type;
+pub mod employee_status_type;
 pub mod holiday_calculation_period_type;
 pub mod label_source;
 pub mod meal_punch_permission;

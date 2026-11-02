@@ -6,6 +6,7 @@
 //! Java's `RuleImpl` is an empty marker and every family declares its own
 //! `execute` shape beneath it.
 
+pub mod dailyearning;
 pub mod doubletimerate;
 pub mod earningrate;
 pub mod hoursdistribution;
