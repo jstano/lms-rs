@@ -30,7 +30,7 @@ see "Test backing" below for why.
 | 0 | Entity core — 11 entities | **done** |
 | 0 | `RuleUtils` resolution | **done** |
 | 0 | Dispatch | **done** |
-| 0 | DAO ports | **partial, by design** — 8 of 19 defined; see `rules/ports.rs` |
+| 0 | DAO ports | **partial, by design** — 22 port traits defined (DAO ports plus services such as the clock, minimum wage and permission lookups); the Java DAO total has not been re-derived — see `rules/ports.rs` |
 | 1 | `punchrounding` — 6 of 6 rules + runner | **done** |
 | 1 | `punchvalidation` — 4 of 4 rules | **done** |
 | 3 | `hoursdistribution` — `TimeCard` surface | **done** |
@@ -59,6 +59,58 @@ see "Test backing" below for why.
 
 32 `RuleType`s in all; 22 ported, 10 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
+
+### Master checklist — every `RuleType`
+
+One row per `RuleType` (32), in port order. **This is the table to update first
+when a family lands.** "Rules" is ported over the `RuleClass` catalogue count (the
+catalogue totals 225). "Runner" is the Java runner that drives the family: ✅
+ported, ⬜ not ported (the rules are driven by nothing yet), — none exists in
+`calcshift/rules` (another component drives the rules). Rust module is under
+`rules/algorithm/`; runners are under `rules/runner/` unless noted.
+
+| # | RuleType (code) | Rust module | Rules | Runner | State |
+|--:|---|---|:-:|:-:|---|
+| 1 | `PunchRounding` (PR) | `punchrounding` | 6/6 | ✅ | done |
+| 2 | `PunchValidation` (PV) | `punchvalidation` | 4/4 | — | done |
+| 3 | `HoursDistribution` (HD) | `hoursdistribution` | 19/19 | ⬜ | rules done |
+| 4 | `RegularHoursDistribution` (RH) | `regularhoursdistribution` | 3/3 | ✅ | done |
+| 5 | `RegularRate` (RR) | `regularrate` | 7/8 | ⬜ | rules done, **1 deferred** (`AnnualSalaryOverHoursRegRate`) |
+| 6 | `DoubleTimeRate` (DR) | `doubletimerate` | 5/5 | ⬜ | rules done |
+| 7 | `OvertimeRate` (OR) | `overtimerate` | 8/8 | ⬜ | rules done |
+| 8 | `EarningRate` (ER) | `earningrate` | 10/10 | ⬜ | rules done |
+| 9 | `ScheduleRestriction` (SR) | `schedulerestriction` | 5/6 | — | rules done, **1 deferred** |
+| 10 | `ScheduleLunch` (SL) | `schedulelunch` | 3/3 | ⬜ | rules done |
+| 11 | `ShiftAdjust` (SA) | `shiftadjustment` | 7/7 | ⬜ | rules done |
+| 12 | `ShiftCorrection` (SC) | `shiftcorrection` | 3/3 | ✅ | done |
+| 13 | `DailyDifferential` (DD) | `dailyearning` | 9/9 | ✅ | done |
+| 14 | `WeeklyDifferential` (WD) | `weeklyearning` | 8/8 | ✅ | done |
+| 15 | `ShiftDifferential` (DF) | `shiftearning` | 23/23 | ✅ | done |
+| 16 | `ScheduleLabel` (LB) | `schedulelabel` | 5/5 | ✅ | done |
+| 17 | `ScheduleLabelAddendum` (LA) | `schedulelabeladdendum` | 3/3 | ✅ | done |
+| 18 | `ScheduleChangeValidation` (SV) | `schedulechangevalidation` | 3/3 | ✅ | done |
+| 19 | `ShiftDiffOt` (SD) | `shiftdifferenceot` | 1/1 | ✅ | done |
+| 20 | `MealPunch` (MP) | `mealpunch` | 2/2 | — | done |
+| 21 | `ReconcileEmployee` (RE) | `reconcileemployee` | 2/2 | — | done |
+| 22 | `ClosePayPeriod` (CP) | `closepayperiod` | 2/2 | ✅ (`closepayperiod/runner.rs`) | done |
+| 23 | `PostCalc` (PC) | — | 0/8 | ⬜ (`PostCalcRunner`) | **not started** — 13 Java files |
+| 24 | `PostPunch` (PP) | — | 0/9 | ? | **not started** — 10 Java files |
+| 25 | `HolidayEligibility` (HE) | — | 0/12 | ? | **not started** — 13 Java files |
+| 26 | `EmployeeAlert` (EA) | — | 0/7 | ? | **not started** — plus `ActualsAlertRuleImpl`, `ScheduleAlertRuleImpl` |
+| 27 | `EmployeeEvent` (EE) | — | 0/3 | ? | **not started** |
+| 28 | `TimeOffDistribution` (TD) | — | 0/3 | ? | **not started** |
+| 29 | `TimeOffEarning` (TE) | — | 0/3 | ? | **not started** |
+| 30 | `EmployeePoints` (EP) | — | 0/18 | ? | **not started** — benefits/points, scope undecided |
+| 31 | `BenefitAccrual` (BA) | — | 0/15 | ? | **not started** — benefits/points, scope undecided |
+| 32 | `BenefitExpiration` (BE) | — | 0/7 | ? | **not started** — benefits/points, scope undecided |
+| | **Total** | | **138/225** | | 20 done · 2 done with a deferred rule · 10 not started |
+
+How to read the totals: 22 of 32 types have every catalogue rule ported except the
+two deferred (so 138 of 225 rules, 61%). "Runner ⬜" on a done family means the
+rules are individually tested but nothing drives them in Java's order (seven
+families — see "Runner inventory"); "?" means the driver for a not-started family
+has not been looked at. Per-family test and transcription counts are in each
+family's own section; the running totals are under "Where the work stands".
 
 ## Where the work stands
 
@@ -113,7 +165,7 @@ the end of this file.
 "`dailyearning` — slice 3" at the end of this file.
 
 **`weeklyearning` is done — all 8 rules and its runner.** See "`weeklyearning` —
-done" at the end of this file. Next up: `shiftearning`.
+done" at the end of this file.
 
 **`shiftearning` is done — all 23 rules, its registry and `ShiftDifferentialRunner`**,
 in five slices. See "`shiftearning` — slice 5" at the end of this file.
@@ -128,13 +180,9 @@ abstract bases**, so it normally exceeds the catalogue count by 1-3. Counts are
 a first measurement, not a scoping pass: per the "Measure before scheduling"
 lesson, read the Java before estimating any of these.
 
-**Prioritized next, in this order, at the user's request** (`shiftcorrection` and `dailyearning` are now done):
+**The prioritized types are all done** (`ShiftCorrection`, `DailyDifferential`, `WeeklyDifferential`, `ShiftDifferential`). *(The table that was here listed `ShiftDifferential` — `shiftearning` — as next; it is ported.)*
 
-| RuleType (code) | Catalogue | Java impls | Java directory / notes |
-|---|---:|---:|---|
-| `ShiftDifferential` (DF) | 23 | 24 | `shiftearning` — own `utility` subpackage; "closer to a second `hoursdistribution`" |
-
-**Behind those, unprioritized:**
+**Not started, unprioritized** (10 rule types; every other `RuleType` is ported):
 
 | RuleType (code) | Catalogue | Java impls | Java directory / notes |
 |---|---:|---:|---|
@@ -154,12 +202,10 @@ lesson, read the Java before estimating any of these.
 `WeeklyDifferential` and `ShiftDifferential`; the runners are the
 `*DifferentialRunner` classes. Do not search the catalogue for "earning".
 
-**Shared algorithm-root helpers not yet ported** (in
-`algorithm/` next to the family directories): `ShiftMatchingUtil`,
-`ShiftTimeInPeriodCalculator`, `MinimumHoursWorkedRuleHelper`, `HolidayMatcher`.
-`shiftearning`'s `utility` subpackage exists in Rust only as
-`shift_time_window_utility.rs`, pulled forward by `schedulelunch` (see its
-section); the rest of that subpackage is untouched.
+**Shared algorithm-root helpers.** Ported: `ShiftTimeInPeriodCalculator` and
+`HolidayMatcher` (in `shiftearning/utility/`, slice 4). **Not yet ported:**
+`ShiftMatchingUtil` and `MinimumHoursWorkedRuleHelper`. `HolidayEligibility` also
+lists `HolidayMatcher` among its dependencies; it now exists.
 
 ### Remaining work by product module
 
@@ -190,11 +236,12 @@ families and their runners are ported.
 
 **T&A-only types not yet ported (~130 catalogue rules)**
 
-- Prioritized, 23 rules: `ShiftDifferential` 23
-  (`ShiftCorrection` and `DailyDifferential` are done).
-- Other T&A, ~47 rules: `PostCalc` 8, `PostPunch` 9, `HolidayEligibility` 12,
-  `MealPunch` 2, `ReconcileEmployee` 2, `ClosePayPeriod` 2, `EmployeeEvent` 3,
-  `TimeOffDistribution` 3, `TimeOffEarning` 3 (plus `EmployeeAlert` above).
+- Prioritized types: all done (`ShiftDifferential`, `ShiftCorrection`,
+  `DailyDifferential`, `WeeklyDifferential`).
+- Other T&A, still to do, ~40 rules: `PostCalc` 8, `PostPunch` 9,
+  `HolidayEligibility` 12, `EmployeeEvent` 3, `TimeOffDistribution` 3,
+  `TimeOffEarning` 3 (plus `EmployeeAlert` above). `MealPunch`, `ReconcileEmployee`
+  and `ClosePayPeriod` are done.
 - Benefits and points, ~40 rules: `BenefitAccrual` 15, `BenefitExpiration` 7,
   `EmployeePoints` 18. The metadata files these under T&A, but `Module` also
   has separate Benefits and Attendance entries, so whether they count toward
@@ -203,20 +250,19 @@ families and their runners are ported.
 **Likely minimum for T&A + Scheduling** (~100 rules plus runners; benefits,
 points, alerts and time-off can be deferred):
 
-1. Finish scheduling: ~~`ScheduleLabel`~~ (done), ~~`ScheduleLabelAddendum`~~ (done),
-   ~~`ScheduleChangeValidation`~~ (done), the deferred `ScheduleRestriction` rule,
-   `ShiftDiffOt`.
-2. The one remaining prioritized differential type (`ShiftCorrection` and
-   `DailyDifferential` are done).
+1. ~~Finish scheduling~~ — done except the deferred `ScheduleRestriction` rule
+   (`ScheduleLabel`, `ScheduleLabelAddendum`, `ScheduleChangeValidation` and
+   `ShiftDiffOt` are ported).
+2. ~~The prioritized differential types~~ — all done.
 3. The payroll-calculation and punch-lifecycle types: `PostCalc`, `PostPunch`,
-   `HolidayEligibility`, `MealPunch`, `ReconcileEmployee`, `ClosePayPeriod`.
-4. The runner layer (see below), unported for nine of the fourteen finished
-   families.
+   `HolidayEligibility` still to do (`MealPunch`, `ReconcileEmployee` and
+   `ClosePayPeriod` are done).
+4. The runner layer (see below), unported for seven of the 22 finished families.
 
 ### Runner inventory
 
 Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
-`rules/runner/{punch_rounding,regular_hours_distribution,shift_correction,daily_differential,weekly_differential}.rs` and the shared `clear_time_card_earnings.rs`.
+`rules/runner/{punch_rounding,regular_hours_distribution,shift_correction,daily_differential,weekly_differential,shift_differential,shift_difference_ot,schedule_change_validation,schedule_label,schedule_label_addendum}.rs` and the shared `clear_time_card_earnings.rs`; the close-pay-period runner is `rules/algorithm/closepayperiod/runner.rs`.
 
 | Java runner | State |
 |---|---|
@@ -232,12 +278,15 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `ShiftDifferentialRunner` | **ported** (`rules/runner/shift_differential.rs`) |
 | `ShiftDifferenceOTRunner` | **ported** (`rules/runner/shift_difference_ot.rs`) |
 | `PostCalcRunner` | not ported — rules not started |
+| `ClosePayPeriodRuleRunner` (in `rms/timekeeping/…/closing`) | **ported** (`rules/algorithm/closepayperiod/runner.rs`) |
+| meal-punch and reconcile-employee drivers | no runner in `calcshift/rules`: the punch loader and the reconcile process drive those rules, outside the rules tree |
 | `ScheduleChangeValidationRunner` | **ported** (`rules/runner/schedule_change_validation.rs`) |
 | `ScheduleLabelRunner` | **ported** (`rules/runner/schedule_label.rs`) |
 | `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | **ported** (`rules/runner/schedule_label_addendum.rs`) |
 | `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
 
-So for nine of the fourteen ported families the rules exist and are tested
+So for seven of the 22 ported families (`hoursdistribution`, the four rate
+families, `shiftadjustment`, `schedulelunch`) the rules exist and are tested
 individually but nothing yet drives them in Java's order; the runner layer
 (and the end-to-end calculation order across families) is a separate piece of
 work that no wave currently covers.
@@ -252,10 +301,10 @@ These are each recorded where they arose; this is the roll-up.
 - ~~`ShiftDifferenceOTRuleImpl`~~ — ported as `ShiftDiffOt` (see "`ShiftDiffOt` — done"). It had a catalogue entry after all.
 - `MinDailyHrsRuleConfig` overlapping-tier validation — not ported (divergence 79).
 - `JSONUtils` multi-select id-list helpers — deferred until a family needs them.
-- DAO ports — `rules/ports.rs` currently holds 11 traits (10 DAO ports plus
-  `MinWagePort`, which is not a DAO — divergence 38). The Status table's "8 of
-  19" predates the rate and scheduling families; the 19 is the Java DAO count
-  and has not been re-derived. Re-count before the next family.
+- DAO ports — `rules/ports.rs` holds 22 traits: DAO ports plus services that are
+  not DAOs (minimum wage, the property clock, scheduling permission, the accrual
+  benefit query, the current property). The Java DAO total (once "19") has not
+  been re-derived.
 - `tbx.core` ground truth is `legacy-tbx-10.0`; the version `taps` builds
   against is unconfirmed (see Methodology).
 
