@@ -151,6 +151,14 @@ pub trait TimeCard {
     /// The labels on the employee's days. `getScheduleLabels()`.
     fn schedule_labels(&self) -> &[EmployeeScheduleLabel];
 
+    /// The shifts whose shift date is `date`. `getShiftsForDay(LocalDate)`.
+    fn shifts_for_day(&self, date: LocalDate) -> Vec<&EmployeeShift> {
+        self.shifts()
+            .iter()
+            .filter(|shift| shift.shift_date() == date)
+            .collect()
+    }
+
     /// The first label on a date, if any. `getScheduleLabelForDate(LocalDate)`.
     ///
     /// Several labels may share a date; Java takes the first in list order.

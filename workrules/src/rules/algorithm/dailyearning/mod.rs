@@ -4,10 +4,9 @@
 //! configs at `taps/src/java/com/unifocus/watson/common/labor/rules/algorithm/dailyearning/`.
 //!
 //! Fifth of the seven families prioritized for scheduling; scoped in
-//! `PARITY_AUDIT.md` ("Scoping — `dailyearning`"). **Slice 1** is here: the
-//! shared surface and the four near-identical rules `NoDailyEarning`,
-//! `MinDailyHoursEarning`, `MinDailyWorkedHoursEarning` and
-//! `NoDailyHoursWithLabelEarning`.
+//! `PARITY_AUDIT.md` ("Scoping — `dailyearning`"). **Slices 1 and 2** are here:
+//! the shared surface and eight of the nine rules — everything except
+//! `HolidayDifferential` and the runner.
 //!
 //! # One call per calendar day
 //!
@@ -23,14 +22,19 @@
 //! `originalHours` over the **hours distributions dated that day** (not shift
 //! net hours); and they gate on the day's schedule label.
 
+pub mod anniversary_earning;
 pub mod config;
+pub mod daily_salaried_allowance;
+pub mod days_worked;
 pub mod min_daily_hours;
 pub mod min_daily_worked_hours;
+pub mod minimum_hours_worked;
 pub mod no_daily_earning;
 pub mod no_daily_hours_with_label;
 
 use crate::entity::earning_type::EarningType;
 use crate::entity::employee::Employee;
+use crate::entity::employee_shift::EmployeeShift;
 use crate::entity::rule_item::RuleItem;
 use crate::entity::time_card::TimeCard;
 use crate::rules::ports::MinWagePort;
@@ -93,6 +97,30 @@ pub fn earning_rate_home_job(
     let home = employee.home_employee_job_status(date)?;
     let rate = home.hourly_rate();
     let wage = min_wage.min_wage(employee.property_id(), Some(home.job_id()), date);
+    Some(if earning_type.pay_at_least_min_wage() && rate < wage {
+        wage
+    } else {
+        rate
+    })
+}
+
+/// `DailyEarningRuleImpl.getEarningRate(shift, ...)`: the hourly rate of the
+/// job status the **shift's own job** held on the shift's date, raised to the
+/// minimum wage when the earning type says so. `None` where Java would throw
+/// (no status for that job and date).
+pub fn earning_rate_for_shift(
+    employee: &Employee,
+    shift: &EmployeeShift,
+    earning_type: &EarningType,
+    min_wage: &dyn MinWagePort,
+) -> Option<f64> {
+    let status = employee.employee_job_status(shift.job_id(), shift.shift_date())?;
+    let rate = status.hourly_rate();
+    let wage = min_wage.min_wage(
+        employee.property_id(),
+        Some(shift.job_id()),
+        shift.shift_date(),
+    );
     Some(if earning_type.pay_at_least_min_wage() && rate < wage {
         wage
     } else {

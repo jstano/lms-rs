@@ -62,6 +62,11 @@ impl EarningType {
         self
     }
 
+    /// A cost type: an earning or memo measured in dollars. `isDollarsType()`.
+    pub fn is_dollars_type(&self) -> bool {
+        (self.earn_type.is_earning() || self.earn_type.is_memo()) && self.uom == UOM::Dollars
+    }
+
     /// `getID()`.
     pub fn id(&self) -> i32 {
         self.id

@@ -15,6 +15,7 @@
 //! that only property-data lookups touch.
 
 pub mod accrual_applied_type;
+pub mod anniversary_date_types;
 pub mod change_reason_type;
 pub mod earn_type;
 pub mod earning_source;

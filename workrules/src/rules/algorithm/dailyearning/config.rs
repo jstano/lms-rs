@@ -189,6 +189,210 @@ impl RuleConfig for NoDailyHoursWithLabelEarningRuleConfig {
     }
 }
 
+/// `DefaultPropertyFactory.MIN_DAILY_HRS`.
+pub const MIN_DAILY_HRS: &str = "minDailyHrs";
+/// `DefaultPropertyFactory.EARNING_FACTOR`.
+pub const EARNING_FACTOR: &str = "earningFactor";
+/// `DefaultPropertyFactory.HOURS`.
+pub const HOURS: &str = "hours";
+/// `DefaultPropertyFactory.DOW_MULTIPLE`.
+pub const DOW_MULTIPLE: &str = "dows";
+/// `DefaultPropertyFactory.STANDARD_WORK_DAY`.
+pub const STANDARD_WORK_DAY: &str = "standardWorkDay";
+/// `DefaultPropertyFactory.ANNIVERSARY_DATE_TYPE`.
+pub const ANNIVERSARY_DATE_TYPE: &str = "anniversaryDateTypes";
+/// `DaysWorkedDailyDifferentialRuleConfig`'s keys.
+pub const WEEKLY_DAYS_WORKED_THRESHOLD: &str = "weeklyDaysWorkedThreshold";
+pub const DAILY_HOURS_THRESHOLD: &str = "dailyHoursThreshold";
+pub const FIRST_DAILY_HOURS_FIXED_COST: &str = "firstDailyHoursFixedCost";
+pub const SECOND_DAILY_HOURS_FIXED_COST: &str = "secondDailyHoursFixedCost";
+
+/// `AbstractRuleConfig.SMALLEST_VALID_DOUBLE`, the floor of
+/// `validateDoubleGreaterThanZero` (so "greater than zero" means "at least a
+/// cent").
+const SMALLEST_VALID_DOUBLE: f64 = 0.01;
+
+/// `MinimumHoursWorkedDifferentialRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct MinimumHoursWorkedDifferentialRuleConfig;
+
+const MIN_HOURS_WORKED_NAME: &str = "Minimum Hours Worked Differential";
+
+impl RuleConfig for MinimumHoursWorkedDifferentialRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::MinHoursWorkedDdf
+    }
+
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(RATE_FACTOR, "1");
+        p.set(MIN_DAILY_HRS, "3");
+        p.set(MIN_QUALIFYING_HOURS, "0");
+        p
+    }
+
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        let name = MIN_HOURS_WORKED_NAME;
+        // Unlike the min-hours configs this one accepts earning 0.
+        if params.int_at(EARNING) < 0 {
+            r.push(format!("{name}: An earning must be selected"));
+        }
+        if params.double_at(RATE_FACTOR) < 0.0 {
+            r.push(format!("{name}: Factor must be greater than 0"));
+        }
+        let min_daily = params.double_at(MIN_DAILY_HRS);
+        if min_daily < 0.0 {
+            r.push(format!("{name}: Min daily hours must be greater than 0"));
+        }
+        let min_qualifying = params.double_at(MIN_QUALIFYING_HOURS);
+        if min_qualifying < 0.0 || min_qualifying >= min_daily {
+            r.push(format!(
+                "{name}: Min qualifying hours must be greater than or equal to 0 and less than min daily hours"
+            ));
+        }
+        r
+    }
+}
+
+/// `DaysWorkedDailyDifferentialRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DaysWorkedDailyDifferentialRuleConfig;
+
+const DAYS_WORKED_NAME: &str = "Days Worked Daily Differential";
+
+impl RuleConfig for DaysWorkedDailyDifferentialRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::DaysWorkedDdf
+    }
+
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(WEEKLY_DAYS_WORKED_THRESHOLD, "5");
+        p.set(EARNING, "0");
+        p.set(DAILY_HOURS_THRESHOLD, "6.0");
+        p.set(FIRST_DAILY_HOURS_FIXED_COST, "1.5");
+        p.set(SECOND_DAILY_HOURS_FIXED_COST, "3.0");
+        p
+    }
+
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        let name = DAYS_WORKED_NAME;
+        let days = params.double_at(WEEKLY_DAYS_WORKED_THRESHOLD);
+        if !(1.0..=8.0).contains(&days) {
+            r.push(format!(
+                "{name}: Weekly Days Worked Threshold must be in the range [1, 8]"
+            ));
+        }
+        if params.int_at(EARNING) <= 0 {
+            r.push(format!("{name}: Earning must be selected"));
+        }
+        let hours = params.double_at(DAILY_HOURS_THRESHOLD);
+        if hours <= 0.0 || hours > 24.0 {
+            r.push(format!(
+                "{name}: Daily Hours Threshold must be in the range (0, 24]"
+            ));
+        }
+        for (key, label) in [
+            (FIRST_DAILY_HOURS_FIXED_COST, "First Daily Hours Fixed Cost"),
+            (
+                SECOND_DAILY_HOURS_FIXED_COST,
+                "Second Daily Hours Fixed Cost",
+            ),
+        ] {
+            if params.double_at(key) < SMALLEST_VALID_DOUBLE {
+                r.push(format!(
+                    "{name}: {label} must be greater than or equal to {SMALLEST_VALID_DOUBLE}"
+                ));
+            }
+        }
+        r
+    }
+}
+
+/// `DailySalariedAllowanceRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DailySalariedAllowanceRuleConfig;
+
+impl RuleConfig for DailySalariedAllowanceRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::DlySalAllowDdf
+    }
+
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(AMOUNT, "0");
+        p.set(STANDARD_WORK_DAY, "0");
+        p.set(DOW_MULTIPLE, "[]");
+        p
+    }
+
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        if params.int_at(EARNING) <= 0 {
+            r.push("Earning must be selected".to_string());
+        }
+        if params.double_at(AMOUNT) <= 0.0 {
+            r.push("Amount must be greater than 0".to_string());
+        }
+        if params.double_at(STANDARD_WORK_DAY) <= 0.0 {
+            r.push("Standard work day must be greater than 0".to_string());
+        }
+        if crate::common::json_ids::ids_for_key(DOW_MULTIPLE, params).is_empty() {
+            r.push("Must include at least one day of week".to_string());
+        }
+        r
+    }
+}
+
+/// `AnniversaryEarningRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AnniversaryEarningRuleConfig;
+
+const ANNIVERSARY_NAME: &str = "Anniversary Earning";
+
+impl RuleConfig for AnniversaryEarningRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::AnniDdf
+    }
+
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(EARNING_FACTOR, "1");
+        p.set(HOURS, "8");
+        p.set(ANNIVERSARY_DATE_TYPE, "[]");
+        p
+    }
+
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        let name = ANNIVERSARY_NAME;
+        if params.int_at(EARNING) <= 0 {
+            r.push(format!("{name}: Earning must be selected"));
+        }
+        for (key, label) in [(EARNING_FACTOR, "Earning Factor"), (HOURS, "Hours")] {
+            if params.double_at(key) < SMALLEST_VALID_DOUBLE {
+                r.push(format!(
+                    "{name}: {label} must be greater than or equal to {SMALLEST_VALID_DOUBLE}"
+                ));
+            }
+        }
+        let selected = params.get(ANNIVERSARY_DATE_TYPE).unwrap_or("").trim();
+        if !(selected.starts_with('[') && selected.ends_with(']')) {
+            r.push(format!(
+                "{name}: Anniversary Date Types is not correctly formatted"
+            ));
+        } else if selected[1..selected.len() - 1].trim().is_empty() {
+            r.push(format!("{name}: Anniversary Date Types must not be empty"));
+        }
+        r
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -254,5 +458,99 @@ mod tests {
                 .validate(&RuleParams::new())
                 .is_empty()
         );
+    }
+
+    #[test]
+    fn slice_two_defaults() {
+        let d = DaysWorkedDailyDifferentialRuleConfig.default_values();
+        assert_eq!(d.get(WEEKLY_DAYS_WORKED_THRESHOLD), Some("5"));
+        assert_eq!(d.get(DAILY_HOURS_THRESHOLD), Some("6.0"));
+        assert_eq!(d.get(FIRST_DAILY_HOURS_FIXED_COST), Some("1.5"));
+        assert_eq!(d.get(SECOND_DAILY_HOURS_FIXED_COST), Some("3.0"));
+        let m = MinimumHoursWorkedDifferentialRuleConfig.default_values();
+        assert_eq!(m.get(MIN_DAILY_HRS), Some("3"));
+        assert_eq!(m.get(RATE_FACTOR), Some("1"));
+        let a = AnniversaryEarningRuleConfig.default_values();
+        assert_eq!(a.get(HOURS), Some("8"));
+        assert_eq!(a.get(ANNIVERSARY_DATE_TYPE), Some("[]"));
+        let s = DailySalariedAllowanceRuleConfig.default_values();
+        assert_eq!(s.get(DOW_MULTIPLE), Some("[]"));
+    }
+
+    #[test]
+    fn minimum_hours_worked_requires_qualifying_hours_below_the_minimum() {
+        let ok = rule_params! { EARNING => "0", RATE_FACTOR => "1", MIN_DAILY_HRS => "6", MIN_QUALIFYING_HOURS => "4" };
+        assert!(
+            MinimumHoursWorkedDifferentialRuleConfig
+                .validate(&ok)
+                .is_empty()
+        );
+        let bad = rule_params! { EARNING => "0", RATE_FACTOR => "1", MIN_DAILY_HRS => "6", MIN_QUALIFYING_HOURS => "6" };
+        assert_eq!(
+            MinimumHoursWorkedDifferentialRuleConfig
+                .validate(&bad)
+                .len(),
+            1
+        );
+    }
+
+    #[test]
+    fn days_worked_ranges_are_inclusive() {
+        let mut p = DaysWorkedDailyDifferentialRuleConfig.default_values();
+        p.set(EARNING, "2");
+        assert!(
+            DaysWorkedDailyDifferentialRuleConfig
+                .validate(&p)
+                .is_empty()
+        );
+        p.set(WEEKLY_DAYS_WORKED_THRESHOLD, "8");
+        p.set(DAILY_HOURS_THRESHOLD, "24");
+        assert!(
+            DaysWorkedDailyDifferentialRuleConfig
+                .validate(&p)
+                .is_empty()
+        );
+        p.set(WEEKLY_DAYS_WORKED_THRESHOLD, "9");
+        p.set(DAILY_HOURS_THRESHOLD, "24.5");
+        assert_eq!(DaysWorkedDailyDifferentialRuleConfig.validate(&p).len(), 2);
+        p.set(WEEKLY_DAYS_WORKED_THRESHOLD, "0");
+        p.set(DAILY_HOURS_THRESHOLD, "0");
+        assert_eq!(DaysWorkedDailyDifferentialRuleConfig.validate(&p).len(), 2);
+    }
+
+    #[test]
+    fn fixed_costs_must_be_at_least_a_cent() {
+        let mut p = DaysWorkedDailyDifferentialRuleConfig.default_values();
+        p.set(EARNING, "2");
+        p.set(FIRST_DAILY_HOURS_FIXED_COST, "0.009");
+        assert_eq!(DaysWorkedDailyDifferentialRuleConfig.validate(&p).len(), 1);
+        p.set(FIRST_DAILY_HOURS_FIXED_COST, "0.01");
+        assert!(
+            DaysWorkedDailyDifferentialRuleConfig
+                .validate(&p)
+                .is_empty()
+        );
+    }
+
+    #[test]
+    fn salaried_allowance_requires_everything() {
+        let d = DailySalariedAllowanceRuleConfig.default_values();
+        assert_eq!(DailySalariedAllowanceRuleConfig.validate(&d).len(), 4);
+        let ok = rule_params! { EARNING => "1", AMOUNT => "5", STANDARD_WORK_DAY => "8", DOW_MULTIPLE => "[2,3]" };
+        assert!(DailySalariedAllowanceRuleConfig.validate(&ok).is_empty());
+    }
+
+    #[test]
+    fn anniversary_requires_a_selection_and_positive_numbers() {
+        let d = AnniversaryEarningRuleConfig.default_values();
+        assert_eq!(
+            AnniversaryEarningRuleConfig.validate(&d).len(),
+            2,
+            "earning and types"
+        );
+        let ok = rule_params! { EARNING => "1", EARNING_FACTOR => "1.5", HOURS => "8", ANNIVERSARY_DATE_TYPE => "[BIRTHDAY]" };
+        assert!(AnniversaryEarningRuleConfig.validate(&ok).is_empty());
+        let malformed = rule_params! { EARNING => "1", EARNING_FACTOR => "1", HOURS => "8", ANNIVERSARY_DATE_TYPE => "BIRTHDAY" };
+        assert_eq!(AnniversaryEarningRuleConfig.validate(&malformed).len(), 1);
     }
 }

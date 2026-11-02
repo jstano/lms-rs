@@ -45,7 +45,7 @@ see "Test backing" below for why.
 | 4 | `schedulelunch` — 3 of 3 rules | **done** |
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
-| 4 | `dailyearning` — 4 of 9 rules (slice 1) + shared surface | **in progress** — see "`dailyearning` — slice 1" |
+| 4 | `dailyearning` — 8 of 9 rules (slices 1–2) + shared surface | **in progress** — see "`dailyearning` — slice 1" and "slice 2"; `HolidayDifferential` and the runner remain |
 | 4+ | `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
@@ -54,7 +54,7 @@ see "Test backing" below for why.
 
 ## Where the work stands
 
-**1,650 tests, 501 of them transcribed Java assertions.** Clippy clean,
+**1,705 tests, 531 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -308,7 +308,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Eighty-eight so far, listed at the end of the section that introduced them. The
+Ninety-one so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -331,7 +331,7 @@ resolves anywhere in the file.
 | 72–75 | `schedulelunch` |
 | 76–79 | `shiftadjustment` |
 | 80–85 | `shiftcorrection` |
-| 86–88 | `dailyearning` |
+| 86–91 | `dailyearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3528,3 +3528,81 @@ The three paying rules each take `EarningTypePort`, `EmployeeEarningPort` and
     can differ in the last bit over many distributions. Every threshold
     comparison here (`> 0`, `>= minQualifyingHours`, `== 0.0`) is exact, so a
     one-ulp difference would matter only at a boundary no fixture reaches.
+
+## `dailyearning` — slice 2
+
+`MinimumHoursWorkedDifferential`, `DaysWorkedDailyDifferential`,
+`DailySalariedAllowance` and `AnniversaryEarning`, with their four configs.
+**55 tests, 30 of them transcribed Java assertions**: 7 executions of
+`MinimumHoursWorkedDifferentialRuleImplTest` (the two `where:` rows of one
+case count separately), 16 of `DaysWorkedDailyDifferentialRuleImplTest`, and
+all 7 of `AnniversaryEarningRuleImplTest`. `DailySalariedAllowance` has no
+Groovy spec; its tests are written from the Java.
+
+| Ported | Java spec cases |
+|---|---:|
+| `MinimumHoursWorkedDifferentialRuleImpl` (+ `MinimumHoursWorkedRuleHelper`) | 7/7 |
+| `DaysWorkedDailyDifferentialRuleImpl` | 16/16 |
+| `DailySalariedAllowanceRuleImpl` | no spec — behaviour tests written from the Java |
+| `AnniversaryEarningRuleImpl` | 7/7 |
+
+New surface: `TimeCard::shifts_for_day`, `EarningType::is_dollars_type`,
+`AnniversaryDateTypes` + `parse_anniversary_types`, and the shared
+`earning_rate_for_shift`.
+
+### Findings
+
+- **These four rules do not share slice 1's shape.** Each differs on something
+  a copy-paste port would get wrong:
+  - `DaysWorked` never checks `isOpenForEditingOn`, and reads the parameters
+    without `fixMap`.
+  - `DailySalariedAllowance` **saves its earning but never adds it to the
+    card**, and sets no note.
+  - `Anniversary` takes no `EmployeeEarningPort` at all (it only appends to
+    the card) and pays at the **raw** home hourly rate, with no minimum-wage
+    floor.
+  - `MinimumHoursWorked` prices off the day's *primary shift's* job, not the
+    home job, and measures hours by shift `netHours`, not distributions.
+- **`Stream.max` keeps the first of equal maxima; Rust's `Iterator::max_by`
+  keeps the last.** `MinimumHoursWorked`'s primary-shift choice (latest OUT
+  punch) would have flipped on a tie. The port compares with strict `>` and is
+  covered by a tie test.
+- **`joda_rs::LocalDate::with_year` panics on Feb 29 in a non-leap year;
+  Joda's `withYear` clamps to Feb 28.** `Anniversary` does the clamp by hand.
+  A leap-day birthday therefore pays on Feb 28 in common years, Feb 29 in leap
+  years. Any future caller of `with_year` on a user-supplied date has the same
+  trap.
+- **`AnniversaryDateTypes` is not in the `taps` checkout.** It lives in
+  `com.unifocus.watson.common.ta.anniversarydates`, which a search of the
+  monorepo did not find. The three constants, their `toString()` names and
+  their declaration order are reconstructed from the rule and its spec (see
+  the module doc of `common/enums/anniversary_date_types.rs`).
+- **`DaysWorked`'s spec is partly weak.** "Receives no extra fixed Earnings if
+  they didn't work at all" passes because zero worked hours yields a zero
+  amount, which would also pass if the employee-eligibility branch were
+  broken. The other cases do exercise it.
+- **The Groovy mocks `ActualsTimeCard` in `MinimumHoursWorked`'s first three
+  cases** (`Mock(Employee)`, `getShiftsForDay(_) >> []`). They are transcribed
+  against a real `TimeCardData`, which makes them stronger: the "outside the
+  calculation period" case now runs against a genuinely closed date.
+
+### Deliberate divergences (continued)
+
+89. **`DaysWorkedDailyDifferentialRuleImpl` backfills its parameters from the
+    config defaults.** Java reads them straight off the rule item with no
+    `fixMap`, so a missing one throws. Same stance as divergence 81.
+
+90. **Anniversary config parsing is lenient where `JSONArray`/`valueOf` throw.**
+    Unknown date-type names are dropped and a value that is not a bracketed
+    list yields no types, instead of an exception. A rule with nothing
+    configured pays nothing either way.
+
+91. **Earning notes use `RuleItem::name` as a stand-in for the rule
+    description.** `RuleUtils.getRuleDescription` is `"Rule: <rule set name> -
+    <config display name>"`, built from a rule set and a localized config name
+    that the Rust `RuleItem` does not carry; every note in this family
+    (and `CaliforniaOTHrs` before it) takes the item's `name`, so a test that
+    wants Java's text builds the item with that text as its name. Two notes are
+    built differently in Java and reproduced as such: `Anniversary` appends
+    `" (<Type>)"`, and `DaysWorked` writes `"Rule: " + ruleItem.toString()`,
+    i.e. `"Rule: RuleItem: <name>"`.
