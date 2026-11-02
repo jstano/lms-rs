@@ -45,7 +45,8 @@ see "Test backing" below for why.
 | 4 | `schedulelunch` — 3 of 3 rules | **done** |
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
-| 4+ | `dailyearning`, `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
+| 4 | `dailyearning` — 9 rules + runner | **scoped, not yet ported** — see "Scoping — `dailyearning`" |
+| 4+ | `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
 32 `RuleType`s in all; 12 ported, 3 prioritized next, 17 more behind them.
@@ -3382,3 +3383,86 @@ tests are written from the Java.
     field here) and `flags`. `setAdjustments().clear()` becomes clearing the
     schedule-lunch flag (divergence 77) — the `adjHours` scalar is left as
     copied, as in Java where `clear()` does not touch it either.
+
+## Scoping — `dailyearning`
+
+`RuleType::DailyDifferential` (`DD`). Java directory `dailyearning`; runner
+`DailyDifferentialRunner` (extends `DifferentialRunner`). **9 catalogue rules,
+10 `*Impl` files** (the tenth is the abstract base `DailyEarningRuleImpl`),
+~900 lines of rules, ~1,100 lines of Groovy rule specs, 8 config specs and one
+runner spec. Measured from the Java and the Rust tree; nothing ported yet.
+
+Unlike every family so far these rules are not driven per shift: the runner
+calls `execute(TimeCard, LocalDate, RuleItem)` **once per calendar day** from
+the calculation start date to `max(maxActualDate, currentPayPeriodEnd)`, and
+each rule writes earnings for that day. The runner first clears the card's
+earnings that earlier daily runs produced, and sorts items by priority
+(`RuleItemPriorityComparator`, see `shiftcorrection` findings).
+
+| Rule | Lines | Spec | What it does |
+|---|---:|---|---|
+| `NoDailyEarningRuleImpl` | 17 | none | no-op |
+| `MinDailyHoursEarningRuleImpl` | 119 | 180 | pays a fixed amount if the day's *original* distribution hours reach a threshold, optionally gated on the day's schedule label |
+| `MinDailyWorkedHoursEarningRuleImpl` | 112 | 140 | same gate, but pays the *worked hours* at a rate factor |
+| `NoDailyHoursWithLabelEarningRuleImpl` | 108 | 101 | pays when the day has **zero** hours and a matching schedule label |
+| `MinimumHoursWorkedDifferentialRuleImpl` | 86 | 192 | tops a short day up to a minimum, priced off the primary shift; uses `MinimumHoursWorkedRuleHelper` |
+| `DaysWorkedDailyDifferentialRuleImpl` | 130 | 242 | pays a fixed dollar amount when fewer than N days were worked in the work week |
+| `HolidayDifferentialRuleImpl` | 230 | 249 | two-factor holiday pay per shift, with max/min hours; the largest rule |
+| `DailySalariedAllowanceRuleImpl` | 87 | none | allowance for salaried-exempt employees on configured weekdays |
+| `AnniversaryEarningRuleImpl` | 132 | 241 | pays on hire / seniority / birthday anniversaries |
+
+### What is missing on the Rust side
+
+None of these needs a new *kind* of machinery; all of it is entity surface and
+three ports:
+
+1. **Employee status.** `Employee.isActiveOnDate` (eight of the nine rules)
+   walks `EmployeeStatus` records — `getStatusForDate`, and the
+   `ACTIVE`/`REHIRE`/`LEAVE_OF_ABSENCE`/terminated cases. The Rust `Employee`
+   holds job statuses but no employee statuses at all.
+2. **`TimeCard` day accessors:** `getShiftsForDay`,
+   `getShiftsEndingOrStartingOnDay`, `getMaxActualDate`, and **schedule
+   labels** (`EmployeeScheduleLabel` entity, `getScheduleLabels`,
+   `getScheduleLabelForDate`) — three rules gate on the day's label.
+3. **The base class's pricing helpers**, `getEarningRate(shift, ...)` and
+   `getEarningRateHomeJob(date, ...)`: hourly rate from the job status,
+   floored at minimum wage when the earning type says so. `MinWagePort` covers
+   the wage lookup.
+4. **Earning construction.** Every rule builds an `EmployeeEarning` with the
+   rule item, source `RULE`, note from `RuleUtils.getRuleDescription`, and
+   `calcAndSetTotalDollars`. Existing earning-writing rules (`earningrate`,
+   `CaliforniaOTHrs`) already do this; a shared builder is warranted.
+5. **Ports:** `EarningTypePort`, `EmployeeEarningPort`, `HolidayPort` and
+   `MinWagePort` exist. `Property.getWorkWeekForDate` (`DaysWorked`) and
+   `PropertyDataPort::value_as_boolean(showDailyDifferentialEarningsOnEmptyTimeCards)`
+   (runner) need checking against what `PropertyPort`/`PropertyDataKey` hold.
+6. **Smaller:** `ShiftUtil.getNetHours(shift, useActual)` (`Holiday`),
+   `AnniversaryDateTypes` enum and a JSON string-array parse
+   (`Anniversary`), `DefaultPropertyFactory` parameter-key constants, the
+   `DifferentialRunner`'s `ClearTimeCardEarnings`.
+
+### Things to watch
+
+- **`MinDailyWorkedHoursEarningRuleImpl` backfills with the wrong config.**
+  It calls `fixMap` on a `MinDailyHoursEarningRuleConfig`, not its own
+  `MinDailyWorkedHoursEarningRuleConfig`. The defaults differ where it
+  matters: `rateFactor` is `"0"` in the former and `"1"` in the latter, so a
+  worked-hours rule item with no stored `rateFactor` prices at **0**, not 1.
+  (The former also adds an unused `amount` = `"1"`.) Reproduce the Java and
+  record it as a divergence-free quirk; do not "fix" it.
+- `HolidayDifferentialRuleImpl` calls `createEarning(..., shift = null, ...)`
+  in the make-up branch when no non-home-job shift exists; the null shift
+  switches the rate source to the home job.
+- Anniversary uses `date.withYear(current.getYear())`; Joda's behaviour for a
+  Feb-29 hire date in a non-leap year (clamps to Feb 28) must be matched.
+- The runner reads `ruleSet.getRuleItems()` and **sorts it in place**; the
+  port sorts a local view (as `shiftcorrection` did).
+
+### Plan
+
+Port in three slices, each with its own commit: (1) the shared surface above
+plus `NoDaily`, `MinDailyHours`, `MinDailyWorkedHours`, `NoDailyHoursWithLabel`
+(the four label-gated, near-identical rules, ported together per "Port
+siblings together"); (2) `MinimumHoursWorked`, `DaysWorked`,
+`DailySalariedAllowance`, `Anniversary`; (3) `HolidayDifferential` and the
+runner.
