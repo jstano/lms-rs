@@ -37,6 +37,24 @@ pub const TIME_BETWEEN_EARNING_PROP: &str = "Earning";
 pub const DIFF_RATE_PROP: &str = "diffRate";
 pub const START_TIME_PROP: &str = "Start Time";
 pub const END_TIME_PROP: &str = "End Time";
+/// Slice 2: the break and window rules' keys.
+pub const MIN_SHIFT_LENGTH: &str = "minShiftLength";
+pub const MIN_BREAK_LENGTH: &str = "minBreakLength";
+pub const HOURS_PER_PENALTY: &str = "hoursPerPenalty";
+pub const CHECK_MIN_BREAK_PROP: &str = "checkMinBreak";
+pub const BREAK_LIMIT_PROP: &str = "breakLimit";
+pub const FIRST_BREAK_LIMIT: &str = "firstBreakLimit";
+pub const FIRST_MIN_SHIFT_LENGTH: &str = "firstMinShiftLength";
+pub const SEC_BREAK_LIMIT: &str = "secBreakLimit";
+pub const SEC_MIN_SHIFT_LENGTH: &str = "secMinShiftLength";
+pub const MAX_DAILY_PENALTY: &str = "maxDailyPenalty";
+pub const EARLIEST_START_TIME_PROP: &str = "earliestStartTime";
+pub const LATEST_START_TIME_PROP: &str = "latestStartTime";
+pub const EARLIEST_END_TIME_PROP: &str = "earliestEndTime";
+pub const LATEST_END_TIME_PROP: &str = "latestEndTime";
+pub const EARNING_AMOUNT_PROP: &str = "earningAmount";
+pub const PAY_ONLY_ONCE_PROP: &str = "payOnlyOnce";
+pub const USE_ACTUAL_TIME_PROP: &str = "useActualTime";
 /// `DefaultPropertyFactory.MINIMUM_WAGE_PROP`.
 pub const MINIMUM_WAGE_PROP: &str = "MinimumWage";
 
@@ -317,6 +335,127 @@ impl RuleConfig for ShiftStartTimeFlatRuleConfig {
     }
 }
 
+/// `PaidBreakFixedHrsRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct PaidBreakFixedHrsRuleConfig;
+
+impl RuleConfig for PaidBreakFixedHrsRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::PdBreakFixedHrsDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(MIN_SHIFT_LENGTH, "6.0");
+        p.set(MIN_BREAK_LENGTH, "0.5");
+        p.set(HOURS_PER_PENALTY, "0.5");
+        p.set(EARNING, "0");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(CHECK_MIN_BREAK_PROP, "false");
+        p.set(BREAK_LIMIT_PROP, "5.0");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Paid Break Fixed Hours";
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, name);
+        if p.double_at(HOURS_PER_PENALTY) <= 0.0 {
+            r.push("Hours Per Penalty must be greater than 0.".to_string());
+        }
+        for (key, label) in [
+            (MIN_SHIFT_LENGTH, "Min Shift Length"),
+            (MIN_BREAK_LENGTH, "Min Break Length"),
+            (BREAK_LIMIT_PROP, "Break Limit"),
+        ] {
+            if p.double_at(key) < 0.0 {
+                r.push(format!("{label} must be greater than or equal to 0."));
+            }
+        }
+        r
+    }
+}
+
+/// `BreakPeriodPenaltyHoursRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BreakPeriodPenaltyHoursRuleConfig;
+
+impl RuleConfig for BreakPeriodPenaltyHoursRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::BreakPerPenaltyHrsDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(MIN_SHIFT_LENGTH, "5.0");
+        p.set(MIN_BREAK_LENGTH, "0.5");
+        p.set(EARNING, "0");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, "Break Period Penalty Hours");
+        r
+    }
+}
+
+/// `BreakPeriodPenaltyRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct BreakPeriodPenaltyRuleConfig;
+
+impl RuleConfig for BreakPeriodPenaltyRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::BreakPeriodPenaltyDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(FIRST_BREAK_LIMIT, "5.0");
+        p.set(FIRST_MIN_SHIFT_LENGTH, "5.0");
+        p.set(MIN_BREAK_LENGTH, "0.5");
+        p.set(SEC_BREAK_LIMIT, "10.0");
+        p.set(SEC_MIN_SHIFT_LENGTH, "10.0");
+        p.set(MAX_DAILY_PENALTY, "1");
+        p.set(HOURS_PER_PENALTY, "1.0");
+        p.set(EARNING, "0");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, "Break Period Penalty");
+        r
+    }
+}
+
+/// `StartEndBetweenPremiumRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct StartEndBetweenPremiumRuleConfig;
+
+impl RuleConfig for StartEndBetweenPremiumRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::StartEndBetweenDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(EARLIEST_START_TIME_PROP, "00:00:00");
+        p.set(LATEST_START_TIME_PROP, "05:30:00");
+        p.set(EARLIEST_END_TIME_PROP, "00:00:00");
+        p.set(LATEST_END_TIME_PROP, "05:30:00");
+        p.set(EARNING_AMOUNT_PROP, "350.00");
+        p.set(PAY_ONLY_ONCE_PROP, "true");
+        p.set(USE_ACTUAL_TIME_PROP, "true");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Start Or End Between Premium";
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, name);
+        if p.double_at(EARNING_AMOUNT_PROP) <= 0.0 {
+            r.push(format!("{name}: Earning amount must be greater than 0"));
+        }
+        r
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -402,5 +541,53 @@ mod tests {
     fn weekly_job_hours_needs_max_above_min() {
         let p = rule_params! { DOLLARS_PROP => "5", EARNING => "1", MIN_HRS_PROP => "10", MAX_HRS_PROP => "10" };
         assert_eq!(WeeklyJobHrsFixedRuleConfig.validate(&p).len(), 1);
+    }
+
+    #[test]
+    fn slice_two_defaults_and_validation() {
+        let g = |c: &dyn RuleConfig, k: &str| c.default_values().get(k).map(str::to_owned);
+        assert_eq!(
+            g(&PaidBreakFixedHrsRuleConfig, HOURS_PER_PENALTY).as_deref(),
+            Some("0.5")
+        );
+        assert_eq!(
+            g(&PaidBreakFixedHrsRuleConfig, BREAK_LIMIT_PROP).as_deref(),
+            Some("5.0")
+        );
+        assert_eq!(
+            g(&BreakPeriodPenaltyHoursRuleConfig, MIN_SHIFT_LENGTH).as_deref(),
+            Some("5.0")
+        );
+        assert_eq!(
+            g(&BreakPeriodPenaltyRuleConfig, SEC_BREAK_LIMIT).as_deref(),
+            Some("10.0")
+        );
+        assert_eq!(
+            g(&BreakPeriodPenaltyRuleConfig, MAX_DAILY_PENALTY).as_deref(),
+            Some("1")
+        );
+        assert_eq!(
+            g(&StartEndBetweenPremiumRuleConfig, EARNING_AMOUNT_PROP).as_deref(),
+            Some("350.00")
+        );
+        assert_eq!(
+            g(&StartEndBetweenPremiumRuleConfig, LATEST_END_TIME_PROP).as_deref(),
+            Some("05:30:00")
+        );
+        for c in [
+            &PaidBreakFixedHrsRuleConfig as &dyn RuleConfig,
+            &BreakPeriodPenaltyHoursRuleConfig,
+            &BreakPeriodPenaltyRuleConfig,
+            &StartEndBetweenPremiumRuleConfig,
+        ] {
+            assert_eq!(
+                c.validate(&c.default_values()).len(),
+                1,
+                "{:?}: only the earning",
+                c.rule_class()
+            );
+        }
+        let p = rule_params! { EARNING => "1", HOURS_PER_PENALTY => "0", MIN_SHIFT_LENGTH => "-1", MIN_BREAK_LENGTH => "-1", BREAK_LIMIT_PROP => "-1" };
+        assert_eq!(PaidBreakFixedHrsRuleConfig.validate(&p).len(), 4);
     }
 }

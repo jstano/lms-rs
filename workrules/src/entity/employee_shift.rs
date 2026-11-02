@@ -857,13 +857,14 @@ impl EmployeeShift {
         duration_in_seconds(in_time, out_time) / SECONDS_PER_MINUTE
     }
 
-    /// This shift's breaks, as rounded-time ranges. `ShiftUtil.getBreaks(shift,
-    /// false)` — the `useActual` argument every caller in this tree passes.
+    /// This shift's breaks as ranges of **adjusted** times (`use_actual`) or
+    /// **rounded** times. `ShiftUtil.getBreaks(shift, useActual)`; the rounded
+    /// form was the only one needed until `shiftearning`.
     ///
     /// Punches pair positionally — indices 1&2, 3&4, … in `PunchTimeComparator`
     /// order, not by punch type — and the whole list is empty when the shift
     /// has (persisted) errors or three punches or fewer.
-    pub fn breaks(&self) -> Vec<DateTimeRange> {
+    pub fn breaks_using(&self, use_actual: bool) -> Vec<DateTimeRange> {
         // ShiftUtil.getBreaks tests `shift.getErrors()`, the persisted set —
         // not the derived one calcWorkedHours uses two lines later.
         if self.has_errors() || self.punches.len() <= 2 {
@@ -875,10 +876,14 @@ impl EmployeeShift {
 
         let mut index = 1;
         while index < order.len().saturating_sub(2) {
-            let (Some(start), Some(end)) = (
-                self.punches[order[index]].rounded_time(),
-                self.punches[order[index + 1]].rounded_time(),
-            ) else {
+            let time = |i: usize| {
+                if use_actual {
+                    self.punches[order[i]].adj_time()
+                } else {
+                    self.punches[order[i]].rounded_time()
+                }
+            };
+            let (Some(start), Some(end)) = (time(index), time(index + 1)) else {
                 index += 2;
                 continue;
             };
@@ -887,6 +892,22 @@ impl EmployeeShift {
         }
 
         breaks
+    }
+
+    /// `ShiftUtil.getBreaks(shift, false)` — the rounded-time breaks.
+    pub fn breaks(&self) -> Vec<DateTimeRange> {
+        self.breaks_using(false)
+    }
+
+    /// The time of the first punch of a type, by adjusted time (`use_actual`)
+    /// or rounded time. `ShiftUtil.getPunchTime(shift, type, useActual)`.
+    pub fn punch_time_of_type(&self, kind: PunchType, use_actual: bool) -> Option<LocalDateTime> {
+        let punch = self.punches.get(self.punch_index_of_type(kind)?)?;
+        if use_actual {
+            punch.adj_time()
+        } else {
+            punch.rounded_time()
+        }
     }
 
     /// Total break time in whole minutes. `ShiftUtil.totalBreakTimeInMinutes`

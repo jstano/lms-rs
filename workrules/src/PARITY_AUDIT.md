@@ -47,7 +47,7 @@ see "Test backing" below for why.
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
-| 4+ | `shiftearning` — 9 of 23 rules (slice 1) + shared base | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 1" |
+| 4+ | `shiftearning` — 13 of 23 rules (slices 1-2) + shared base | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 1" |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
 32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
@@ -55,7 +55,7 @@ see "Test backing" below for why.
 
 ## Where the work stands
 
-**1,851 tests, 630 of them transcribed Java assertions.** Clippy clean,
+**1,877 tests, 641 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -316,7 +316,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-One hundred and two so far, listed at the end of the section that introduced them. The
+One hundred and four so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -341,7 +341,7 @@ resolves anywhere in the file.
 | 80–85 | `shiftcorrection` |
 | 86–94 | `dailyearning` |
 | 95–99 | `weeklyearning` |
-| 100–102 | `shiftearning` |
+| 100–104 | `shiftearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3942,3 +3942,60 @@ net_hours_with_reallocated_undone}`; `dailyearning::earning_rate_for_job`.
 
 102. **A shift with no IN punch skips `ShiftStartTimeFlat`**, where Java
      dereferences the null. Same stance as divergence 83.
+
+## `shiftearning` — slice 2
+
+The four break and window rules, with their configs: `PaidBreakFixedHrs`,
+`BreakPeriodPenaltyHours`, `BreakPeriodPenalty`, `StartEndBetweenPremium`.
+**26 tests, 11 of them transcribed Java assertions** — all 11 rows of
+`StartEndBetweenPremiumRuleImplTest`. The other three have no Groovy spec;
+their tests are written from the Java.
+
+| Ported | Java spec cases |
+|---|---:|
+| `PaidBreakFixedHrsRuleImpl` | no spec — behaviour tests written from the Java |
+| `BreakPeriodPenaltyHoursRuleImpl` | no spec — behaviour tests written from the Java |
+| `BreakPeriodPenaltyRuleImpl` | no spec — behaviour tests written from the Java |
+| `StartEndBetweenPremiumRuleImpl` | 11/11 rows |
+
+New surface: `EmployeeShift::breaks_using(use_actual)` (the adjusted-time form
+of `ShiftUtil.getBreaks`; `breaks()` is now its `false` case) and
+`EmployeeShift::punch_time_of_type` (`ShiftUtil.getPunchTime`).
+`ShiftTimeWindowUtility`'s `convert_start_time`/`convert_end_time` became
+`pub(crate)`.
+
+### Findings
+
+- **`BreakPeriodPenalty`'s daily cap is shared across the day's shifts.** The
+  count it starts from is every RULE earning of *this rule item* dated the
+  shift's date — including those written for other shifts that day. Each shift
+  is therefore not entitled to `maxDailyPenalty` penalties of its own.
+- **A break can only satisfy one of `BreakPeriodPenalty`'s two tests.** The
+  matched first break is removed from the list before the second test, so one
+  early break covers the first meal period and leaves the second uncovered.
+- **`BreakPeriodPenaltyHours` is cancelled by a single long-enough break
+  anywhere in the shift**, not just an early one; and with no breaks at all it
+  pays nothing (zero break time).
+- **`PaidBreakFixedHrs` with `checkMinBreak` on requires the break to start
+  strictly less than `breakLimit` hours after the first IN** (a break starting
+  exactly at the limit does not qualify), and to last at least `minBreakLength`.
+- **`StartEndBetweenPremium` sets `totalDollars` directly** instead of
+  calculating it, and uses a fixed note rather than the rule description. Its
+  Groovy rows 1-3 pass blank-string parameters; they never reach the parsing
+  because an earlier gate (no end time, errors, closed period) exits first.
+- **`StartEndBetweenPremium` writes its occurrences with `saveAll`**, one batch,
+  where every other rule here saves one at a time; the port uses
+  `EmployeeEarningPort::save_all`.
+- **Validation messages in `PaidBreakFixedHrsRuleConfig` omit the rule name**
+  for four of five checks (`hoursProp.getDisplayName() + " must be …"`); the
+  port reproduces the condition, not the missing prefix.
+
+### Deliberate divergences (continued)
+
+103. **`BreakPeriodPenaltyHours` backfills its parameters from the defaults.**
+     Java reads them without `fixMap` (its `ruleConfig` field is unused), so a
+     missing one throws. Same stance as divergences 81, 89, 95 and 100.
+
+104. **`BreakPeriodPenalty` ignores a RULE earning that has no rule item** when
+     counting the day's penalties; Java's `earning.getRuleItem().equals(ruleItem)`
+     would throw on it.

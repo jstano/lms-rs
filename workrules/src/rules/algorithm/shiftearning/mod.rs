@@ -6,7 +6,8 @@
 //!
 //! The last of the seven families prioritized for scheduling, scoped in
 //! `PARITY_AUDIT.md` ("Scoping — `shiftearning`") and ported in five slices.
-//! **Slice 1** is here: the shared base and nine simple rules.
+//! **Slices 1 and 2** are here: the shared base, nine simple rules, and the four
+//! break and window rules.
 //!
 //! # Per shift
 //!
@@ -25,6 +26,8 @@
 //! [`earning_rate_home_job`](crate::rules::algorithm::dailyearning::earning_rate_home_job),
 //! shared with `dailyearning`.
 
+pub mod break_period_penalty;
+pub mod break_period_penalty_hours;
 pub mod config;
 pub mod dow_flat;
 pub mod dow_rate_factor;
@@ -32,7 +35,9 @@ pub mod hours_threshold_fixed;
 pub mod hours_threshold_fixed_with_max_cap;
 pub mod minimum_hours_worked_shift;
 pub mod no_earning;
+pub mod paid_break_fixed_hrs;
 pub mod shift_start_time_flat;
+pub mod start_end_between_premium;
 pub mod time_between_shifts;
 pub mod utility;
 pub mod weekly_job_hrs_fixed;
