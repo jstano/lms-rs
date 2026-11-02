@@ -625,6 +625,11 @@ impl EmployeeShift {
         round_hours(worked + self.adj_hours)
     }
 
+    /// The hours of `WORKED` adjustments already reallocated to an earning.
+    pub fn reallocated_to_earning_hours(&self) -> f64 {
+        self.reallocated_to_earning_hours
+    }
+
     /// Set the hours of `WORKED` adjustments reallocated to an earning, as
     /// loading the shift's adjustments would.
     #[must_use]

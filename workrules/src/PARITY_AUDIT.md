@@ -47,7 +47,7 @@ see "Test backing" below for why.
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
-| 4+ | `shiftearning` — 16 of 23 rules (slices 1-3) + shared base | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 1" |
+| 4+ | `shiftearning` — 20 of 23 rules (slices 1-4) + shared base, `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 4" |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
 32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
@@ -55,7 +55,7 @@ see "Test backing" below for why.
 
 ## Where the work stands
 
-**1,916 tests, 689 of them transcribed Java assertions.** Clippy clean,
+**1,960 tests, 742 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -107,6 +107,10 @@ the end of this file.
 
 **`weeklyearning` is done — all 8 rules and its runner.** See "`weeklyearning` —
 done" at the end of this file. Next up: `shiftearning`.
+
+**`shiftearning` is in progress — 20 of 23 rules** (slices 1-4). Remaining
+(slice 5): `ContractToFullTime`, `ContractGuarantee`, `SplitShiftDifferentialRate`
+and `ShiftDifferentialRunner`. See "`shiftearning` — slice 4" at the end.
 
 ### Unstarted scope inventory
 
@@ -341,7 +345,7 @@ resolves anywhere in the file.
 | 80–85 | `shiftcorrection` |
 | 86–94 | `dailyearning` |
 | 95–99 | `weeklyearning` |
-| 100–107 | `shiftearning` |
+| 100–111 | `shiftearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3808,7 +3812,7 @@ shift (employee, job, shift date), **sorts by priority**
 | `BreakPeriodPenaltyRuleImpl` | 211 | — | break periods |
 | `HolidayTimeOfDayRuleImpl` | 171 | 206 | `HolidayMatcher`, `RuleUtils` |
 | `TimeOfDayDifferentialRateRuleImpl` | 221 | — | date-time periods |
-| `DOWHolidayRuleImpl` | 242 | 265 | **`EmployeeShiftAdjustment`** (writes one), `Holiday` |
+| `DOWHolidayRuleImpl` | 242 | 265 | `HolidayMatcher`, `Holiday`; reads (does not write) shift adjustments — corrected in slice 4 |
 | `SplitShiftDifferentialRateRuleImpl` | 308 | 368 | **`SplitShiftPayTypes`**, **`CurrentProperty`** |
 | `TimeOfDayPctDifferentialRateRuleImpl` | 343 | 521 | `RoundingOption`, date-time ranges |
 
@@ -3821,11 +3825,11 @@ ones the audit's "no spec — behaviour tests from the Java" convention covers.)
    has four overloads (shift or job+date, earning type or earning id) and is
    what `dailyearning`'s `earning_rate_for_shift` already is for the first;
    the job+date form is new. A shared `ShiftEarningRule` trait.
-2. **`EmployeeShiftAdjustment` as an entity.** `DOWHolidayRuleImpl` is the first
-   rule to *append* an adjustment (`ShiftAdjustType`) rather than fold it into
-   `adj_hours`; `EmployeeShift` models adjustments only as scalars and flags
-   (divergence 76-77). Probably one more narrowing, but `DOWHoliday`'s spec
-   (265 lines) decides it.
+2. **`EmployeeShiftAdjustment` as an entity.** *Resolved in slice 4: not needed.*
+   This section originally said `DOWHolidayRuleImpl` "writes" an adjustment.
+   It does not — `calcWorkedAdjustmentsNotReallocatedToEarning` only **reads**
+   them, and the scalars `adj_hours` and `reallocated_to_earning_hours` carry
+   exactly what it needs (divergence 110).
 3. **Two enums/services not in the `taps` checkout:** `SplitShiftPayTypes`
    (`common.ta.splitshiftpaytypes`) and, from `CurrentProperty`, the "current
    property" the rule reads a fallback minimum wage from. Both will be
@@ -4070,3 +4074,92 @@ New surface: `TimeCard::work_day_start_time` (default midnight;
 
 107. **An unknown `roundingOption` code is treated as `NONE`.** Java's
      `RoundingOption.fromCode` throws `IllegalArgumentException`.
+
+## `shiftearning` — slice 4
+
+The four holiday and anniversary rules, with their configs and the two shared
+helpers they need: `HolidayRateFactor`, `HolidayTimeOfDay`, `DOWHoliday` and
+`AnniversaryWorkedShiftDifferential`; `HolidayMatcher` and
+`ShiftTimeInPeriodCalculator` (both Java `algorithm/` root, ported into
+`shiftearning/utility/` because only this family uses them). **44 tests, 53 of
+them transcribed Java assertions** (a `where:` table is one function here).
+
+| Ported | Java spec cases |
+|---|---:|
+| `AnniversaryWorkedShiftDifferentialRuleImpl` | 6/6 executions (5 tests; the field check runs for `DOLLARS` and `HOURS`) |
+| `HolidayRateFactorRuleImpl` | 14/14 rows |
+| `HolidayTimeOfDayRuleImpl` | 17/17 (10 acceptance scenarios, 5 rate rows, 2 early exits) |
+| `DOWHolidayRuleImpl` | 16/16 (3 invalid-shift rows, 2 no-match rows, 11 paying rows) |
+| `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | no spec — behaviour tests from the Java |
+
+New surface: `EmployeeShift::reallocated_to_earning_hours`;
+`dailyearning::anniversary_earning::date_for_type` made `pub(crate)`.
+
+### Findings
+
+- **The specs mock `HolidayMatcher`; the port runs the real one.** `HolidayTimeOfDay`
+  and `DOWHoliday` stub `findOverlappingHolidays` and `getHolidayPeriod`. The
+  transcriptions instead configure a one-type calendar and let the real matcher
+  decide. That is a stronger test only if the mock's answers are what the real
+  matcher would give; each row was checked to be (every shift overlaps the
+  holiday windows the mock returns, and nothing the mock omits overlaps).
+- **`HolidayRateFactor`'s Groovy row 1 is vacuous.** It expects zero saves of an
+  all-zero earning, but the Mock matcher only counts saves *equal to* that
+  earning; the rule really pays 17.5 hours at 9.5 × 0.5 = 4.75. The
+  transcription asserts the real earning in its own test.
+- **`DOWHoliday` does not write an adjustment.** The scoping section said it did
+  and drove an `EmployeeShiftAdjustment` entity; reading the Java showed it only
+  sums them (`WORKED` not reallocated counted, every `BREAK` subtracted, `OT`
+  ignored). Corrected in the scoping tables above; divergence 110.
+- **`HolidayMatcher` overlap is inclusive at both ends**
+  (`DateTimePeriod.overlapsPeriod`). A shift that ends exactly when a holiday
+  window begins "overlaps" it by zero hours. For `HolidayTimeOfDay` that is
+  harmless (no hours, no earning). For `DOWHoliday` it is not: the date then
+  takes the *holiday* branch, pays nothing, and so suppresses the weekday
+  premium that date would otherwise earn. Reproduced.
+- **`HolidayTimeOfDay` matches against the default midnight-to-midnight window
+  but measures hours in the configured one.** `findOverlappingHolidays(shift,
+  types, useActual)` uses the 3-argument overload, so a holiday whose configured
+  `Start Time`–`End Time` window spills into the next day is not found by a shift
+  that only touches the spill. `DOWHoliday` passes the configured times to the
+  matcher and does not have this problem.
+- **`HolidayTimeOfDay`'s rate depends on rule order.** With `includeDiffs`, it
+  adds `round_currency(total dollars / net hours)` for each rule-created
+  `EARNING`-kind earning already on the shift, so it only sees differentials
+  that ran before it (priority).
+- **`DOWHoliday`'s spec sets `homeJobRate` on the rule, but `execute` overwrites
+  it from `homeAsBase`** (default `true`); its "using earningRate" row therefore
+  prices from the home job too. The expected rate is 8 either way.
+- **`AnniversaryWorkedShiftDifferential` is the least guarded rule in the
+  family.** Only `isOpenForEditingFor`: no error check, no employee-status
+  check. It de-duplicates nothing (a type configured twice pays twice, in
+  configured order, unlike the daily `AnniversaryEarning`), uses the shift's raw
+  stored `netHours` field, takes the earning type's id from the type *found*
+  (the spec's DAO returns type 31 for configured id 23), and **never calls the
+  earning DAO** — the earnings exist only on the time card.
+- **`HolidayRateFactor` matches by date only.** The shift's date must equal the
+  holiday date and the holiday's own type must be configured; there is no
+  window. The first listed holiday on that date wins.
+- **A `DOLLARS` check is `getUOM() == DOLLARS` here, not `isDollarsType()`.** The
+  daily `AnniversaryEarning` uses the latter. A `DOLLARS` unit on a non-earning,
+  non-memo type pays hours in one rule and dollars in the other.
+
+### Deliberate divergences (continued)
+
+108. **`HolidayMatcher` returns a `Vec` ordered by holiday date then id.** Java
+     returns a `HashSet<Holiday>`. `HolidayTimeOfDay` and `DOWHoliday` sum over
+     it, so order cannot change the result. Same stance as 96.
+
+109. **Unresolvable lookups end the rule instead of throwing.** A shift whose job
+     cannot be resolved (no property, so no calendar), an employee with no home
+     job status (home rate, `homeDeptOnly`), or a missing earning type or rate
+     all return without writing; Java dereferences null. Same stance as 83.
+
+110. **`DOWHoliday` computes the worked-adjustment total from two scalars.**
+     `round_hours(adj_hours − reallocated_to_earning_hours)` equals the Java loop
+     over `EmployeeShiftAdjustment`s because `adj_hours` is already Σ `WORKED`
+     less Σ `BREAK` and the reallocated figure is the `WORKED` part only.
+
+111. **`HolidayTimeOfDay` looks each card earning's type up through
+     `EarningTypePort`** to test `getType().isEarning()`; Java reads it off the
+     earning. An earning whose type cannot be resolved is not counted.

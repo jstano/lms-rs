@@ -71,6 +71,23 @@ pub const MAX_HRS_PAID: &str = "maxHrsPaid";
 pub const HOURS: &str = "hours";
 pub const MIN_HRS_SPREAD: &str = "minHours";
 pub const USE_MIN_WAGE: &str = "useMinWage";
+/// Slice 4: the holiday and anniversary rules' keys.
+pub const HOLIDAY_EARNING_PROP: &str = "holidayEarning";
+pub const DOW_EARNING_PROP: &str = "dowEarning";
+pub const HOLIDAY_FACTOR_PROP: &str = "holidayFactor";
+pub const DOW_FACTOR_PROP: &str = "dowFactor";
+pub const DOW_HOURS_FACTOR_PROP: &str = "dowHoursFactor";
+pub const HOLIDAY_HOURS_FACTOR_PROP: &str = "holidayHoursFactor";
+pub const ADJUSTMENT_THRESHOLD_PROP: &str = "adjThreshold";
+pub const HOLIDAY_TYPES_PROP: &str = "holidayTypes";
+pub const HOME_DEPT_RATE_PROP: &str = "homeDeptRate";
+pub const HOME_DEPT_ONLY_PROP: &str = "homeDeptOnly";
+/// `HolidayTimeOfDayRuleConfig`'s earning key is `earning`, as elsewhere.
+pub const HOLIDAY_TOD_EARNING_PROP: &str = "earning";
+pub const INCLUDE_DIFFS: &str = "includeDiffs";
+/// `AnniversaryWorkedShiftDifferentialRuleConfig`.
+pub const ANNIVERSARY_DATE_TYPE: &str = "anniversaryDateTypes";
+pub const EARNING_FACTOR: &str = "earningFactor";
 /// `DefaultPropertyFactory.MINIMUM_WAGE_PROP`.
 pub const MINIMUM_WAGE_PROP: &str = "MinimumWage";
 
@@ -609,6 +626,163 @@ impl RuleConfig for DailySpreadShiftDifferentialRuleConfig {
         at_least_a_cent(p, HOURS, "Hours", &mut r, name);
         at_least_a_cent(p, MIN_HRS_SPREAD, "Minimum Spread Hours", &mut r, name);
         earning_selected(p, EARNING, &mut r, name);
+        r
+    }
+}
+
+fn not_negative(p: &RuleParams, key: &str, label: &str, r: &mut ValidationResults, name: &str) {
+    if p.double_at(key) < 0.0 {
+        r.push(format!("{name}: {label} must be greater than zero"));
+    }
+}
+
+/// `DOWHolidayRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DowHolidayRuleConfig;
+
+impl RuleConfig for DowHolidayRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::DowHolidayDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(HOLIDAY_FACTOR_PROP, "0.5");
+        p.set(DOW_FACTOR_PROP, "0.5");
+        p.set(HOLIDAY_EARNING_PROP, "0");
+        p.set(DOW_EARNING_PROP, "0");
+        p.set(DOW_PROP, "[1,2,3,4,5,6,7]");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(HOME_AS_BASE_PROP, "true");
+        p.set(HOLIDAY_TYPES_PROP, "[]");
+        p.set(START_TIME_PROP, "00:00:00");
+        p.set(END_TIME_PROP, "00:00:00");
+        p.set(DOW_HOURS_FACTOR_PROP, "0.5");
+        p.set(HOLIDAY_HOURS_FACTOR_PROP, "0.5");
+        p.set(ADJUSTMENT_THRESHOLD_PROP, "270");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Day of Week Holiday";
+        let mut r = ValidationResults::new();
+        not_negative(p, DOW_FACTOR_PROP, "DOW Factor", &mut r, name);
+        not_negative(p, HOLIDAY_FACTOR_PROP, "Holiday Factor", &mut r, name);
+        if p.int_at(HOLIDAY_EARNING_PROP) <= 0 {
+            r.push(format!("{name}: Holiday earning must be selected."));
+        }
+        if p.int_at(DOW_EARNING_PROP) <= 0 {
+            r.push(format!("{name}: Day of Week earning must be selected."));
+        }
+        not_negative(p, DOW_HOURS_FACTOR_PROP, "DOW Hours Factor", &mut r, name);
+        not_negative(
+            p,
+            HOLIDAY_HOURS_FACTOR_PROP,
+            "Holiday Hours Factor",
+            &mut r,
+            name,
+        );
+        not_negative(
+            p,
+            ADJUSTMENT_THRESHOLD_PROP,
+            "Adjustment Threshold",
+            &mut r,
+            name,
+        );
+        r
+    }
+}
+
+/// `HolidayRateFactorRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HolidayRateFactorRuleConfig;
+
+impl RuleConfig for HolidayRateFactorRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::HolidayFactorDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(FACTOR_PROP, "0.5");
+        p.set(EARNING, "0");
+        p.set(HOLIDAY_TYPES_PROP, "[]");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(HOME_AS_BASE_PROP, "true");
+        p.set(HOME_DEPT_RATE_PROP, "false");
+        p.set(HOME_DEPT_ONLY_PROP, "false");
+        p.set(MAX_HRS_PAID, "99");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Holiday Rate Factor";
+        let mut r = ValidationResults::new();
+        not_negative(p, FACTOR_PROP, "Rate Factor", &mut r, name);
+        not_negative(p, MAX_HRS_PAID, "Max Hours Paid", &mut r, name);
+        if p.int_at(EARNING) <= 0 {
+            r.push(format!("{name}: Earning : Earning must be selected."));
+        }
+        r
+    }
+}
+
+/// `HolidayTimeOfDayRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HolidayTimeOfDayRuleConfig;
+
+impl RuleConfig for HolidayTimeOfDayRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::HolidayTodDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(FACTOR_PROP, "0.5");
+        p.set(HOLIDAY_TOD_EARNING_PROP, "0");
+        p.set(HOLIDAY_TYPES_PROP, "[]");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(HOME_AS_BASE_PROP, "true");
+        p.set(START_TIME_PROP, "00:00:00");
+        p.set(END_TIME_PROP, "00:00:00");
+        p.set(INCLUDE_DIFFS, "true");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Holiday Time Of Day";
+        let mut r = ValidationResults::new();
+        not_negative(p, FACTOR_PROP, "Factor", &mut r, name);
+        earning_selected(p, HOLIDAY_TOD_EARNING_PROP, &mut r, name);
+        r
+    }
+}
+
+/// `AnniversaryWorkedShiftDifferentialRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct AnniversaryWorkedShiftDifferentialRuleConfig;
+
+impl RuleConfig for AnniversaryWorkedShiftDifferentialRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::AnnWrkdDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(EARNING_FACTOR, "1");
+        p.set(ANNIVERSARY_DATE_TYPE, "[]");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Anniversary Worked Shift Differential";
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, name);
+        at_least_a_cent(p, EARNING_FACTOR, "Earning Factor", &mut r, name);
+        match serde_json::from_str::<Vec<serde_json::Value>>(
+            p.get(ANNIVERSARY_DATE_TYPE).unwrap_or(""),
+        ) {
+            Ok(list) if list.is_empty() => {
+                r.push(format!("{name}: Anniversary Date Type must not be empty"));
+            }
+            Ok(_) => {}
+            Err(_) => r.push(format!(
+                "{name}: Anniversary Date Type is not correctly formatted"
+            )),
+        }
         r
     }
 }

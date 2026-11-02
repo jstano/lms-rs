@@ -26,12 +26,16 @@
 //! [`earning_rate_home_job`](crate::rules::algorithm::dailyearning::earning_rate_home_job),
 //! shared with `dailyearning`.
 
+pub mod anniversary_worked_shift_differential;
 pub mod break_period_penalty;
 pub mod break_period_penalty_hours;
 pub mod config;
 pub mod daily_spread_shift_differential;
 pub mod dow_flat;
+pub mod dow_holiday;
 pub mod dow_rate_factor;
+pub mod holiday_rate_factor;
+pub mod holiday_time_of_day;
 pub mod hours_threshold_fixed;
 pub mod hours_threshold_fixed_with_max_cap;
 pub mod minimum_hours_worked_shift;

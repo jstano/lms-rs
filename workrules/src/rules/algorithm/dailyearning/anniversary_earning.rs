@@ -49,7 +49,7 @@ use joda_rs::LocalDate;
 use std::collections::BTreeSet;
 
 /// `date.withYear(year)` with Joda's Feb-29 clamping.
-fn with_year_clamped(date: LocalDate, year: i32) -> LocalDate {
+pub(crate) fn with_year_clamped(date: LocalDate, year: i32) -> LocalDate {
     if date.month_value() == 2
         && date.day_of_month() == 29
         && !LocalDate::of(year, 1, 1).is_leap_year()
@@ -60,7 +60,7 @@ fn with_year_clamped(date: LocalDate, year: i32) -> LocalDate {
     }
 }
 
-fn date_for_type(
+pub(crate) fn date_for_type(
     kind: AnniversaryDateTypes,
     employee: &Employee,
     date: LocalDate,
