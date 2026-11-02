@@ -552,6 +552,12 @@ pub trait SalaryDistPort {
     fn find_by_id(&self, id: i32) -> Option<crate::entity::salary_dist::SalaryDist>;
 }
 
+/// The property the user is working in (not the employee's). `CurrentProperty`.
+pub trait CurrentPropertyPort {
+    /// `getProperty().getPayPeriod()`: the property's current pay period.
+    fn pay_period(&self) -> DateRange;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

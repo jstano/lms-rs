@@ -54,14 +54,15 @@ see "Test backing" below for why.
 | 4 | `shiftdifferenceot` (`ShiftDiffOt`) — 1 of 1 rule + runner | **done** |
 | 4 | `mealpunch` — 2 of 2 rules | **done** (no runner: the punch loader drives them) |
 | 4 | `reconcileemployee` — 2 of 2 rules | **done** (no runner: the reconcile process drives them) |
-| 1+ | the other 11 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `closepayperiod` — 2 of 2 rules + runner | **done** |
+| 1+ | the other 10 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 21 ported, 11 not started.
+32 `RuleType`s in all; 22 ported, 10 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**2,117 tests, 900 of them transcribed Java assertions.** Clippy clean,
+**2,127 tests, 905 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -139,7 +140,6 @@ lesson, read the Java before estimating any of these.
 |---|---:|---:|---|
 | `BenefitAccrual` (BA) | 15 | 16 | `benefitaccrual` |
 | `BenefitExpiration` (BE) | 7 | 8 | `benefitexpiration` |
-| `ClosePayPeriod` (CP) | 2 | 3 | `closepayperiod` |
 | `EmployeeAlert` (EA) | 7 | 8 | `employeealerts`; plus top-level `ActualsAlertRuleImpl` and `ScheduleAlertRuleImpl` |
 | `EmployeeEvent` (EE) | 3 | 4 | `employeeevent` |
 | `EmployeePoints` (EP) | 18 | 21 | `employeepoints` |
@@ -352,6 +352,7 @@ resolves anywhere in the file.
 | 125–126 | `shiftdifferenceot` |
 | 127–129 | `mealpunch` |
 | 130–132 | `reconcileemployee` |
+| 133–135 | `closepayperiod` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4579,3 +4580,49 @@ attached `salary_dist`, `annual_based`, `set_annual_rate`, `set_hourly_rate`, an
 132. **Identity comparisons become id comparisons**: "the home status was given the
      default distribution" compares distribution ids, and a status with no
      distribution and a missing default both read as "no distribution" and so match.
+
+## `closepayperiod` — done
+
+`RuleType::ClosePayPeriod` (`CP`): `NoCP` and `PrepayContractCP`, their configs and
+`ClosePayPeriodRuleRunner` (Java directory `closepayperiod`, 246 lines; the runner
+is in `rms/timekeeping/domain/paygroup/closing`, not `calcshift`). **10 tests, 5
+transcribed Java assertions:** `PrepayContractCPRuleImplTest` (one test over three
+termination dates) and `ClosePayPeriodRuleRunnerTest` (2). The rule's other
+behaviour is tested from the Java.
+
+The only reversible family: a rule has `execute` and `undo`, and the runner always
+undoes before it executes, so closing a period again replaces the earlier output.
+
+New surface: `CurrentPropertyPort` (`CurrentProperty.getProperty().getPayPeriod()`);
+on `Employee`: `is_active_on_date_include_loa`, `is_active_during_period`,
+`last_status_active_date`.
+
+### Findings
+
+- **The "prepay next period" rule pays the period after the *current property's*
+  pay period**, not after the one being closed — it reads `CurrentProperty`, the
+  property the user is logged into, which can differ from the employee's. The
+  prepayment is still dated the closing period's last day.
+- **The adjustment is written whether or not the employee left.** It reverses last
+  period's prepayment on the employee's last active-or-on-leave day *in the closing
+  period* — the period's last day for someone who stayed. The spec only covers
+  three termination dates inside the period.
+- **Only the first prior-period prepayment is adjusted** (`break` after one).
+- **The adjustment keeps the rate and negates dollars and hours**; the total comes
+  from `calcAndSetTotalDollars`.
+- **Prepayment needs a `CONTRACT` home job** in the next period with non-zero
+  contract hours, taken on the later of the period's start and the status's start.
+- **`undo` identifies its output by rule item and date alone**, removing every
+  earning that item wrote in the period, whatever its source.
+- **The runner does not sort the items** (unlike the shift/daily runners) and
+  resolves the rule set for the *home* job on the period's last day.
+
+### Deliberate divergences (continued)
+
+133. **The runner is handed loaded time cards** and does not run them "in system
+     processing mode"; there is no repository or processing-mode flag here.
+
+134. **Identity (`earning.getRuleItem() == ruleItem`) becomes rule item id equality.**
+
+135. **An unresolvable earning type, or no home job on the day an earning would be
+     written, writes nothing** where Java dereferences null.

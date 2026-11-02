@@ -124,6 +124,42 @@ impl Employee {
         }
     }
 
+    /// Was the employee working **or on leave of absence** on `date`?
+    /// `isActiveOnDateIncludeLoa(LocalDate)`. As [`is_active_on_date`](Self::is_active_on_date)
+    /// but leave counts.
+    pub fn is_active_on_date_include_loa(&self, date: LocalDate) -> bool {
+        match self.status_for_date(date) {
+            None => false,
+            Some(status) => match status.status_type() {
+                EmployeeStatusType::Active
+                | EmployeeStatusType::Rehire
+                | EmployeeStatusType::LeaveOfAbsence => true,
+                EmployeeStatusType::Terminated => status.start_date() == date,
+                EmployeeStatusType::Transferred => false,
+            },
+        }
+    }
+
+    /// Was the employee active on at least one day of the period?
+    /// `isActiveDuringPeriod(DateRange)`.
+    pub fn is_active_during_period(&self, period: &DateRange) -> bool {
+        period
+            .dates()
+            .into_iter()
+            .any(|date| self.is_active_on_date(date))
+    }
+
+    /// The latest date in the period the employee was active or on leave, if any.
+    /// `getLastStatusActiveDate(DateRange)`.
+    pub fn last_status_active_date(&self, period: &DateRange) -> Option<LocalDate> {
+        let mut dates = period.dates();
+        dates.sort();
+        dates
+            .into_iter()
+            .rev()
+            .find(|&date| self.is_active_on_date_include_loa(date))
+    }
+
     /// Attach the pay group. `setPayGroup()`.
     #[must_use]
     pub fn with_pay_group_id(mut self, pay_group_id: Option<i32>) -> Self {
