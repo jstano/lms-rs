@@ -10,6 +10,7 @@ pub mod dailyearning;
 pub mod doubletimerate;
 pub mod earningrate;
 pub mod hoursdistribution;
+pub mod mealpunch;
 pub mod overtimerate;
 pub mod punchrounding;
 pub mod punchvalidation;

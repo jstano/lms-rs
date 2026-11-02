@@ -523,6 +523,29 @@ pub trait SchedulingPermissionPort {
     fn can_overwrite_fair_work_week_changes(&self, property_id: i32) -> bool;
 }
 
+/// Whether an employee is scheduled around a moment. `EmployeeShiftDAO.isScheduled`.
+pub trait SchedulePresencePort {
+    /// Is the employee scheduled to work at `date_time`, allowing the given grace
+    /// minutes before the scheduled start and after the scheduled end?
+    fn is_scheduled(
+        &self,
+        employee: &crate::entity::employee::Employee,
+        date_time: joda_rs::LocalDateTime,
+        grace_before_minutes: i32,
+        grace_after_minutes: i32,
+    ) -> bool;
+}
+
+/// Whether an employee is clocked in. `EmployeeInOutDAO.isEmployeeOnClock`.
+pub trait OnClockPort {
+    /// Is the employee on the clock at `date_time`?
+    fn is_employee_on_clock(
+        &self,
+        employee: &crate::entity::employee::Employee,
+        date_time: joda_rs::LocalDateTime,
+    ) -> bool;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

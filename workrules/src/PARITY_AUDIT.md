@@ -52,14 +52,15 @@ see "Test backing" below for why.
 | 4 | `schedulelabeladdendum` — 3 of 3 rules + both runners | **done** |
 | 4 | `schedulechangevalidation` — 3 of 3 rules + runner | **done** |
 | 4 | `shiftdifferenceot` (`ShiftDiffOt`) — 1 of 1 rule + runner | **done** |
-| 1+ | the other 13 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `mealpunch` — 2 of 2 rules | **done** (no runner: the punch loader drives them) |
+| 1+ | the other 12 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 19 ported, 13 not started.
+32 `RuleType`s in all; 20 ported, 12 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**2,089 tests, 889 of them transcribed Java assertions.** Clippy clean,
+**2,100 tests, 896 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -142,7 +143,6 @@ lesson, read the Java before estimating any of these.
 | `EmployeeEvent` (EE) | 3 | 4 | `employeeevent` |
 | `EmployeePoints` (EP) | 18 | 21 | `employeepoints` |
 | `HolidayEligibility` (HE) | 12 | 13 | `holidayeligibility`; `HolidayMatcher` at the algorithm root |
-| `MealPunch` (MP) | 2 | 2 | `mealpunch`; single-item type |
 | `PostCalc` (PC) | 8 | 13 | `postcalc`; runner `PostCalcRunner` |
 | `PostPunch` (PP) | 9 | 10 | `postpunch` |
 | `ReconcileEmployee` (RE) | 2 | 3 | `reconcileemployee` |
@@ -350,6 +350,7 @@ resolves anywhere in the file.
 | 119–121 | `schedulelabeladdendum` |
 | 122–124 | `schedulechangevalidation` |
 | 125–126 | `shiftdifferenceot` |
+| 127–129 | `mealpunch` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4473,3 +4474,51 @@ registry.
      `switch` falls through to `rate = 0`.
 
 126. **`shift.setShiftDiffOTHoursDistribution` is not ported**, being a dead write.
+
+## `mealpunch` — done
+
+`RuleType::MealPunch` (`MP`): `NoMealPunch` and `FixedMealEarning`, with their
+configs (Java directory `mealpunch`, 154 lines). **11 tests, 7 transcribed Java
+assertions** — all of `FixedMealEarningRuleConfigTest` that applies to a runtime
+config (defaults, and the six rows of the validation table; its "properties"
+test checks UI property types and is not ported). The two rules have no Groovy
+spec; their tests are written from the Java.
+
+Each rule answers two questions, so the trait has two methods: `execute` (may this
+employee take a meal punch now: allow / disallow / allow with the time off the
+clock) and `process_meal_punch` (does an arrived meal punch earn something).
+**There is no runner to port**: `PunchMatcher.handleMealPunches` in the punch
+loader calls `processMealPunch`, and the clock's meal service calls `execute`.
+Both are outside the rules tree.
+
+New surface: `TempPunch` (employee, job, time); `SchedulePresencePort`
+(`EmployeeShiftDAO.isScheduled`); `OnClockPort` (`EmployeeInOutDAO.isEmployeeOnClock`).
+
+### Findings
+
+- **`NoMealPunchRuleConfig` reports the wrong rule class.** It sets
+  `RuleClass.NO_IPVR` (the in-punch-validation "none" rule), a copy-paste from its
+  neighbour; the catalogue's `NO_MPR` entry names the config by class name, so the
+  mistake is invisible unless something reads `config.getRuleClass()`.
+- **The "permission" rule is inverted from what the name suggests.** The default
+  `punchPermission` is `DISALLOW`, yet an employee who is **off the clock** is
+  *allowed* regardless; the configured permission applies only to someone already
+  **on the clock**. `ALLOW` skips the clock check entirely.
+- **`scheduledOnly` is the only schedule gate** and runs first: an unscheduled
+  employee is disallowed whatever `punchPermission` says.
+- **The earning note** uses the rule *set's* name, which a `RuleItem` here cannot
+  supply (it holds only the set's id); the caller passes it in.
+- **The earning has no shift** (`setShift(null)`), unlike nearly every shift rule's
+  earning, and uses the status for the punch's job rather than the home job.
+
+### Deliberate divergences (continued)
+
+127. **`NoMealPunchRuleConfig` reports `NO_MPR`**, not Java's copy-pasted `NO_IPVR`.
+
+128. **An unknown `punchPermission` code is treated as `DISALLOW`**, where
+     `MealPunchPermission.fromCode` throws.
+
+129. **The earning note's timestamp is the ISO form** (`2014-05-06T12:00:00`),
+     where Java formats it with the locale-aware `ResourceMgr.formatLocalDateTime`
+     (not ported). An unresolvable earning type returns no earning instead of an
+     earning with a null type.
