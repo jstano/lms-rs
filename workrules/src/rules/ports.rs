@@ -172,6 +172,20 @@ pub trait EmployeeEarningPort {
     ) -> Option<f64>;
 }
 
+/// Persisting a shift. `EmployeeShiftDAO.save`.
+///
+/// Its own trait rather than a method on [`EmployeeShiftPort`], which is
+/// about reading totals: `SplitToScheduleCorrectionRuleImpl` is the only rule
+/// that writes a shift, and a rule that only reads should not need an
+/// implementor that can write.
+///
+/// Takes `&mut` because Hibernate's `save` assigns the new row's id onto the
+/// entity it is given.
+pub trait EmployeeShiftSavePort {
+    /// Persist a new shift, assigning its id.
+    fn save(&self, shift: &mut crate::entity::employee_shift::EmployeeShift);
+}
+
 /// Shift totals the rules need but do not hold. `EmployeeShiftDAO`.
 ///
 /// The Java DAO is 1,497 lines; these are the methods the rules tree reaches.

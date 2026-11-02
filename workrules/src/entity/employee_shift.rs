@@ -36,6 +36,7 @@
 //! Five of the six punch-rounding rules reach the shift this way, so this is
 //! the normal case, not an exception.
 
+use crate::common::dates::is_between_exclusive;
 use crate::common::enums::punch_type::PunchType;
 use crate::common::enums::shift_adjust_type::ShiftAdjustType;
 use crate::common::enums::shift_error_type::ShiftErrorType;
@@ -467,6 +468,94 @@ impl EmployeeShift {
         PunchCursor { shift: self, index }
     }
 
+    /// Append a punch and recompute hours. `addPunch(EmployeeShiftPunch)`.
+    ///
+    /// Like Java's, this does **not** touch the shift's start and end times:
+    /// those move only when a punch's rounded time is *set* while the punch
+    /// already belongs to a shift (see [`PunchCursor::set_rounded_time`]).
+    /// `OutPunchCorrectionRuleImpl` gets the end time by setting the new
+    /// punch's rounded time *before* adding it, with the back-reference
+    /// already in place; the port reproduces that end state with
+    /// [`reset_start_and_end_times_from_punch`](Self::reset_start_and_end_times_from_punch)
+    /// after the add.
+    pub fn add_punch(&mut self, punch: EmployeeShiftPunch) {
+        self.punches.push(punch);
+        self.calc_worked_hours();
+    }
+
+    /// Mutable access to one punch for the writes that carry no shift
+    /// callback (`setAdjTime`, `setPunchTime`, `setID`). The rounded time must
+    /// still go through a [`PunchCursor`].
+    pub(crate) fn punch_mut(&mut self, index: usize) -> &mut EmployeeShiftPunch {
+        &mut self.punches[index]
+    }
+
+    /// Re-derive start and end from the punches. `ShiftUtil.setTimesFromPunches`.
+    ///
+    /// Both are cleared first, then the **last** IN's and OUT's rounded times
+    /// win. Does not recompute hours, as in Java.
+    pub fn set_times_from_punches(&mut self) {
+        self.start_date_time = None;
+        self.end_date_time = None;
+        for punch in &self.punches {
+            match punch.punch_type() {
+                PunchType::In => self.start_date_time = punch.rounded_time(),
+                PunchType::Out => self.end_date_time = punch.rounded_time(),
+                _ => {}
+            }
+        }
+    }
+
+    /// Do two shifts overlap in time? `ShiftUtil.isOverlappingShifts`.
+    ///
+    /// True for identical spans, or when either shift's start or end falls
+    /// strictly inside the other. Two shifts that merely touch (one ends
+    /// where the next begins) do **not** overlap. False unless both shifts
+    /// have both times.
+    pub fn is_overlapping(&self, other: &EmployeeShift) -> bool {
+        let (Some(s1), Some(e1), Some(s2), Some(e2)) = (
+            self.start_date_time,
+            self.end_date_time,
+            other.start_date_time,
+            other.end_date_time,
+        ) else {
+            return false;
+        };
+        (s1 == s2 && e1 == e2)
+            || is_between_exclusive(s1, s2, e2)
+            || is_between_exclusive(e1, s2, e2)
+            || is_between_exclusive(s2, s1, e1)
+            || is_between_exclusive(e2, s1, e1)
+    }
+
+    /// Forget that any `schedulelunch` rule touched this shift — the narrowed
+    /// stand-in for `adjustments.clear()` (divergence 77).
+    pub fn clear_schedule_lunch_adjustment(&mut self) {
+        self.schedule_lunch_adjustment = false;
+    }
+
+    /// Set the shift's id. `setID()`; 0 means "not yet persisted".
+    pub fn set_id(&mut self, id: i32) {
+        self.id = id;
+    }
+
+    /// Change the shift type. `setShiftType()`.
+    pub fn set_shift_type(&mut self, shift_type: ShiftType) {
+        self.shift_type = shift_type;
+    }
+
+    /// `setShiftCategory()`. Java also mirrors the category onto the planned
+    /// shift; this crate's [`PlannedShift`] carries no category, so there is
+    /// nothing to mirror.
+    pub fn set_shift_category_id(&mut self, shift_category_id: Option<i32>) {
+        self.shift_category_id = shift_category_id;
+    }
+
+    /// `setPlannedShift()`.
+    pub fn set_planned_shift(&mut self, planned_shift: Option<PlannedShift>) {
+        self.planned_shift = planned_shift;
+    }
+
     /// The punch indices in the order `PunchTimeComparator` puts them.
     ///
     /// Java sorts a copy of the punch list; sorting indices says the same thing
@@ -793,7 +882,7 @@ impl EmployeeShift {
     ///
     /// Fired by [`PunchCursor::set_rounded_time`], never called directly by a
     /// rule — which is the whole reason the cursor exists.
-    fn reset_start_and_end_times_from_punch(&mut self, index: usize) {
+    pub(crate) fn reset_start_and_end_times_from_punch(&mut self, index: usize) {
         match self.punches[index].punch_type() {
             PunchType::In => self.start_date_time = self.punches[index].rounded_time(),
             PunchType::Out => self.end_date_time = self.punches[index].rounded_time(),

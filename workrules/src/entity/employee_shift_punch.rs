@@ -44,6 +44,11 @@ pub struct EmployeeShiftPunch {
     rounded_time: Option<LocalDateTime>,
     badge_no: String,
     source: PunchSource,
+    /// `rawPunch` — the text the clock sent; rules that synthesise a punch
+    /// stamp it with their own name.
+    raw_punch: String,
+    /// `rounded` — whether a rounding rule has processed this punch.
+    rounded: bool,
 }
 
 impl EmployeeShiftPunch {
@@ -62,7 +67,53 @@ impl EmployeeShiftPunch {
             rounded_time: Some(time),
             badge_no: String::new(),
             source,
+            raw_punch: String::new(),
+            rounded: false,
         }
+    }
+
+    /// Give the punch distinct punch, adjusted and rounded times.
+    ///
+    /// [`new`](Self::new) starts all three equal; a punch synthesised from
+    /// another (`OutPunchCorrectionRuleImpl`) offsets each of the source's own
+    /// three by the same amount, and the source's three need not be equal.
+    #[must_use]
+    pub fn with_times(
+        mut self,
+        punch_time: Option<LocalDateTime>,
+        adj_time: Option<LocalDateTime>,
+        rounded_time: Option<LocalDateTime>,
+    ) -> Self {
+        self.punch_time = punch_time;
+        self.adj_time = adj_time;
+        self.rounded_time = rounded_time;
+        self
+    }
+
+    /// `getRawPunch()`.
+    pub fn raw_punch(&self) -> &str {
+        &self.raw_punch
+    }
+
+    /// `setRawPunch()`.
+    pub fn set_raw_punch(&mut self, raw_punch: impl Into<String>) {
+        self.raw_punch = raw_punch.into();
+    }
+
+    /// `getRounded()`.
+    pub fn rounded(&self) -> bool {
+        self.rounded
+    }
+
+    /// `setRounded()`.
+    pub fn set_rounded(&mut self, rounded: bool) {
+        self.rounded = rounded;
+    }
+
+    /// `setID()`. A shift split off a schedule resets its punches' ids to 0 so
+    /// they persist as new rows.
+    pub fn set_id(&mut self, id: i32) {
+        self.id = id;
     }
 
     /// `getID()`.

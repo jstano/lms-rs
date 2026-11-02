@@ -13,3 +13,4 @@
 
 pub mod punch_rounding;
 pub mod regular_hours_distribution;
+pub mod shift_correction;

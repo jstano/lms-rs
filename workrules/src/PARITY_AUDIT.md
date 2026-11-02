@@ -44,15 +44,16 @@ see "Test backing" below for why.
 | 4 | `schedulerestriction` — 5 of 6 rules | **done, one deferred** |
 | 4 | `schedulelunch` — 3 of 3 rules | **done** |
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
-| 4+ | `shiftcorrection`, `dailyearning`, `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
+| 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
+| 4+ | `dailyearning`, `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 11 ported, 4 prioritized next, 17 more behind them.
+32 `RuleType`s in all; 12 ported, 3 prioritized next, 17 more behind them.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**1,566 tests, 476 of them transcribed Java assertions.** Clippy clean,
+**1,610 tests, 493 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -94,7 +95,10 @@ one deferred" at the end of this file.
 end of this file.
 
 **`shiftadjustment` is done — all 7 rules.** See "`shiftadjustment` — done" at
-the end of this file. Next up: `shiftcorrection`.
+the end of this file.
+
+**`shiftcorrection` is done — all 3 rules and its runner.** See
+"`shiftcorrection` — done" at the end of this file. Next up: `dailyearning`.
 
 ### Unstarted scope inventory
 
@@ -106,11 +110,10 @@ abstract bases**, so it normally exceeds the catalogue count by 1-3. Counts are
 a first measurement, not a scoping pass: per the "Measure before scheduling"
 lesson, read the Java before estimating any of these.
 
-**Prioritized next, in this order, at the user's request:**
+**Prioritized next, in this order, at the user's request** (`shiftcorrection` is now done):
 
 | RuleType (code) | Catalogue | Java impls | Java directory / notes |
 |---|---:|---:|---|
-| `ShiftCorrection` (SC) | 3 | 4 | `shiftcorrection` |
 | `DailyDifferential` (DD) | 9 | 10 | `dailyearning` |
 | `WeeklyDifferential` (WD) | 8 | 9 | `weeklyearning` |
 | `ShiftDifferential` (DF) | 23 | 24 | `shiftearning` — own `utility` subpackage; "closer to a second `hoursdistribution`" |
@@ -178,8 +181,8 @@ rule, each family needing its own runner.
 
 **T&A-only types not yet ported (~130 catalogue rules)**
 
-- Prioritized, 43 rules: `ShiftCorrection` 3, `DailyDifferential` 9,
-  `WeeklyDifferential` 8, `ShiftDifferential` 23.
+- Prioritized, 40 rules: `DailyDifferential` 9, `WeeklyDifferential` 8,
+  `ShiftDifferential` 23 (`ShiftCorrection` is done).
 - Other T&A, ~47 rules: `PostCalc` 8, `PostPunch` 9, `HolidayEligibility` 12,
   `MealPunch` 2, `ReconcileEmployee` 2, `ClosePayPeriod` 2, `EmployeeEvent` 3,
   `TimeOffDistribution` 3, `TimeOffEarning` 3 (plus `EmployeeAlert` above).
@@ -194,17 +197,16 @@ points, alerts and time-off can be deferred):
 1. Finish scheduling: `ScheduleLabel`, `ScheduleLabelAddendum`,
    `ScheduleChangeValidation`, the deferred `ScheduleRestriction` rule,
    `ShiftDiffOt`.
-2. The four prioritized T&A families: `ShiftCorrection` and the three
-   differential types.
+2. The three prioritized differential types (`ShiftCorrection` is done).
 3. The payroll-calculation and punch-lifecycle types: `PostCalc`, `PostPunch`,
    `HolidayEligibility`, `MealPunch`, `ReconcileEmployee`, `ClosePayPeriod`.
-4. The runner layer (see below), unported for nine of the eleven finished
+4. The runner layer (see below), unported for nine of the twelve finished
    families.
 
 ### Runner inventory
 
 Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
-`rules/runner/{punch_rounding,regular_hours_distribution}.rs` only.
+`rules/runner/{punch_rounding,regular_hours_distribution,shift_correction}.rs` only.
 
 | Java runner | State |
 |---|---|
@@ -214,7 +216,7 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `RegularRateRunner`, `OTRateRunner`, `DTRateRunner`, `EarningRateRunner` (+ `EarningRateRunnerData`, `EarningRateRunnerPair`), `PremiumRateRunner`, `RateRunner` | not ported — rate rules are |
 | `ShiftAdjustmentRunner` | not ported — rules are |
 | `ScheduleLunchRunner`, `AuditableScheduleLunchRunner` | not ported — rules are |
-| `ShiftCorrectionRunner` | not ported — rules not started |
+| `ShiftCorrectionRunner` | **ported** (`rules/runner/shift_correction.rs`) |
 | `ShiftDifferentialRunner`, `DailyDifferentialRunner`, `WeeklyDifferentialRuleRunner`, `DifferentialRunner` | not ported — rules not started |
 | `ShiftDifferenceOTRunner` | not ported |
 | `PostCalcRunner` | not ported — rules not started |
@@ -222,7 +224,7 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `ScheduleLabelRunner`, `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | not ported — rules not started |
 | `ClearTimeCardEarnings`, `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
 
-So for nine of the eleven ported families the rules exist and are tested
+So for nine of the twelve ported families the rules exist and are tested
 individually but nothing yet drives them in Java's order; the runner layer
 (and the end-to-end calculation order across families) is a separate piece of
 work that no wave currently covers.
@@ -305,7 +307,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Seventy-nine so far, listed at the end of the section that introduced them. The
+Eighty-five so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -327,6 +329,7 @@ resolves anywhere in the file.
 | 69–71 | `schedulerestriction` |
 | 72–75 | `schedulelunch` |
 | 76–79 | `shiftadjustment` |
+| 80–85 | `shiftcorrection` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3304,3 +3307,78 @@ not only an internal helper of `calcWorkedHours`.
     in the ported algorithm reads the result differently for overlapping
     versus non-overlapping tiers, and no ported behaviour test configures
     more than one nonzero tier at a time.
+
+## `shiftcorrection` — done
+
+Fourth of the seven scheduling-prioritized families. **44 tests, 17 of them
+transcribed Java assertions**: all 14 cases of
+`SplitToScheduleCorrectionRuleImplTest.groovy`, the config spec's defaults and
+validation, and the runner spec's single case. `OutPunchCorrectionRuleImpl`
+and `ShiftCategoryCorrectionRuleImpl` have no Groovy spec; their behaviour
+tests are written from the Java.
+
+| Ported | Java spec cases |
+|---|---:|
+| `OutPunchCorrectionRuleImpl` | no spec — behaviour tests written from the Java |
+| `ShiftCategoryCorrectionRuleImpl` | no spec — behaviour tests written from the Java |
+| `SplitToScheduleCorrectionRuleImpl` | 14/14 |
+| `ShiftCorrectionRunner` | 1/1, plus two added |
+
+### Findings
+
+- **`RuleItemPriorityComparator` is used by five runners, not one.** The
+  comment in `rules/priority.rs` said only `PostPunchRuleRunner` calls it;
+  `grep` shows `ShiftCorrectionRunner`, `ShiftDifferentialRunner`,
+  `DailyDifferentialRunner` and `ScheduleChangeValidationRunner` do too. The
+  comment is corrected. The two differential runners and
+  `ScheduleChangeValidationRunner` will need to sort when they are ported.
+- **`ShiftCategoryCorrectionRuleImpl`'s graces are named backwards.** The
+  window opens `gracePostSchedStart` minutes before the punch and closes
+  `gracePreSchedStart` minutes after it. Invisible at the 60/60 default.
+- **This is the first rule family that writes shifts.** `SplitToSchedule`
+  creates and persists shifts and appends them to the time card, so its
+  `execute` takes `&mut dyn TimeCard` (the one family that does) and the
+  family needed `EmployeeShiftSavePort`.
+- **`OutPunchCorrectionRuleImpl` gets its end time through a setter-ordering
+  side effect.** It sets the new punch's rounded time *after*
+  `setEmployeeShift`, which fires the shift callback; `addPunch` itself never
+  touches start/end. `EmployeeShift::add_punch` mirrors `addPunch` (no start/end
+  change) and the rule then fires the callback explicitly.
+- **Neither `EmployeeShift` nor its collections override `equals`**, so
+  `findContiguousSchedules`' `!=` and `List.contains` are identity, not value,
+  comparisons — the port compares positions.
+
+### Deliberate divergences (continued)
+
+80. **The runner corrects a clone and writes it back at the same index.**
+    Java hands each rule the live shift and the live time card. A
+    `&mut EmployeeShift` borrowed from the card cannot coexist with the
+    `&mut dyn TimeCard` `SplitToSchedule` appends to. Shifts a rule appends
+    land after the originals and are not visited this pass, matching Java's
+    copied iteration list. During `execute` the card still holds the
+    *pre-correction* original; none of the three rules reads it.
+
+81. **`OutPunchCorrectionRuleImpl` backfills its parameter from the defaults.**
+    Java never calls `fixMap` there, so a rule item with no `dailyHours`
+    throws `NullPointerException` in `Double.parseDouble`. The port reads 8.00.
+
+82. **`ShiftCategoryCorrectionRuleImpl`'s swapped graces are reproduced, not
+    fixed** (see Findings).
+
+83. **Missing IN/OUT punches and null times skip rather than throw.** Java
+    dereferences `getPunchOfType(OUT)` and `getAdjTime()` unchecked; the port
+    returns without changing the shift. Unreachable for shifts that passed the
+    rules' own gates.
+
+84. **`EmployeeShiftDAO.save` is its own narrow port, and later changes to a
+    saved split are not re-saved.** Java saves the split, then may mutate it
+    again when a later schedule cuts it further, relying on the Hibernate
+    session to flush. The port calls `EmployeeShiftSavePort::save` once per
+    split at creation time; the persisted row for a split that is cut again
+    would be stale until the caller saves the card. The spec counts `save`
+    calls, which match.
+
+85. **Not modeled on the copied schedule:** `assignment` (the shift has no such
+    field here) and `flags`. `setAdjustments().clear()` becomes clearing the
+    schedule-lunch flag (divergence 77) — the `adjHours` scalar is left as
+    copied, as in Java where `clear()` does not touch it either.

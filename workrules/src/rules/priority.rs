@@ -7,8 +7,10 @@
 //! # This is not the general ordering mechanism
 //!
 //! It looks like one, and it is easy to assume every runner sorts its rule
-//! items this way. **Only `PostPunchRuleRunner` calls it.** Every other runner
-//! iterates `ruleSet.getRuleItems()` in whatever order Hibernate returned, and
+//! items this way. **Only five runners call it**: `PostPunchRuleRunner`,
+//! `ShiftCorrectionRunner`, `ShiftDifferentialRunner`, `DailyDifferentialRunner`
+//! and `ScheduleChangeValidationRunner`. Every other runner iterates
+//! `ruleSet.getRuleItems()` in whatever order Hibernate returned, and
 //! reproducing Java means *not* sorting there either.
 //!
 //! It mostly does not matter, because seven of the 32 rule types have

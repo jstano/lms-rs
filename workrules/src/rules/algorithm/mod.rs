@@ -17,6 +17,7 @@ pub mod regularrate;
 pub mod schedulelunch;
 pub mod schedulerestriction;
 pub mod shiftadjustment;
+pub mod shiftcorrection;
 pub mod shiftearning;
 pub mod single_distribution_type_config;
 pub mod utility;
