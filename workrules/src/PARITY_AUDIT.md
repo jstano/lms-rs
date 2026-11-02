@@ -47,7 +47,7 @@ see "Test backing" below for why.
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
-| 4+ | `shiftearning` | not started — prioritized next, at the user's request |
+| 4+ | `shiftearning` — 23 rules + runner | **scoped, not yet ported** — see "Scoping — `shiftearning`" |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
 32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
@@ -3761,3 +3761,102 @@ New surface: `PeriodSalaryPort`, `Employee::is_active_home_job_status_all_period
 99. **`SalariedMinWage` takes a `PeriodSalaryPort`** in place of
     `PayRateCalculator`. The port is a single scalar lookup; the calculator's own
     logic (annual rates, pay-period types) stays out of this crate.
+
+## Scoping — `shiftearning`
+
+`RuleType::ShiftDifferential` (`DF`). Java directory `shiftearning`; runner
+`ShiftDifferentialRunner` (extends `DifferentialRunner`). The last of the seven
+families prioritized for scheduling, and the largest of them: **23 catalogue
+rules, 25 `*Impl` files** (the base `ShiftEarningRuleImpl`, plus
+`NoEarningRuleImpl`, which has a catalogue entry), a `utility` subpackage, ~3,600
+lines of rules, ~2,700 lines of configs and ~3,100 lines of Groovy rule specs
+(12 rule specs, 12 config specs, one runner spec, one utility spec).
+Measured from the Java and the Rust tree; **nothing ported yet**. The
+`ShiftDiffOt` type is a different family: its one rule is the deferred
+`ShiftDifferenceOTRuleImpl` and its runner `ShiftDifferenceOTRunner` is
+separate (see the deferred list).
+
+Unlike the daily and weekly families these rules are driven **per shift**, as
+`punchrounding` and `shiftcorrection` were: `execute(EmployeeShift, TimeCard,
+RuleItem)`. The runner skips shifts with errors, resolves the rule set per
+shift (employee, job, shift date), **sorts by priority**
+(`RuleItemPriorityComparator` — one of the five users listed under
+`shiftcorrection`) and runs each item. Its clearing step removes earnings of
+**three** rule types: `SHIFT_DIFFERENTIAL`, `HOURS_DISTRIBUTION` and
+`POST_CALC` — so it also deletes earnings those families wrote.
+
+| Rule | Lines | Spec | What it needs beyond today's surface |
+|---|---:|---:|---|
+| `NoEarningRuleImpl` | 26 | — | nothing (no-op) |
+| `HoursThresholdFixedRuleImpl` | 70 | — | `ShiftUtil` |
+| `DOWFlatRuleImpl` | 74 | — | `DateUtil` |
+| `DOWRateFactorRuleImpl` | 85 | 130 | `DateUtil`, UOM |
+| `WeeklyJobHrsFixedRuleImpl` | 90 | — | `Weeks`, week `DateRange` |
+| `MinimumHoursWorkedShiftDifferentialRuleImpl` | 86 | 338 | `MinimumHoursWorkedRuleHelper` (ported in `dailyearning`) |
+| `BreakPeriodPenaltyHoursRuleImpl` | 84 | — | break periods (`ShiftUtil.getBreaks`) |
+| `PaidBreakFixedHrsRuleImpl` | 100 | — | break periods |
+| `HoursThresholdFixedWithMaxCapRuleImpl` | 107 | 227 | `Weeks`, week `DateRange` |
+| `ShiftStartTimeFlatRuleImpl` | 116 | — | date-time periods |
+| `StartEndBetweenPremiumRuleImpl` | 122 | 107 | `ShiftTimeWindowUtility` (half in Rust already) |
+| `ContractToFullTimeRuleImpl` | 117 | — | `Weeks`, contract hours, `RuleUtils` |
+| `ContractGuaranteeRuleImpl` | 148 | — | contract hours |
+| `TimeBetweenShiftsRuleImpl` | 139 | — | nothing new beyond shifts |
+| `DailySpreadShiftDifferentialRuleImpl` | 158 | 143 | `ShiftNetHoursComparator` |
+| `HolidayRateFactorRuleImpl` | 190 | 168 | `HolidayDAO` (ported), `JSONUtils` (ported) |
+| `AnniversaryWorkedShiftDifferentialRuleImpl` | 195 | 176 | `AnniversaryDateTypes` (reconstructed in `dailyearning`) |
+| `BreakPeriodPenaltyRuleImpl` | 211 | — | break periods |
+| `HolidayTimeOfDayRuleImpl` | 171 | 206 | `HolidayMatcher`, `RuleUtils` |
+| `TimeOfDayDifferentialRateRuleImpl` | 221 | — | date-time periods |
+| `DOWHolidayRuleImpl` | 242 | 265 | **`EmployeeShiftAdjustment`** (writes one), `Holiday` |
+| `SplitShiftDifferentialRateRuleImpl` | 308 | 368 | **`SplitShiftPayTypes`**, **`CurrentProperty`** |
+| `TimeOfDayPctDifferentialRateRuleImpl` | 343 | 521 | `RoundingOption`, date-time ranges |
+
+(`HoursThresholdFixed`, `DOWFlat` and the other no-spec rules are exactly the
+ones the audit's "no spec — behaviour tests from the Java" convention covers.)
+
+### What is missing on the Rust side
+
+1. **The base-class pricing helpers.** `ShiftEarningRuleImpl.getEarningRate`
+   has four overloads (shift or job+date, earning type or earning id) and is
+   what `dailyearning`'s `earning_rate_for_shift` already is for the first;
+   the job+date form is new. A shared `ShiftEarningRule` trait.
+2. **`EmployeeShiftAdjustment` as an entity.** `DOWHolidayRuleImpl` is the first
+   rule to *append* an adjustment (`ShiftAdjustType`) rather than fold it into
+   `adj_hours`; `EmployeeShift` models adjustments only as scalars and flags
+   (divergence 76-77). Probably one more narrowing, but `DOWHoliday`'s spec
+   (265 lines) decides it.
+3. **Two enums/services not in the `taps` checkout:** `SplitShiftPayTypes`
+   (`common.ta.splitshiftpaytypes`) and, from `CurrentProperty`, the "current
+   property" the rule reads a fallback minimum wage from. Both will be
+   reconstructed from the rule and spec, as `AnniversaryDateTypes` was.
+4. **`HolidayMatcher`** (`algorithm/HolidayMatcher.java`), used by
+   `HolidayTimeOfDay`; whether `HolidayRateFactor` and `DOWHoliday` use it or
+   carry their own copy of the logic is for slice 4 to read.
+5. **`Weeks`** (`tbx.core`), used by three weekly-cap rules; the work-week
+   arithmetic itself exists (`WeeklyDateRange`).
+6. **The runner**, `ShiftDifferentialRunner`, and the shared
+   `clear_time_card_earnings` already take a rule-type list — it needs
+   `[ShiftDifferential, HoursDistribution, PostCalc]`.
+
+### Plan
+
+Five slices, each its own commit:
+
+1. **Shared base + simple rules (9):** the `ShiftEarningRule` trait and pricing
+   helpers, `NoEarning`, `HoursThresholdFixed`, `DOWFlat`, `DOWRateFactor`,
+   `WeeklyJobHrsFixed`, `HoursThresholdFixedWithMaxCap`, `TimeBetweenShifts`,
+   `MinimumHoursWorkedShiftDifferential`, `ShiftStartTimeFlat`.
+2. **Break and window rules (4):** `PaidBreakFixedHrs`, `BreakPeriodPenaltyHours`,
+   `BreakPeriodPenalty`, `StartEndBetweenPremium` (+ `ShiftTimeWindowUtility`).
+3. **Time-of-day family (3):** `TimeOfDayDifferentialRate`, `TimeOfDayPct`,
+   `DailySpreadShiftDifferential` — the 521-line spec makes `TimeOfDayPct` the
+   single hardest rule in the family.
+4. **Holiday and anniversary (4):** `HolidayRateFactor`, `HolidayTimeOfDay`,
+   `DOWHoliday`, `AnniversaryWorkedShiftDifferential`.
+5. **Contract, split-shift and the runner (3 + runner):** `ContractToFullTime`,
+   `ContractGuarantee`, `SplitShiftDifferentialRate`, `ShiftDifferentialRunner`
+   and the registry.
+
+Read the Java for each slice before estimating it: the "Measure before
+scheduling" lesson has held for every family so far, and the dependency column
+above comes from imports, not from reading the rule bodies.
