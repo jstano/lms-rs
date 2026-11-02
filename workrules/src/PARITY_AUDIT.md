@@ -47,7 +47,7 @@ see "Test backing" below for why.
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
-| 4+ | `shiftearning` — 13 of 23 rules (slices 1-2) + shared base | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 1" |
+| 4+ | `shiftearning` — 16 of 23 rules (slices 1-3) + shared base | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 1" |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
 32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
@@ -55,7 +55,7 @@ see "Test backing" below for why.
 
 ## Where the work stands
 
-**1,877 tests, 641 of them transcribed Java assertions.** Clippy clean,
+**1,916 tests, 689 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -316,7 +316,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-One hundred and four so far, listed at the end of the section that introduced them. The
+One hundred and seven so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -341,7 +341,7 @@ resolves anywhere in the file.
 | 80–85 | `shiftcorrection` |
 | 86–94 | `dailyearning` |
 | 95–99 | `weeklyearning` |
-| 100–104 | `shiftearning` |
+| 100–107 | `shiftearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3999,3 +3999,74 @@ of `ShiftUtil.getBreaks`; `breaks()` is now its `false` case) and
 104. **`BreakPeriodPenalty` ignores a RULE earning that has no rule item** when
      counting the day's penalties; Java's `earning.getRuleItem().equals(ruleItem)`
      would throw on it.
+
+## `shiftearning` — slice 3
+
+The three time-of-day rules, with their configs: `TimeOfDayDifferentialRate`,
+`TimeOfDayPctDifferentialRate` and `DailySpreadShiftDifferential`. **39 tests,
+48 of them transcribed Java assertions** (the count is higher than the number of
+test functions because a `where:` table is one function here): all 41 rows of
+`TimeOfDayPctDifferentialRateRuleImplTest` and the 7 rows of
+`DailySpreadShiftDifferentialRuleImplTest`. `TimeOfDayDifferentialRate` has no
+Groovy spec; its tests are written from the Java.
+
+| Ported | Java spec cases |
+|---|---:|
+| `TimeOfDayDifferentialRateRuleImpl` | no spec — behaviour tests written from the Java |
+| `TimeOfDayPctDifferentialRateRuleImpl` | 41/41 rows |
+| `DailySpreadShiftDifferentialRuleImpl` | 7/7 rows |
+
+New surface: `TimeCard::work_day_start_time` (default midnight;
+`TimeCardData::with_work_day_start_time`), standing in for
+`PayGroup.getWorkDayStartTime()`.
+
+### Findings
+
+- **`TimeOfDayPct`'s 41 rows went in green on the first compile**, which is the
+  reverse of the audit's usual experience with a large spec. Worth stating the
+  reason rather than trusting it: the rule is almost entirely arithmetic on
+  `DateTimeRange`s and `RoundingOption`, both already exact in this crate, and
+  the day-cut split (the only structurally new part) is covered by the spec's
+  last four rows, which check both dates and both rates. The rows that matter
+  most for confidence are the rounding table (2.22 / 2.25 / 2.25 / 2.17 from the
+  same 7,980 seconds) and the WATSON-11507 table, which pins `DOWN` rounding at
+  every five minutes.
+- **`TimeOfDayPct` prices each earning for its own date.** The spec's
+  employee changes rate at midnight (1 until the shift date, 2 after) so the two
+  earnings of a split shift have different rates (1 and 2).
+- **A break that "swallows" the premium window zeroes it, but the loop goes
+  on**, so in `TimeOfDayDifferentialRate` a *later* break can subtract from zero
+  and leave the premium negative; nothing is then paid (it must be above zero).
+  `TimeOfDayPct`'s version zeroes the seconds the same way and has the same
+  property. Both are reproduced as the Java does them.
+- **`TimeOfDayDifferentialRate` clamps *after* the threshold test**:
+  `minAmount` can raise a premium of 0.4 hours to a paid 3 hours, but only once
+  the 0.4 has passed `minHrsBetween`.
+- **`TimeOfDayDifferentialRate` pays nothing for a `HOURS_RATE` earning type**
+  (the `switch` has no case for it) and silently drops the earning-less result.
+- **`TimeOfDayPct`'s percent gate is `percent <= max || max >= 1`.** With the
+  default `maxPctHrsBetween` of 1, a premium that exceeds the shift's hours
+  (possible when reallocated hours shrink the shift) still passes.
+- **`DailySpreadShiftDifferential`'s spec is contrived on purpose.** Each
+  shift's `netHours` is `outHour + inHour`, which exists only to fix the sort
+  order (least, home, most-hours-earlier, most-hours-later), and every shift's
+  punches are on `today` whatever its shift date — so "tomorrow" and
+  "yesterday" shifts are excluded by date, not by punch time.
+- **`TimeOfDayPct` and `DailySpread` are the two rules in the family that need
+  the rate for a date other than the shift's** (`TimeOfDayPct`) or the shift's
+  *employee job status* rather than its job (`DailySpread`); both go through
+  `Employee::employee_job_status`, so an employee with no status for that job
+  and date pays nothing instead of throwing.
+
+### Deliberate divergences (continued)
+
+105. **`DailySpreadShiftDifferential` skips a shift with no IN or OUT punch** when
+     finding the day's first-in/last-out; Java dereferences the null. Same
+     stance as divergence 83.
+
+106. **`TimeOfDayPct` writes its `payNetHrs` per-date earnings in date order.**
+     Java groups into a `HashMap`, whose order is unspecified. Same as divergence
+     96.
+
+107. **An unknown `roundingOption` code is treated as `NONE`.** Java's
+     `RoundingOption.fromCode` throws `IllegalArgumentException`.

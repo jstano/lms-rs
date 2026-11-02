@@ -6,8 +6,8 @@
 //!
 //! The last of the seven families prioritized for scheduling, scoped in
 //! `PARITY_AUDIT.md` ("Scoping — `shiftearning`") and ported in five slices.
-//! **Slices 1 and 2** are here: the shared base, nine simple rules, and the four
-//! break and window rules.
+//! **Slices 1-3** are here: the shared base, nine simple rules, the four
+//! break and window rules, and the three time-of-day rules.
 //!
 //! # Per shift
 //!
@@ -29,6 +29,7 @@
 pub mod break_period_penalty;
 pub mod break_period_penalty_hours;
 pub mod config;
+pub mod daily_spread_shift_differential;
 pub mod dow_flat;
 pub mod dow_rate_factor;
 pub mod hours_threshold_fixed;
@@ -39,6 +40,8 @@ pub mod paid_break_fixed_hrs;
 pub mod shift_start_time_flat;
 pub mod start_end_between_premium;
 pub mod time_between_shifts;
+pub mod time_of_day_differential_rate;
+pub mod time_of_day_pct_differential_rate;
 pub mod utility;
 pub mod weekly_job_hrs_fixed;
 

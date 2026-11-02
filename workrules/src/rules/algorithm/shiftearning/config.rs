@@ -55,6 +55,22 @@ pub const LATEST_END_TIME_PROP: &str = "latestEndTime";
 pub const EARNING_AMOUNT_PROP: &str = "earningAmount";
 pub const PAY_ONLY_ONCE_PROP: &str = "payOnlyOnce";
 pub const USE_ACTUAL_TIME_PROP: &str = "useActualTime";
+/// Slice 3: the time-of-day and spread rules' keys.
+pub const MIN_HRS_BETWEEN: &str = "minHrsBetween";
+pub const MIN_HOURS_PAID: &str = "minAmount";
+pub const MAX_HOURS_PAID: &str = "maxAmount";
+pub const PCT_WAGE_PROP: &str = "pctWage";
+pub const MIN_PCT_HRS_BETWEEN: &str = "pctHrsBetween";
+pub const MAX_PCT_HRS_BETWEEN: &str = "maxPctHrsBetween";
+pub const PAY_NET_HRS: &str = "payNetHrs";
+pub const EARLY_START_TIME_PROP: &str = "earliestStartTime";
+pub const LATE_START_TIME_PROP: &str = "latestStartTime";
+pub const ROUNDING_OPTION: &str = "roundingOption";
+pub const ROUND_TO: &str = "roundTo";
+pub const MAX_HRS_PAID: &str = "maxHrsPaid";
+pub const HOURS: &str = "hours";
+pub const MIN_HRS_SPREAD: &str = "minHours";
+pub const USE_MIN_WAGE: &str = "useMinWage";
 /// `DefaultPropertyFactory.MINIMUM_WAGE_PROP`.
 pub const MINIMUM_WAGE_PROP: &str = "MinimumWage";
 
@@ -456,6 +472,147 @@ impl RuleConfig for StartEndBetweenPremiumRuleConfig {
     }
 }
 
+/// `TimeOfDayDifferentialRateRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TimeOfDayDifferentialRateRuleConfig;
+
+impl RuleConfig for TimeOfDayDifferentialRateRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::TimeOfDayDifRateDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(DIFF_RATE_PROP, "5.75");
+        p.set(EARNING, "0");
+        p.set(START_TIME_PROP, "22:00:00");
+        p.set(END_TIME_PROP, "06:00:00");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(MIN_HRS_BETWEEN, "0.0");
+        p.set(DOW_PROP, "[1,2,3,4,5,6,7]");
+        p.set(MIN_HOURS_PAID, "0.0");
+        p.set(MAX_HOURS_PAID, "99");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Time Of Day Differential Rate";
+        let mut r = ValidationResults::new();
+        if p.double_at(DIFF_RATE_PROP) < 0.0 {
+            r.push(format!(
+                "{name}: Differential Rate must be greater than or equal 0"
+            ));
+        }
+        earning_selected(p, EARNING, &mut r, name);
+        if p.double_at(MIN_HRS_BETWEEN) < 0.0 {
+            r.push(format!(
+                "{name}: Min Hrs Between must be greater than or equal 0"
+            ));
+        }
+        if p.double_at(MIN_HOURS_PAID) < 0.0 {
+            r.push(format!(
+                "{name}: Min Hours Paid must be greater than or equal 0"
+            ));
+        }
+        if p.double_at(MAX_HOURS_PAID) < p.double_at(MIN_HOURS_PAID) {
+            r.push(format!(
+                "{name}: Max Hours Paid must be greater than or equal Min Hours Paid"
+            ));
+        }
+        r
+    }
+}
+
+/// `TimeOfDayPctDifferentialRateRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct TimeOfDayPctDifferentialRateRuleConfig;
+
+impl RuleConfig for TimeOfDayPctDifferentialRateRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::TodPctDifRateDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(DIFF_RATE_PROP, "0");
+        p.set(PCT_WAGE_PROP, "1.00");
+        p.set(EARNING, "0");
+        p.set(START_TIME_PROP, "22:00:00");
+        p.set(END_TIME_PROP, "06:00:00");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(MIN_HRS_BETWEEN, "0.0");
+        p.set(MIN_PCT_HRS_BETWEEN, "0.0");
+        p.set(MAX_PCT_HRS_BETWEEN, "1.0");
+        p.set(PAY_NET_HRS, "false");
+        p.set(EARLY_START_TIME_PROP, "00:00:00");
+        p.set(LATE_START_TIME_PROP, "23:59:00");
+        p.set(DOW_PROP, "[1,2,3,4,5,6,7]");
+        p.set(ROUNDING_OPTION, "NONE");
+        p.set(ROUND_TO, "5");
+        p.set(MAX_HRS_PAID, "99");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Time Of Day Pct Differential Rate";
+        let mut r = ValidationResults::new();
+        for (key, label) in [
+            (PCT_WAGE_PROP, "Pct of Job Rate"),
+            (MIN_PCT_HRS_BETWEEN, "Min. Pct. Hrs. Between"),
+            (MAX_PCT_HRS_BETWEEN, "Max. Pct. Hrs. Between"),
+        ] {
+            if !(0.0..=1.0).contains(&p.double_at(key)) {
+                r.push(format!("{name}: {label} must be between 0 and 1"));
+            }
+        }
+        for (key, label) in [
+            (DIFF_RATE_PROP, "Differential Rate"),
+            (MIN_HRS_BETWEEN, "Min. Hrs. Between"),
+        ] {
+            if p.double_at(key) < 0.0 {
+                r.push(format!("{name}: {label} must be greater than or equal 0"));
+            }
+        }
+        earning_selected(p, EARNING, &mut r, name);
+        if p.double_at(MAX_PCT_HRS_BETWEEN) < p.double_at(MIN_PCT_HRS_BETWEEN) {
+            r.push(format!("{name}: Max. Pct. Hrs. Between must be greater than or equal to Min. Pct. Hrs. Between"));
+        }
+        let round_to = p.int_at(ROUND_TO);
+        if round_to <= 0 || round_to > 60 {
+            r.push(format!(
+                "{name}: Round To must be greater than 0 and less than or equal to 60"
+            ));
+        }
+        if p.double_at(MAX_HRS_PAID) <= 0.0 {
+            r.push(format!("{name}: Max Hours Paid must be greater than 0"));
+        }
+        r
+    }
+}
+
+/// `DailySpreadShiftDifferentialRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct DailySpreadShiftDifferentialRuleConfig;
+
+impl RuleConfig for DailySpreadShiftDifferentialRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::DailySpreadShiftDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(HOURS, "1.0");
+        p.set(EARNING, "0");
+        p.set(MIN_HRS_SPREAD, "10");
+        p.set(USE_MIN_WAGE, "true");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Daily Spread Shift Differential";
+        let mut r = ValidationResults::new();
+        at_least_a_cent(p, HOURS, "Hours", &mut r, name);
+        at_least_a_cent(p, MIN_HRS_SPREAD, "Minimum Spread Hours", &mut r, name);
+        earning_selected(p, EARNING, &mut r, name);
+        r
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -589,5 +746,84 @@ mod tests {
         }
         let p = rule_params! { EARNING => "1", HOURS_PER_PENALTY => "0", MIN_SHIFT_LENGTH => "-1", MIN_BREAK_LENGTH => "-1", BREAK_LIMIT_PROP => "-1" };
         assert_eq!(PaidBreakFixedHrsRuleConfig.validate(&p).len(), 4);
+    }
+
+    #[test]
+    fn slice_three_defaults_and_validation() {
+        let g = |c: &dyn RuleConfig, k: &str| c.default_values().get(k).map(str::to_owned);
+        assert_eq!(
+            g(&TimeOfDayDifferentialRateRuleConfig, DIFF_RATE_PROP).as_deref(),
+            Some("5.75")
+        );
+        assert_eq!(
+            g(&TimeOfDayDifferentialRateRuleConfig, MAX_HOURS_PAID).as_deref(),
+            Some("99")
+        );
+        assert_eq!(
+            g(
+                &TimeOfDayPctDifferentialRateRuleConfig,
+                LATE_START_TIME_PROP
+            )
+            .as_deref(),
+            Some("23:59:00")
+        );
+        assert_eq!(
+            g(&TimeOfDayPctDifferentialRateRuleConfig, ROUNDING_OPTION).as_deref(),
+            Some("NONE")
+        );
+        assert_eq!(
+            g(&TimeOfDayPctDifferentialRateRuleConfig, ROUND_TO).as_deref(),
+            Some("5")
+        );
+        assert_eq!(
+            g(&TimeOfDayPctDifferentialRateRuleConfig, PCT_WAGE_PROP).as_deref(),
+            Some("1.00")
+        );
+        assert_eq!(
+            g(&DailySpreadShiftDifferentialRuleConfig, MIN_HRS_SPREAD).as_deref(),
+            Some("10")
+        );
+        for c in [
+            &TimeOfDayDifferentialRateRuleConfig as &dyn RuleConfig,
+            &TimeOfDayPctDifferentialRateRuleConfig,
+            &DailySpreadShiftDifferentialRuleConfig,
+        ] {
+            assert_eq!(
+                c.validate(&c.default_values()).len(),
+                1,
+                "{:?}: only the earning",
+                c.rule_class()
+            );
+        }
+    }
+
+    #[test]
+    fn pct_config_ranges() {
+        let mut p = TimeOfDayPctDifferentialRateRuleConfig.default_values();
+        p.set(EARNING, "1");
+        assert!(
+            TimeOfDayPctDifferentialRateRuleConfig
+                .validate(&p)
+                .is_empty()
+        );
+        p.set(PCT_WAGE_PROP, "1.01");
+        p.set(ROUND_TO, "61");
+        p.set(MAX_HRS_PAID, "0");
+        assert_eq!(TimeOfDayPctDifferentialRateRuleConfig.validate(&p).len(), 3);
+        p.set(PCT_WAGE_PROP, "1");
+        p.set(ROUND_TO, "60");
+        p.set(MAX_HRS_PAID, "1");
+        p.set(MIN_PCT_HRS_BETWEEN, "0.8");
+        p.set(MAX_PCT_HRS_BETWEEN, "0.5");
+        assert_eq!(TimeOfDayPctDifferentialRateRuleConfig.validate(&p).len(), 1);
+    }
+
+    #[test]
+    fn time_of_day_paid_hours_must_be_ordered() {
+        let mut p = TimeOfDayDifferentialRateRuleConfig.default_values();
+        p.set(EARNING, "1");
+        p.set(MIN_HOURS_PAID, "5");
+        p.set(MAX_HOURS_PAID, "4");
+        assert_eq!(TimeOfDayDifferentialRateRuleConfig.validate(&p).len(), 1);
     }
 }

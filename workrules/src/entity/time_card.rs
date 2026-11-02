@@ -179,6 +179,14 @@ pub trait TimeCard {
             .collect()
     }
 
+    /// The time of day the pay group's work day starts. `PayGroup.getWorkDayStartTime()`.
+    ///
+    /// Midnight unless the card says otherwise. Rules that split an earning
+    /// across the day cut use it (`TimeOfDayPctDifferentialRate`).
+    fn work_day_start_time(&self) -> joda_rs::LocalTime {
+        joda_rs::LocalTime::of(0, 0, 0)
+    }
+
     /// The first label on a date, if any. `getScheduleLabelForDate(LocalDate)`.
     ///
     /// Several labels may share a date; Java takes the first in list order.
@@ -632,6 +640,7 @@ pub struct TimeCardData {
     shifts: Vec<EmployeeShift>,
     schedules: Vec<EmployeeShift>,
     schedule_labels: Vec<EmployeeScheduleLabel>,
+    work_day_start_time: joda_rs::LocalTime,
     earnings: Vec<EmployeeEarning>,
     hours_distribution_types: Vec<HoursDistributionType>,
     flsa_data_map: HashMap<LocalDate, FlsaData>,
@@ -663,6 +672,7 @@ impl Default for TimeCardData {
             shifts: Vec::new(),
             schedules: Vec::new(),
             schedule_labels: Vec::new(),
+            work_day_start_time: joda_rs::LocalTime::of(0, 0, 0),
             earnings: Vec::new(),
             hours_distribution_types: Vec::new(),
             flsa_data_map: HashMap::new(),
@@ -687,6 +697,13 @@ impl TimeCardData {
     /// An empty card — see [`Default`] for the state it starts in.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Set when the work day starts. `PayGroup.setWorkDayStartTime()`.
+    #[must_use]
+    pub fn with_work_day_start_time(mut self, time: joda_rs::LocalTime) -> Self {
+        self.work_day_start_time = time;
+        self
     }
 
     /// Attach the schedule labels. `getScheduleLabels()`.
@@ -827,6 +844,10 @@ impl TimeCard for TimeCardData {
 
     fn schedule_labels(&self) -> &[EmployeeScheduleLabel] {
         &self.schedule_labels
+    }
+
+    fn work_day_start_time(&self) -> joda_rs::LocalTime {
+        self.work_day_start_time
     }
 
     fn earnings(&self) -> &[EmployeeEarning] {
