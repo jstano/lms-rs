@@ -393,6 +393,78 @@ impl RuleConfig for AnniversaryEarningRuleConfig {
     }
 }
 
+/// `HolidayDifferentialRuleConfig`'s parameter keys.
+pub const HOLIDAY_EARNING_PROP: &str = "holidayEarning";
+pub const PRIMARY_FACTOR: &str = "primaryFactor";
+pub const SECONDARY_FACTOR: &str = "secondaryFactor";
+pub const SECONDARY_FACTOR_THRESHOLD: &str = "secondaryFactorThreshold";
+pub const MIN_HRS_PAID: &str = "minHrsPaid";
+pub const MAX_HRS_PAID: &str = "maxHrsPaid";
+pub const ACTUAL_PUNCH_PROP: &str = "actualPunchTime";
+pub const COUNT_ENTIRE_SHIFT_AS_HOLIDAY: &str = "countEntireShiftAsHoliday";
+pub use crate::rules::algorithm::hoursdistribution::config::HOLIDAY_TYPES_PROP;
+
+/// `HolidayDifferentialRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HolidayDifferentialRuleConfig;
+
+const HOLIDAY_NAME: &str = "Holiday Differential";
+
+impl RuleConfig for HolidayDifferentialRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::HolidayDifDdf
+    }
+
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(HOLIDAY_EARNING_PROP, "0");
+        p.set(PRIMARY_FACTOR, "0.5");
+        p.set(SECONDARY_FACTOR, "1.0");
+        p.set(SECONDARY_FACTOR_THRESHOLD, "8.0");
+        p.set(MIN_HRS_PAID, "6.0");
+        p.set(HOLIDAY_TYPES_PROP, "[]");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(MAX_HRS_PAID, "999");
+        p.set(COUNT_ENTIRE_SHIFT_AS_HOLIDAY, "false");
+        p
+    }
+
+    fn validate(&self, params: &RuleParams) -> ValidationResults {
+        let mut r = ValidationResults::new();
+        let name = HOLIDAY_NAME;
+        if params.int_at(HOLIDAY_EARNING_PROP) <= 0 {
+            r.push(format!("{name}: Holiday Earning must be selected"));
+        }
+        for (key, label) in [
+            (PRIMARY_FACTOR, "Primary Factor"),
+            (SECONDARY_FACTOR, "Secondary Factor"),
+            (SECONDARY_FACTOR_THRESHOLD, "Secondary Factor Threshold"),
+        ] {
+            if params.double_at(key) < SMALLEST_VALID_DOUBLE {
+                r.push(format!(
+                    "{name}: {label} must be greater than or equal to {SMALLEST_VALID_DOUBLE}"
+                ));
+            }
+        }
+        if params.double_at(MIN_HRS_PAID) < 0.0 {
+            r.push(format!(
+                "{name}: Minimum Hours Paid must be greater than or equal to 0"
+            ));
+        }
+        if params.double_at(MAX_HRS_PAID) < params.double_at(MIN_HRS_PAID) {
+            r.push(format!(
+                "{name}: Maximum Hours Paid must be greater than or equal to Minimum Hours Paid."
+            ));
+        }
+        if params.double_at(MAX_HRS_PAID) < params.double_at(SECONDARY_FACTOR_THRESHOLD) {
+            r.push(format!(
+                "{name}: Maximum Hours Paid must be greater than or equal to Secondary Factor Threshold."
+            ));
+        }
+        r
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -552,5 +624,49 @@ mod tests {
         assert!(AnniversaryEarningRuleConfig.validate(&ok).is_empty());
         let malformed = rule_params! { EARNING => "1", EARNING_FACTOR => "1", HOURS => "8", ANNIVERSARY_DATE_TYPE => "BIRTHDAY" };
         assert_eq!(AnniversaryEarningRuleConfig.validate(&malformed).len(), 1);
+    }
+
+    #[test]
+    fn holiday_differential_defaults() {
+        let d = HolidayDifferentialRuleConfig.default_values();
+        assert_eq!(d.get(PRIMARY_FACTOR), Some("0.5"));
+        assert_eq!(d.get(SECONDARY_FACTOR), Some("1.0"));
+        assert_eq!(d.get(SECONDARY_FACTOR_THRESHOLD), Some("8.0"));
+        assert_eq!(d.get(MIN_HRS_PAID), Some("6.0"));
+        assert_eq!(d.get(ACTUAL_PUNCH_PROP), Some("true"));
+        assert_eq!(d.get(MAX_HRS_PAID), Some("999"));
+        assert_eq!(d.get(COUNT_ENTIRE_SHIFT_AS_HOLIDAY), Some("false"));
+        assert_eq!(d.get(HOLIDAY_TYPES_PROP), Some("[]"));
+        assert_eq!(d.len(), 9);
+    }
+
+    #[test]
+    fn holiday_differential_max_must_cover_min_and_the_secondary_threshold() {
+        let mut p = HolidayDifferentialRuleConfig.default_values();
+        p.set(HOLIDAY_EARNING_PROP, "3");
+        assert!(HolidayDifferentialRuleConfig.validate(&p).is_empty());
+        p.set(MAX_HRS_PAID, "5");
+        assert_eq!(
+            HolidayDifferentialRuleConfig.validate(&p).len(),
+            2,
+            "below both the minimum (6) and the threshold (8)"
+        );
+        p.set(MAX_HRS_PAID, "8");
+        assert!(HolidayDifferentialRuleConfig.validate(&p).is_empty());
+    }
+
+    #[test]
+    fn holiday_differential_needs_an_earning_and_positive_factors() {
+        let d = HolidayDifferentialRuleConfig.default_values();
+        assert_eq!(
+            HolidayDifferentialRuleConfig.validate(&d).len(),
+            1,
+            "earning 0"
+        );
+        let mut p = d;
+        p.set(HOLIDAY_EARNING_PROP, "3");
+        p.set(PRIMARY_FACTOR, "0");
+        p.set(MIN_HRS_PAID, "-1");
+        assert_eq!(HolidayDifferentialRuleConfig.validate(&p).len(), 2);
     }
 }

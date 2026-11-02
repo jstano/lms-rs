@@ -26,6 +26,7 @@ pub mod anniversary_earning;
 pub mod config;
 pub mod daily_salaried_allowance;
 pub mod days_worked;
+pub mod holiday_differential;
 pub mod min_daily_hours;
 pub mod min_daily_worked_hours;
 pub mod minimum_hours_worked;
@@ -128,6 +129,187 @@ pub fn earning_rate_for_shift(
     })
 }
 
+use crate::rules::dispatch::RuleRegistry;
+use crate::rules::ports::{
+    AssignmentPort, EarningTypePort as EarningTypes, EmployeeEarningPort as EmployeeEarnings,
+    HolidayPort, PropertyPort,
+};
+use crate::rules::rule_class::RuleClass;
+use crate::rules::rule_type::RuleType;
+use anniversary_earning::AnniversaryEarningRule;
+use daily_salaried_allowance::DailySalariedAllowanceRule;
+use days_worked::DaysWorkedDailyDifferentialRule;
+use holiday_differential::HolidayDifferentialRule;
+use min_daily_hours::MinDailyHoursEarningRule;
+use min_daily_worked_hours::MinDailyWorkedHoursEarningRule;
+use minimum_hours_worked::MinimumHoursWorkedDifferentialRule;
+use no_daily_earning::NoDailyEarningRule;
+use no_daily_hours_with_label::NoDailyHoursWithLabelEarningRule;
+
+/// Dispatch for the nine daily-differential rules. `RuleImplFactory`, narrowed
+/// to this family.
+///
+/// Every rule owns its ports, so the three that several rules share (earning
+/// types, the earning writer and minimum wage) must be `Clone` — in practice a
+/// cheap handle onto the same store.
+pub struct DailyEarningRegistry<T, E, M, H, A, P>
+where
+    T: EarningTypes,
+    E: EmployeeEarnings,
+    M: MinWagePort,
+    H: HolidayPort,
+    A: AssignmentPort,
+    P: PropertyPort,
+{
+    no_daily: NoDailyEarningRule,
+    holiday: HolidayDifferentialRule<T, E, M, H, A>,
+    min_hours_worked: MinimumHoursWorkedDifferentialRule<T, E, M>,
+    days_worked: DaysWorkedDailyDifferentialRule<T, E, P>,
+    min_daily_hours: MinDailyHoursEarningRule<T, E, M>,
+    no_daily_hours_with_label: NoDailyHoursWithLabelEarningRule<T, E, M>,
+    min_daily_worked_hours: MinDailyWorkedHoursEarningRule<T, E, M>,
+    salaried_allowance: DailySalariedAllowanceRule<T, E>,
+    anniversary: AnniversaryEarningRule<T>,
+}
+
+impl<T, E, M, H, A, P> DailyEarningRegistry<T, E, M, H, A, P>
+where
+    T: EarningTypes + Clone,
+    E: EmployeeEarnings + Clone,
+    M: MinWagePort + Clone,
+    H: HolidayPort,
+    A: AssignmentPort,
+    P: PropertyPort,
+{
+    /// Build every rule over the shared ports.
+    pub fn new(
+        earning_types: T,
+        earnings: E,
+        min_wage: M,
+        holidays: H,
+        assignments: A,
+        property: P,
+    ) -> Self {
+        Self {
+            no_daily: NoDailyEarningRule,
+            holiday: HolidayDifferentialRule::new(
+                earning_types.clone(),
+                earnings.clone(),
+                min_wage.clone(),
+                holidays,
+                assignments,
+            ),
+            min_hours_worked: MinimumHoursWorkedDifferentialRule::new(
+                earning_types.clone(),
+                earnings.clone(),
+                min_wage.clone(),
+            ),
+            days_worked: DaysWorkedDailyDifferentialRule::new(
+                earning_types.clone(),
+                earnings.clone(),
+                property,
+            ),
+            min_daily_hours: MinDailyHoursEarningRule::new(
+                earning_types.clone(),
+                earnings.clone(),
+                min_wage.clone(),
+            ),
+            no_daily_hours_with_label: NoDailyHoursWithLabelEarningRule::new(
+                earning_types.clone(),
+                earnings.clone(),
+                min_wage.clone(),
+            ),
+            min_daily_worked_hours: MinDailyWorkedHoursEarningRule::new(
+                earning_types.clone(),
+                earnings.clone(),
+                min_wage,
+            ),
+            salaried_allowance: DailySalariedAllowanceRule::new(earning_types.clone(), earnings),
+            anniversary: AnniversaryEarningRule::new(earning_types),
+        }
+    }
+}
+
+impl<T, E, M, H, A, P> RuleRegistry<dyn DailyEarningRule> for DailyEarningRegistry<T, E, M, H, A, P>
+where
+    T: EarningTypes + 'static,
+    E: EmployeeEarnings + 'static,
+    M: MinWagePort + 'static,
+    H: HolidayPort + 'static,
+    A: AssignmentPort + 'static,
+    P: PropertyPort + 'static,
+{
+    fn rule_type(&self) -> RuleType {
+        RuleType::DailyDifferential
+    }
+
+    fn rule_for(&self, rule_class: RuleClass) -> Option<&(dyn DailyEarningRule + 'static)> {
+        match rule_class {
+            RuleClass::NoDdf => Some(&self.no_daily),
+            RuleClass::HolidayDifDdf => Some(&self.holiday),
+            RuleClass::MinHoursWorkedDdf => Some(&self.min_hours_worked),
+            RuleClass::DaysWorkedDdf => Some(&self.days_worked),
+            RuleClass::MinDailyHrsDdf => Some(&self.min_daily_hours),
+            RuleClass::NoDailyHrsDdf => Some(&self.no_daily_hours_with_label),
+            RuleClass::MinDailyWrkdHrsDdf => Some(&self.min_daily_worked_hours),
+            RuleClass::DlySalAllowDdf => Some(&self.salaried_allowance),
+            RuleClass::AnniDdf => Some(&self.anniversary),
+            _ => None,
+        }
+    }
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+    use crate::common::enums::uom::UOM;
+    use crate::entity::assignment::Assignment;
+    use crate::entity::holiday::Holiday;
+    use crate::rules::algorithm::dailyearning::fixtures::*;
+    use joda_rs::LocalDate;
+
+    #[derive(Clone)]
+    struct Types;
+    impl EarningTypes for Types {
+        fn find_by_id(&self, _id: i32) -> Option<EarningType> {
+            Some(earning_type(UOM::Hours))
+        }
+    }
+    struct Calendar;
+    impl HolidayPort for Calendar {
+        fn find_all_for_property(&self, _p: i32) -> Vec<Holiday> {
+            Vec::new()
+        }
+    }
+    struct Jobs;
+    impl AssignmentPort for Jobs {
+        fn find_by_id(&self, _id: i32) -> Option<Assignment> {
+            None
+        }
+    }
+    struct Week;
+    impl PropertyPort for Week {
+        fn period_end_date(&self, _p: i32) -> LocalDate {
+            LocalDate::of(2014, 5, 6)
+        }
+    }
+
+    /// All nine catalogue entries dispatch, none is missing.
+    #[test]
+    fn every_daily_differential_rule_class_dispatches() {
+        let registry = DailyEarningRegistry::new(
+            Types,
+            SavedEarnings::default(),
+            FixedMinWage(10.0),
+            Calendar,
+            Jobs,
+            Week,
+        );
+        assert_eq!(registry.dispatchable().len(), 9);
+        assert!(registry.missing().is_empty());
+    }
+}
+
 /// Fixtures shared by the slice's rule tests.
 #[cfg(test)]
 pub(crate) mod fixtures {
@@ -169,6 +351,7 @@ pub(crate) mod fixtures {
         EarningType::new(0, 1, "Lieu", EarnType::Regular, uom)
     }
 
+    #[derive(Clone)]
     pub struct FixedMinWage(pub f64);
 
     impl MinWagePort for FixedMinWage {

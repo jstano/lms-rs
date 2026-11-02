@@ -159,6 +159,26 @@ pub trait TimeCard {
             .collect()
     }
 
+    /// Shifts that start or end on `date`, by the calendar date of their start
+    /// or end time. `getShiftsEndingOrStartingOnDay(LocalDate)`.
+    ///
+    /// Unlike [`shifts_for_day`](Self::shifts_for_day) this ignores the shift
+    /// date: an overnight shift dated the 1st that ends on the 2nd is returned
+    /// for both days.
+    fn shifts_ending_or_starting_on_day(&self, date: LocalDate) -> Vec<&EmployeeShift> {
+        self.shifts()
+            .iter()
+            .filter(|shift| {
+                shift
+                    .end_date_time()
+                    .is_some_and(|t| t.to_local_date() == date)
+                    || shift
+                        .start_date_time()
+                        .is_some_and(|t| t.to_local_date() == date)
+            })
+            .collect()
+    }
+
     /// The first label on a date, if any. `getScheduleLabelForDate(LocalDate)`.
     ///
     /// Several labels may share a date; Java takes the first in list order.
@@ -397,6 +417,21 @@ pub trait TimeCard {
             self.calculation_mode(),
             EmployeeCalculationMode::AutoSchedule | EmployeeCalculationMode::EditSchedule
         )
+    }
+
+    /// The latest date any hours distribution or earning falls on, or the
+    /// calculation start date when there are none. `getMaxActualDate()`.
+    ///
+    /// Note it is the **distributions'** dates, not the shifts' own: a shift
+    /// with no distributions contributes nothing.
+    fn max_actual_date(&self) -> LocalDate {
+        self.shifts()
+            .iter()
+            .flat_map(|shift| shift.hours_distributions())
+            .map(|distribution| distribution.date())
+            .chain(self.earnings().iter().map(|earning| earning.earning_date()))
+            .max()
+            .unwrap_or_else(|| self.calculation_start_date())
     }
 
     /// `hasShiftsOrEarnings()`.

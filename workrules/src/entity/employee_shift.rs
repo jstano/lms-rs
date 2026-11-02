@@ -572,6 +572,53 @@ impl EmployeeShift {
         order
     }
 
+    /// The shift's net hours, optionally recomputed from the raw punches.
+    /// `ShiftUtil.getNetHours(shift, useActual)`.
+    ///
+    /// `use_actual = false` is just the stored net hours rounded to two
+    /// places. `true` rebuilds it from each punch's **adjusted** time (before
+    /// rounding): the span from the first to the last punch, less the breaks
+    /// between the 2nd/3rd, 4th/5th, … punches, each break rounded to two
+    /// places on its own, plus `adjHours`. An actual shift that currently has
+    /// errors (derived afresh, because the saved ones may be stale) is worth
+    /// zero; a schedule is not subject to that test.
+    ///
+    /// Java's break loop is `for (i = 1; i < size - 2; i += 2)`, so with four
+    /// punches it reads one break (1,2) and with six reads two (1,2) and (3,4)
+    /// — the last punch is always the closing OUT and never an in-break.
+    pub fn net_hours_using(&self, use_actual: bool) -> f64 {
+        if !use_actual {
+            return round_hours(self.net_hours);
+        }
+        if !(self.derived_errors().is_empty() || self.shift_type != ShiftType::Actual) {
+            return 0.0;
+        }
+
+        let mut worked = 0.0;
+        let order = self.punch_order();
+        if let (Some(first), Some(last)) = (order.first(), order.last()) {
+            let hours_between =
+                |a: usize, b: usize| match (self.punches[a].adj_time(), self.punches[b].adj_time())
+                {
+                    (Some(from), Some(to)) => {
+                        round_hours(crate::common::dates::duration_in_fractional_hours(from, to))
+                    }
+                    _ => 0.0,
+                };
+            let duration = hours_between(*first, *last);
+            let mut breaks = 0.0;
+            if order.len() >= 2 {
+                let mut i = 1;
+                while i + 2 < order.len() {
+                    breaks += hours_between(order[i], order[i + 1]);
+                    i += 2;
+                }
+            }
+            worked = duration - breaks;
+        }
+        round_hours(worked + self.adj_hours)
+    }
+
     /// Net hours worked inside a window, with the shift's adjustment applied.
     /// `ShiftUtil.getNetHoursInRange`.
     ///
