@@ -51,14 +51,15 @@ see "Test backing" below for why.
 | 4 | `schedulelabel` — 5 of 5 rules + runner | **done** |
 | 4 | `schedulelabeladdendum` — 3 of 3 rules + both runners | **done** |
 | 4 | `schedulechangevalidation` — 3 of 3 rules + runner | **done** |
-| 1+ | the other 14 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `shiftdifferenceot` (`ShiftDiffOt`) — 1 of 1 rule + runner | **done** |
+| 1+ | the other 13 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 18 ported, 14 not started.
+32 `RuleType`s in all; 19 ported, 13 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**2,069 tests, 868 of them transcribed Java assertions.** Clippy clean,
+**2,089 tests, 889 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -134,7 +135,6 @@ lesson, read the Java before estimating any of these.
 
 | RuleType (code) | Catalogue | Java impls | Java directory / notes |
 |---|---:|---:|---|
-| `ShiftDiffOt` (SD) | 1 | — | runner `ShiftDifferenceOTRunner`; single-item type. Unverified whether its rule is the same class as the deferred `ShiftDifferenceOTRuleImpl` of `hoursdistribution`; check before porting either |
 | `BenefitAccrual` (BA) | 15 | 16 | `benefitaccrual` |
 | `BenefitExpiration` (BE) | 7 | 8 | `benefitexpiration` |
 | `ClosePayPeriod` (CP) | 2 | 3 | `closepayperiod` |
@@ -182,7 +182,7 @@ families and their runners are ported.
 
 **Both modules (T&A and Scheduling)**
 
-- `ShiftDiffOt` — 1 rule, not started (see the unverified-identity note above).
+- `ShiftDiffOt` — 1 rule, **done** (it is `ShiftDifferenceOTRuleImpl`, the same class once thought deferred).
 - `EmployeeAlert` — 7 rules, not started, plus the `ActualsAlertRuleImpl` and
   `ScheduleAlertRuleImpl` impls.
 - `HoursDistribution`, `RegularRate`, `OvertimeRate`, `DoubleTimeRate` — done,
@@ -230,7 +230,7 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `DailyDifferentialRunner` (+ `DifferentialRunner`'s clearing, via `ClearTimeCardEarnings`) | **ported** (`rules/runner/daily_differential.rs`) |
 | `WeeklyDifferentialRuleRunner` | **ported** (`rules/runner/weekly_differential.rs`) |
 | `ShiftDifferentialRunner` | **ported** (`rules/runner/shift_differential.rs`) |
-| `ShiftDifferenceOTRunner` | not ported |
+| `ShiftDifferenceOTRunner` | **ported** (`rules/runner/shift_difference_ot.rs`) |
 | `PostCalcRunner` | not ported — rules not started |
 | `ScheduleChangeValidationRunner` | **ported** (`rules/runner/schedule_change_validation.rs`) |
 | `ScheduleLabelRunner` | **ported** (`rules/runner/schedule_label.rs`) |
@@ -249,7 +249,7 @@ These are each recorded where they arose; this is the roll-up.
 - `AnnualSalaryOverHoursRegRateRuleImpl` — deferred (divergence 57; needs a
   service that is not a DAO).
 - `schedulerestriction`'s sixth rule — deferred (see its section).
-- `ShiftDifferenceOTRuleImpl` — no catalogue entry; deferred with `hoursdistribution`.
+- ~~`ShiftDifferenceOTRuleImpl`~~ — ported as `ShiftDiffOt` (see "`ShiftDiffOt` — done"). It had a catalogue entry after all.
 - `MinDailyHrsRuleConfig` overlapping-tier validation — not ported (divergence 79).
 - `JSONUtils` multi-select id-list helpers — deferred until a family needs them.
 - DAO ports — `rules/ports.rs` currently holds 11 traits (10 DAO ports plus
@@ -315,8 +315,8 @@ way to tell which rule it belonged to was to have both. The same is true of the
 three rules that declare `dailyDataProducer` identically, and of the four that
 shadow the shared accumulators.
 
-`ShiftDifferenceOTRuleImpl` exists as a twentieth `*RuleImpl` but has no
-catalogue entry; it is deferred with the rules.
+`ShiftDifferenceOTRuleImpl` exists as a twentieth `*RuleImpl`. *(Later: it is
+the single rule of `RuleType::ShiftDiffOt` and is ported under that type.)*
 
 ### Deliberate divergences — index
 
@@ -349,6 +349,7 @@ resolves anywhere in the file.
 | 116–118 | `schedulelabel` |
 | 119–121 | `schedulelabeladdendum` |
 | 122–124 | `schedulechangevalidation` |
+| 125–126 | `shiftdifferenceot` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4412,3 +4413,63 @@ New surface: `EarningRequest`; `CurrentDateTimePort`
 124. **`execute` drops the `ScheduleCalcDataSet` argument.** No rule in the family
      reads it. It keeps the separate `params` argument, because the specs pass a
      blank rule item with their own parameter map.
+
+## `ShiftDiffOt` — done
+
+`RuleType::ShiftDiffOt` (`SD`) has one rule, `ShiftDifferenceOTRuleImpl`, with its
+config and `ShiftDifferenceOTRunner`. This **resolves the audit's open question**
+(it was listed as "unverified whether its rule is the same class as the deferred
+`ShiftDifferenceOTRuleImpl`"): the catalogue entry `SHIFT_DIFFERENCE_OT_SDO` names
+`ShiftDifferenceOTRuleConfig` and that same class. Java keeps the rule in the
+`hoursdistribution` package; here it has its own module, `shiftdifferenceot`.
+**20 tests, 21 transcribed Java assertions:** `ShiftDifferenceOTRuleImplTest` 8,
+`ShiftDifferenceOTRuleConfigTest` 11 (the validation table's 10 rows and the
+defaults), `ShiftDifferenceOTRunnerTest` 2.
+
+A short-rest premium: when the gap between one actual shift's end and the next
+one's start is under `hoursBetweenShifts` (default 10), the shortfall is premium
+time on the second shift, paid either as an earning (the default) or by converting
+regular hours into an overtime distribution (`convertHoursToOT`). The rule's own
+doc comment has the full walk.
+
+New surface: `OvertimeRateLookup` (the eight overtime-rate rules, the property's
+`OVERTIME_RATE` rule set and the default set), `ShiftDifferenceOT` trait and
+registry.
+
+### Findings
+
+- **The specs only exercise the earning mode.** All eight rule cases run with
+  `convertHoursToOT` off. The conversion path — the rate lookup, the merge into an
+  existing overtime distribution, `reduceSecondShiftOTByFirstShiftOT` — has no
+  Groovy coverage; its Rust tests are written from the Java and are the only
+  coverage.
+- **The earning's rate always floors at minimum wage**, ignoring the earning
+  type's `payAtLeastMinWage` flag that the other shift rules honour.
+- **The previous shift is found by calendar day, not by adjacency**, and only for
+  the first shift on the calculation start date; a shift in a closed period is
+  skipped for calculation but is still a candidate "previous shift".
+- **A skipped pair still advances the walk**: with `excludeShiftsOnSeparateDays` or
+  `excludeShiftsOnSameDay`, the second shift becomes the new previous shift.
+- **A non-actual shift does not advance it**, so a schedule shift between two
+  actual ones is invisible to the gap calculation.
+- **Java's `shiftDiffOTHoursDistribution` is written and never read** — a
+  transient field set to the new premium distribution even when that distribution
+  is merged away instead of being added. Not ported (divergence 126).
+- **The merged overtime rate is a cost-weighted blend**, using the existing
+  distribution's `totalCosts` **before** its hours are changed:
+  `(existingCosts + newCosts) / newTotalHours − baseRate`.
+- **The earning's date and job are the second shift's**; the unit switch covers
+  `DAYS` too, which most shift rules omit.
+
+### Deliberate divergences (continued)
+
+125. **The overtime rate is read off a scratch distribution.** Java calls each rate
+     rule's `getRate(...)`; the Rust rules expose only `execute_for_shift`, which
+     writes the rate to a distribution. The rule prices a scratch distribution
+     carrying the shift's date, the overtime hours and the regular distribution's
+     base rate, then reads its premium rate. Identical for every rule whose
+     `execute` is `setOvertimeRates(getRate(...))`, which the audit checked for the
+     job and weighted rules; an unlisted rule class would price 0, as Java's
+     `switch` falls through to `rate = 0`.
+
+126. **`shift.setShiftDiffOTHoursDistribution` is not ported**, being a dead write.

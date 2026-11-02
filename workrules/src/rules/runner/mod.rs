@@ -19,5 +19,6 @@ pub mod schedule_change_validation;
 pub mod schedule_label;
 pub mod schedule_label_addendum;
 pub mod shift_correction;
+pub mod shift_difference_ot;
 pub mod shift_differential;
 pub mod weekly_differential;
