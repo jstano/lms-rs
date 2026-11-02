@@ -24,7 +24,8 @@
 //! not see it (and the "less than a standard day" test cannot be defeated by
 //! the rule's own earlier output). No note is set.
 //!
-//! No Groovy spec; behaviour tests are written from the Java.
+//! Spec: `DailySalariedAllowanceRuleImplTest.groovy` — **filed under the
+//! `weeklyearning` test directory**, which is why it was missed at first.
 
 use crate::common::dates::translate_dow_from_iso;
 use crate::common::enums::earning_source::EarningSource;
@@ -101,14 +102,14 @@ impl<T: EarningTypePort, E: EmployeeEarningPort> DailyEarningRule
             return;
         }
 
-        let Some(earning_type) = self.earning_types.find_by_id(params.int_at(EARNING)) else {
-            return;
-        };
+        // The earning type is only ever *stored*, never inspected, so the
+        // configured id is used as is. The Groovy spec stubs
+        // `findByID` to return null and still expects exactly one save.
         let mut earning = EmployeeEarning::new(
             0,
             employee.id(),
             home.job_id(),
-            earning_type.id(),
+            params.int_at(EARNING),
             date,
             0.0,
             0.0,
@@ -299,5 +300,192 @@ mod tests {
             vec![shift_with_hours(today(), 4.0)],
         );
         assert!(run(&mut c, &item(TUESDAY, "8")).0.borrow().is_empty());
+    }
+
+    // ---- java_parity_tests: DailySalariedAllowanceRuleImplTest.groovy ----
+    // (2016-09-19 is a Monday: ISO 1, database convention 2.)
+
+    fn monday() -> LocalDate {
+        LocalDate::of(2016, 9, 19)
+    }
+
+    fn spec_employee(
+        status: EmployeeStatusType,
+        home: bool,
+        pay_type: EmployeePayType,
+    ) -> Employee {
+        let d = monday();
+        Employee::new(
+            1,
+            1,
+            "Pat",
+            vec![EmployeeJobStatus::new(
+                1,
+                1,
+                1,
+                d.minus_years(1),
+                d.plus_years(1),
+                pay_type,
+                0.0,
+                home,
+            )],
+        )
+        .with_statuses(vec![EmployeeStatus::new(
+            d.minus_years(1),
+            d.plus_years(1),
+            status,
+        )])
+    }
+
+    fn spec_item(dows: &str) -> RuleItem {
+        RuleItem::new(
+            1,
+            1,
+            "x",
+            RuleClass::DlySalAllowDdf,
+            rule_params! { STANDARD_WORK_DAY => "8", DOW_MULTIPLE => dows },
+        )
+    }
+
+    fn spec_shift() -> crate::entity::employee_shift::EmployeeShift {
+        crate::entity::employee_shift::EmployeeShift::new(
+            0,
+            1,
+            1,
+            monday(),
+            crate::common::enums::shift_type::ShiftType::Actual,
+            Vec::new(),
+        )
+    }
+
+    /// The spec's `earningTypeDAO` is a bare mock that answers null.
+    struct NullTypes;
+    impl EarningTypePort for NullTypes {
+        fn find_by_id(&self, _id: i32) -> Option<EarningType> {
+            None
+        }
+    }
+
+    fn spec_run(card: &mut TimeCardData, dows: &str) -> usize {
+        let saved = SavedEarnings::default();
+        DailySalariedAllowanceRule::new(NullTypes, saved.clone()).execute(
+            card,
+            monday(),
+            &spec_item(dows),
+        );
+        saved.0.borrow().len()
+    }
+
+    #[test]
+    fn spec_should_not_pay_if_date_is_not_included_in_configured_dows() {
+        let mut c = TimeCardData::new()
+            .with_employee(spec_employee(
+                EmployeeStatusType::Active,
+                true,
+                EmployeePayType::SalariedExempt,
+            ))
+            .with_shifts(vec![spec_shift()]);
+        assert_eq!(spec_run(&mut c, "[1,3,4,5,6,7]"), 0);
+    }
+
+    #[test]
+    fn spec_should_not_pay_if_no_shifts_for_day_exist() {
+        let mut c = TimeCardData::new().with_employee(spec_employee(
+            EmployeeStatusType::Active,
+            true,
+            EmployeePayType::SalariedExempt,
+        ));
+        assert_eq!(spec_run(&mut c, "[2,3,4,5,6,7]"), 0);
+    }
+
+    #[test]
+    fn spec_should_not_pay_if_employee_is_not_active_on_date() {
+        let mut c = TimeCardData::new()
+            .with_employee(spec_employee(
+                EmployeeStatusType::Terminated,
+                true,
+                EmployeePayType::SalariedExempt,
+            ))
+            .with_shifts(vec![spec_shift()]);
+        // Terminated a year ago: active only on its start date.
+        assert_eq!(spec_run(&mut c, "[2,3,4,5,6,7]"), 0);
+    }
+
+    #[test]
+    fn spec_should_not_pay_if_employee_has_no_home_job_on_date() {
+        let mut c = TimeCardData::new()
+            .with_employee(spec_employee(
+                EmployeeStatusType::Active,
+                false,
+                EmployeePayType::SalariedExempt,
+            ))
+            .with_shifts(vec![spec_shift()]);
+        assert_eq!(spec_run(&mut c, "[2,3,4,5,6,7]"), 0);
+    }
+
+    #[test]
+    fn spec_should_not_pay_if_the_home_job_is_not_salaried() {
+        let mut c = TimeCardData::new()
+            .with_employee(spec_employee(
+                EmployeeStatusType::Active,
+                true,
+                EmployeePayType::Hourly,
+            ))
+            .with_shifts(vec![spec_shift()]);
+        assert_eq!(spec_run(&mut c, "[2,3,4,5,6,7]"), 0);
+    }
+
+    #[test]
+    fn spec_should_not_pay_if_salary_distribution_earnings_exceed_the_standard_day() {
+        struct SalaryType;
+        impl EarningTypePort for SalaryType {
+            fn find_by_id(&self, _id: i32) -> Option<EarningType> {
+                Some(
+                    EarningType::new(0, 1, "s", EarnType::Regular, UOM::Hours)
+                        .with_flags(false, false, true, false),
+                )
+            }
+        }
+        let nine = crate::entity::employee_earning::EmployeeEarning::new(
+            0,
+            1,
+            1,
+            0,
+            monday(),
+            9.0,
+            0.0,
+            EarningSource::Auto,
+        );
+        let mut c = TimeCardData::new()
+            .with_employee(spec_employee(
+                EmployeeStatusType::Active,
+                true,
+                EmployeePayType::SalariedExempt,
+            ))
+            .with_shifts(vec![spec_shift()])
+            .with_earnings(vec![nine]);
+        let saved = SavedEarnings::default();
+        DailySalariedAllowanceRule::new(SalaryType, saved.clone()).execute(
+            &mut c,
+            monday(),
+            &spec_item("[1,2,3,4,5,6,7]"),
+        );
+        assert!(saved.0.borrow().is_empty());
+    }
+
+    #[test]
+    fn spec_should_pay_if_all_parameters_are_just_right() {
+        let mut c = TimeCardData::new()
+            .with_employee(spec_employee(
+                EmployeeStatusType::Active,
+                true,
+                EmployeePayType::SalariedExempt,
+            ))
+            .with_shifts(vec![spec_shift()]);
+        assert_eq!(
+            spec_run(&mut c, "[1,2,3,4,5,6,7]"),
+            1,
+            "even though the earning type resolves to null"
+        );
     }
 }

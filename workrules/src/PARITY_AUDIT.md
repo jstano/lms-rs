@@ -46,15 +46,16 @@ see "Test backing" below for why.
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
-| 4+ | `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
+| 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
+| 4+ | `shiftearning` | not started — prioritized next, at the user's request |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 13 ported, 2 prioritized next, 17 more behind them.
+32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**1,725 tests, 556 of them transcribed Java assertions.** Clippy clean,
+**1,795 tests, 605 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -102,7 +103,10 @@ the end of this file.
 "`shiftcorrection` — done" at the end of this file.
 
 **`dailyearning` is done — all 9 rules and its runner**, in three slices. See
-"`dailyearning` — slice 3" at the end of this file. Next up: `weeklyearning`.
+"`dailyearning` — slice 3" at the end of this file.
+
+**`weeklyearning` is done — all 8 rules and its runner.** See "`weeklyearning` —
+done" at the end of this file. Next up: `shiftearning`.
 
 ### Unstarted scope inventory
 
@@ -118,7 +122,6 @@ lesson, read the Java before estimating any of these.
 
 | RuleType (code) | Catalogue | Java impls | Java directory / notes |
 |---|---:|---:|---|
-| `WeeklyDifferential` (WD) | 8 | 9 | `weeklyearning` |
 | `ShiftDifferential` (DF) | 23 | 24 | `shiftearning` — own `utility` subpackage; "closer to a second `hoursdistribution`" |
 
 **Behind those, unprioritized:**
@@ -184,7 +187,7 @@ rule, each family needing its own runner.
 
 **T&A-only types not yet ported (~130 catalogue rules)**
 
-- Prioritized, 31 rules: `WeeklyDifferential` 8, `ShiftDifferential` 23
+- Prioritized, 23 rules: `ShiftDifferential` 23
   (`ShiftCorrection` and `DailyDifferential` are done).
 - Other T&A, ~47 rules: `PostCalc` 8, `PostPunch` 9, `HolidayEligibility` 12,
   `MealPunch` 2, `ReconcileEmployee` 2, `ClosePayPeriod` 2, `EmployeeEvent` 3,
@@ -200,17 +203,17 @@ points, alerts and time-off can be deferred):
 1. Finish scheduling: `ScheduleLabel`, `ScheduleLabelAddendum`,
    `ScheduleChangeValidation`, the deferred `ScheduleRestriction` rule,
    `ShiftDiffOt`.
-2. The two remaining prioritized differential types (`ShiftCorrection` and
+2. The one remaining prioritized differential type (`ShiftCorrection` and
    `DailyDifferential` are done).
 3. The payroll-calculation and punch-lifecycle types: `PostCalc`, `PostPunch`,
    `HolidayEligibility`, `MealPunch`, `ReconcileEmployee`, `ClosePayPeriod`.
-4. The runner layer (see below), unported for nine of the thirteen finished
+4. The runner layer (see below), unported for nine of the fourteen finished
    families.
 
 ### Runner inventory
 
 Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
-`rules/runner/{punch_rounding,regular_hours_distribution,shift_correction,daily_differential}.rs` only.
+`rules/runner/{punch_rounding,regular_hours_distribution,shift_correction,daily_differential,weekly_differential}.rs` and the shared `clear_time_card_earnings.rs`.
 
 | Java runner | State |
 |---|---|
@@ -222,14 +225,15 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `ScheduleLunchRunner`, `AuditableScheduleLunchRunner` | not ported — rules are |
 | `ShiftCorrectionRunner` | **ported** (`rules/runner/shift_correction.rs`) |
 | `DailyDifferentialRunner` (+ `DifferentialRunner`'s clearing, via `ClearTimeCardEarnings`) | **ported** (`rules/runner/daily_differential.rs`) |
-| `ShiftDifferentialRunner`, `WeeklyDifferentialRuleRunner` | not ported — rules not started |
+| `WeeklyDifferentialRuleRunner` | **ported** (`rules/runner/weekly_differential.rs`) |
+| `ShiftDifferentialRunner` | not ported — rules not started |
 | `ShiftDifferenceOTRunner` | not ported |
 | `PostCalcRunner` | not ported — rules not started |
 | `ScheduleChangeValidationRunner` | not ported — rules not started |
 | `ScheduleLabelRunner`, `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | not ported — rules not started |
 | `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
 
-So for nine of the thirteen ported families the rules exist and are tested
+So for nine of the fourteen ported families the rules exist and are tested
 individually but nothing yet drives them in Java's order; the runner layer
 (and the end-to-end calculation order across families) is a separate piece of
 work that no wave currently covers.
@@ -312,7 +316,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Ninety-four so far, listed at the end of the section that introduced them. The
+Ninety-nine so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -336,6 +340,7 @@ resolves anywhere in the file.
 | 76–79 | `shiftadjustment` |
 | 80–85 | `shiftcorrection` |
 | 86–94 | `dailyearning` |
+| 95–99 | `weeklyearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3413,7 +3418,7 @@ earnings that earlier daily runs produced, and sorts items by priority
 | `MinimumHoursWorkedDifferentialRuleImpl` | 86 | 192 | tops a short day up to a minimum, priced off the primary shift; uses `MinimumHoursWorkedRuleHelper` |
 | `DaysWorkedDailyDifferentialRuleImpl` | 130 | 242 | pays a fixed dollar amount when fewer than N days were worked in the work week |
 | `HolidayDifferentialRuleImpl` | 230 | 249 | two-factor holiday pay per shift, with max/min hours; the largest rule |
-| `DailySalariedAllowanceRuleImpl` | 87 | none | allowance for salaried-exempt employees on configured weekdays |
+| `DailySalariedAllowanceRuleImpl` | 87 | 205 (misfiled, see slice 2) | allowance for salaried-exempt employees on configured weekdays |
 | `AnniversaryEarningRuleImpl` | 132 | 241 | pays on hire / seniority / birthday anniversaries |
 
 ### What is missing on the Rust side
@@ -3540,14 +3545,15 @@ The three paying rules each take `EarningTypePort`, `EmployeeEarningPort` and
 **55 tests, 30 of them transcribed Java assertions**: 7 executions of
 `MinimumHoursWorkedDifferentialRuleImplTest` (the two `where:` rows of one
 case count separately), 16 of `DaysWorkedDailyDifferentialRuleImplTest`, and
-all 7 of `AnniversaryEarningRuleImplTest`. `DailySalariedAllowance` has no
-Groovy spec; its tests are written from the Java.
+all 7 of `AnniversaryEarningRuleImplTest`. `DailySalariedAllowance` was first recorded here as having no Groovy spec;
+that was wrong (see the correction in the table and "`weeklyearning` —
+done").
 
 | Ported | Java spec cases |
 |---|---:|
 | `MinimumHoursWorkedDifferentialRuleImpl` (+ `MinimumHoursWorkedRuleHelper`) | 7/7 |
 | `DaysWorkedDailyDifferentialRuleImpl` | 16/16 |
-| `DailySalariedAllowanceRuleImpl` | no spec — behaviour tests written from the Java |
+| `DailySalariedAllowanceRuleImpl` | 7/7 — **corrected**: this row originally read "no spec"; the spec exists as `weeklyearning/DailySalariedAllowanceRuleImplTest.groovy` and was transcribed with `weeklyearning` |
 | `AnniversaryEarningRuleImpl` | 7/7 |
 
 New surface: `TimeCard::shifts_for_day`, `EarningType::is_dollars_type`,
@@ -3670,3 +3676,88 @@ New surface: `EmployeeShift::net_hours_using(use_actual)` (`ShiftUtil.getNetHour
 94. **Missing adjusted punch times count as zero hours in
     `net_hours_using(true)`**, where Java would throw on the unchecked
     `getAdjTime()`. Same stance as divergence 83.
+
+## `weeklyearning` — done
+
+All eight catalogue entries and the runner: `NoWeeklyEarning`, `WeeklyHrsFixed`,
+`DOWWeeklyHrsRateFactor`, `DOWHrsFixed`, `DailySpread`, `SalariedMinWage`,
+`HoursThresholdFixedWeekly`, `DailyWeeklyGuaranteedHours`, with their configs
+and the eight-class `WeeklyEarningRegistry`. **70 tests, 49 of them transcribed
+Java assertions.** The shared `ClearTimeCardEarnings` was lifted out of
+`DailyDifferentialRunner` into `rules/runner/clear_time_card_earnings.rs`.
+
+| Ported | Java spec cases |
+|---|---:|
+| `NoWeeklyEarningRuleImpl` | no spec |
+| `WeeklyHrsFixedRuleImpl` | no spec — behaviour tests written from the Java |
+| `DOWHrsFixedRuleImpl` | no spec — behaviour tests written from the Java |
+| `SalariedMinWageRuleImpl` | no spec — behaviour tests written from the Java |
+| `DailySpreadRuleImpl` | 4/4 `where:` rows |
+| `DOWWeeklyHrsRateFactorRuleImpl` | 18/18 rows |
+| `HoursThresholdFixedWeeklyRuleImpl` | 8/8 |
+| `DailyWeeklyGuaranteedHoursRuleImpl` | 9/9 |
+| `WeeklyDifferentialRuleRunner` | 3/3 (two rows + one case) |
+| `DailySalariedAllowanceRuleImpl` (from `dailyearning`) | 7/7 — the misfiled spec |
+
+New surface: `PeriodSalaryPort`, `Employee::is_active_home_job_status_all_period`,
+`weeklyearning::net_hours_legacy`.
+
+### Findings
+
+- **`DailySalariedAllowanceRuleImplTest.groovy` is filed under `weeklyearning`
+  but tests the `dailyearning` rule.** Slice 2 reported that rule as having no
+  spec. Its seven cases are now transcribed in `dailyearning/daily_salaried_allowance.rs`
+  and the earlier text is corrected above. One case showed the earning type is
+  never inspected — the spec's `EarningTypeDAO` mock answers null and still
+  expects one save — so the rule now uses the configured id directly instead of
+  requiring the type to resolve.
+- **There are two different `getNetHours`.** `WeeklyHrsFixed` and `DOWHrsFixed`
+  use the base class's deprecated one; the other two use `ShiftUtil`'s. They
+  disagree on rounding (unrounded vs 2 places for stored hours), on how punches
+  are read (every in/out pair summed vs first-to-last less breaks), and on
+  schedules (`ShiftUtil` exempts them from the errors test). A test pins the
+  difference.
+- **`DailyWeeklyGuaranteedHours`'s spec barely checks its saves.** Its
+  `1 * employeeEarningDAO.save({matcher})` passes a closure that *returns* the
+  matcher closure, which Groovy treats as true for any argument, so only the
+  call **count** is asserted; the content is asserted separately through
+  `timeCard.earnings.any matcher`. The port's transcription checks both.
+- **`DailySpread`'s spec only exercises the config defaults** and runs against
+  mocks of the card and employee; the `useMinWage = false` and rounded-vs-actual
+  punch branches are covered only by tests written from the Java.
+- **Negative earnings.** `DailyWeeklyGuaranteedHours` deliberately writes
+  *negative* hours to trim a day or week back to its maximum; downstream code
+  that assumes positive hours would mishandle them.
+- **A zero-hour configured day can pay.** `DOWHrsFixed` seeds every configured
+  open weekday at 0 hours; with `minHours` of 0 such days would pay. The config
+  validator forbids `minHours <= 0`; the rule does not look.
+- **`WeeklyDifferentialRuleRunner` does not sort**, so rule items run in
+  rule-set order — it is not one of the five `RuleItemPriorityComparator` users.
+- **`SalariedMinWage` and `AnnualSalaryOverHoursRegRate` share a blocker** —
+  `PayRateCalculator.getPeriodSalary` — and the one-method `PeriodSalaryPort`
+  added here is also what the still-deferred rate rule (divergence 57) needs.
+- **Display names in the configs' validation messages are placeholders**, here
+  and in `dailyearning` (see divergence 98): Java builds them from localized
+  `getName()` strings the crate does not carry. The validation *conditions* are
+  exact.
+
+### Deliberate divergences (continued)
+
+95. **`WeeklyHrsFixed` and `DOWHrsFixed` backfill parameters from the defaults.** Java reads `WeeklyHrsFixed`/
+    `DOWHrsFixed` straight off the rule item (their `ruleConfig` field is never
+    used), so a missing parameter throws. Same stance as divergences 81 and 89.
+
+96. **`DOWHrsFixed` writes its earnings in date order.** Java iterates a
+    `HashMap<LocalDate, Double>`, whose order is unspecified.
+
+97. **`DailySpread` skips a day with no home job.** Java throws
+    `HomeJobNotFoundException`. Same stance as divergence 83, with the caveat
+    that this one is an explicit, typed error rather than an accident.
+
+98. **The description handed to each rule is `"Rule: <rule set> - <rule item
+    name>"`**, where Java uses the rule's localized config name. This also
+    applies to the placeholder display names in config validation messages.
+
+99. **`SalariedMinWage` takes a `PeriodSalaryPort`** in place of
+    `PayRateCalculator`. The port is a single scalar lookup; the calculator's own
+    logic (annual rates, pay-period types) stays out of this crate.

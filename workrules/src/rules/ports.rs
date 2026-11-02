@@ -172,6 +172,18 @@ pub trait EmployeeEarningPort {
     ) -> Option<f64>;
 }
 
+/// A salaried employee's pay for a pay period. `PayRateCalculator.getPeriodSalary`.
+///
+/// A calculator service rather than a DAO, and only a single scalar is read
+/// off it, so it comes across as its own one-method port the way
+/// [`MinWagePort`] does. `SalariedMinWageRuleImpl` is the first user; the
+/// still-deferred `AnnualSalaryOverHoursRegRateRuleImpl` is the other.
+pub trait PeriodSalaryPort {
+    /// The salary earned over the pay period that ends on `period_end_date`.
+    /// `getPeriodSalary(Employee, LocalDate)`.
+    fn period_salary(&self, employee_id: i32, period_end_date: LocalDate) -> f64;
+}
+
 /// Persisting a shift. `EmployeeShiftDAO.save`.
 ///
 /// Its own trait rather than a method on [`EmployeeShiftPort`], which is

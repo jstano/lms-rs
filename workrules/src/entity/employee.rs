@@ -85,6 +85,15 @@ impl Employee {
         self
     }
 
+    /// Does the employee have a home job on **every** date of `period`?
+    /// `isActiveHomeJobStatusAllPeriod(DateRange)`.
+    pub fn is_active_home_job_status_all_period(&self, period: &DateRange) -> bool {
+        period
+            .dates()
+            .into_iter()
+            .all(|date| self.home_employee_job_status(date).is_some())
+    }
+
     /// The first employment interval covering a date. `getStatusForDate(LocalDate)`.
     pub fn status_for_date(&self, date: LocalDate) -> Option<&EmployeeStatus> {
         self.statuses

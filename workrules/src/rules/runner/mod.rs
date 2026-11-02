@@ -11,7 +11,9 @@
 //! `ActualsTimeCardCalculator` sequences about fourteen families in one fixed
 //! pipeline, and the rest are driven from their own subsystems.
 
+pub mod clear_time_card_earnings;
 pub mod daily_differential;
 pub mod punch_rounding;
 pub mod regular_hours_distribution;
 pub mod shift_correction;
+pub mod weekly_differential;

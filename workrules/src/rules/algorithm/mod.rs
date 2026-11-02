@@ -22,3 +22,4 @@ pub mod shiftcorrection;
 pub mod shiftearning;
 pub mod single_distribution_type_config;
 pub mod utility;
+pub mod weeklyearning;

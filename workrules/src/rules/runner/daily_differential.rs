@@ -33,7 +33,6 @@
 //! supplies `rule_type_of_item`. An earning whose id is 0 has never been
 //! persisted and is removed from the card without a delete.
 
-use crate::common::enums::earning_source::EarningSource;
 use crate::entity::rule_item::RuleItem;
 use crate::entity::rule_set::RuleSet;
 use crate::entity::time_card::TimeCard;
@@ -51,6 +50,7 @@ use crate::rules::priority::sort_by_priority;
 use crate::rules::rule_class::RuleClass;
 use crate::rules::rule_config::RuleConfig;
 use crate::rules::rule_type::RuleType;
+use crate::rules::runner::clear_time_card_earnings::clear_time_card_earnings;
 use joda_rs::LocalDate;
 use std::cell::RefCell;
 
@@ -81,38 +81,12 @@ impl<'r, E: EmployeeEarningPort, P: PropertyDataPort> DailyDifferentialRunner<'r
         time_card: &mut dyn TimeCard,
         rule_type_of_item: &dyn Fn(i32) -> Option<RuleType>,
     ) {
-        let doomed: Vec<usize> = time_card
-            .earnings()
-            .iter()
-            .enumerate()
-            .filter(|(_, earning)| {
-                time_card.is_open_for_editing_for_earning(earning)
-                    && earning.source() == EarningSource::Rule
-                    && earning
-                        .rule_item_id()
-                        .and_then(rule_type_of_item)
-                        .is_some_and(|t| t == RuleType::DailyDifferential)
-                    && earning.shift_id().is_none_or(|shift_id| {
-                        time_card
-                            .shifts()
-                            .iter()
-                            .find(|s| s.id() == shift_id)
-                            .is_none_or(|s| time_card.is_open_for_editing_for_shift(s))
-                    })
-            })
-            .map(|(i, _)| i)
-            .collect();
-
-        let mut removed = Vec::with_capacity(doomed.len());
-        for index in doomed.into_iter().rev() {
-            removed.push(time_card.earnings_mut().remove(index));
-        }
-        let mut port = self.earnings.borrow_mut();
-        for earning in removed.into_iter().rev() {
-            if earning.id() != 0 {
-                port.remove(earning.id());
-            }
-        }
+        clear_time_card_earnings(
+            time_card,
+            &mut *self.earnings.borrow_mut(),
+            &[RuleType::DailyDifferential],
+            rule_type_of_item,
+        );
     }
 
     /// `runRules(ActualsTimeCard)`.
@@ -203,6 +177,7 @@ fn config_for(rule_class: RuleClass) -> &'static dyn RuleConfig {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::common::enums::earning_source::EarningSource;
     use crate::common::enums::employee_pay_type::EmployeePayType;
     use crate::common::enums::employee_status_type::EmployeeStatusType;
     use crate::common::enums::shift_type::ShiftType;
