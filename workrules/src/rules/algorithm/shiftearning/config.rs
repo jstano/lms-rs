@@ -88,6 +88,17 @@ pub const INCLUDE_DIFFS: &str = "includeDiffs";
 /// `AnniversaryWorkedShiftDifferentialRuleConfig`.
 pub const ANNIVERSARY_DATE_TYPE: &str = "anniversaryDateTypes";
 pub const EARNING_FACTOR: &str = "earningFactor";
+/// Slice 5: the contract and split-shift rules' keys.
+pub const FULL_TIME_HOURS: &str = "fullTimeHours";
+pub const EARNING_TYPES: &str = "earningTypes";
+pub const DEFAULT_RATE: &str = "defaultRate";
+pub const MIN_TIME_PROP: &str = "minTime";
+pub const MAX_TIME_PROP: &str = "maxTime";
+pub const FIRST_SHIFT_MAX: &str = "firstShiftMax";
+pub const SECOND_SHIFT_MAX: &str = "secondShiftMax";
+pub const DEDUCT_MIN_WAGE: &str = "deductMinWage";
+pub const FIXED_AMOUNT: &str = "fixedAmount";
+pub const SPLIT_SHIFT_PAY_TYPES: &str = "splitShiftPayTypes";
 /// `DefaultPropertyFactory.MINIMUM_WAGE_PROP`.
 pub const MINIMUM_WAGE_PROP: &str = "MinimumWage";
 
@@ -732,7 +743,8 @@ impl RuleConfig for HolidayTimeOfDayRuleConfig {
         RuleClass::HolidayTodDif
     }
     fn default_values(&self) -> RuleParams {
-        let mut p = RuleParams::new();
+        // `extends PriorityRuleConfig`: the only config in this family that does.
+        let mut p = crate::rules::rule_config::priority_default_values();
         p.set(FACTOR_PROP, "0.5");
         p.set(HOLIDAY_TOD_EARNING_PROP, "0");
         p.set(HOLIDAY_TYPES_PROP, "[]");
@@ -742,6 +754,9 @@ impl RuleConfig for HolidayTimeOfDayRuleConfig {
         p.set(END_TIME_PROP, "00:00:00");
         p.set(INCLUDE_DIFFS, "true");
         p
+    }
+    fn priority(&self, params: &RuleParams) -> Option<i32> {
+        Some(crate::rules::rule_config::priority_of(self, params))
     }
     fn validate(&self, p: &RuleParams) -> ValidationResults {
         let name = "Holiday Time Of Day";
@@ -783,6 +798,121 @@ impl RuleConfig for AnniversaryWorkedShiftDifferentialRuleConfig {
                 "{name}: Anniversary Date Type is not correctly formatted"
             )),
         }
+        r
+    }
+}
+
+/// `ContractToFullTimeRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ContractToFullTimeRuleConfig;
+
+impl RuleConfig for ContractToFullTimeRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::ContractToFullDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(DIFF_RATE_PROP, "5.75");
+        p.set(FULL_TIME_HOURS, "40.0");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Contract To Full Time Differential";
+        let mut r = ValidationResults::new();
+        if p.double_at(DIFF_RATE_PROP) < 0.0 {
+            r.push(format!(
+                "{name}: Differential Rate must be greater than or equal 0"
+            ));
+        }
+        earning_selected(p, EARNING, &mut r, name);
+        r
+    }
+}
+
+/// `ContractGuaranteeRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct ContractGuaranteeRuleConfig;
+
+impl RuleConfig for ContractGuaranteeRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::ContractGuaranteeDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(EARNING, "0");
+        p.set(EARNING_TYPES, "[]");
+        p.set(DEFAULT_RATE, "false");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Contract Guarantee";
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, name);
+        r
+    }
+}
+
+/// `SplitShiftDifferentialRateRuleConfig`.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SplitShiftDifferentialRateRuleConfig;
+
+impl RuleConfig for SplitShiftDifferentialRateRuleConfig {
+    fn rule_class(&self) -> RuleClass {
+        RuleClass::SplitShiftDifRateDif
+    }
+    fn default_values(&self) -> RuleParams {
+        let mut p = RuleParams::new();
+        p.set(DIFF_RATE_PROP, "5.75");
+        p.set(EARNING, "0");
+        p.set(MIN_TIME_PROP, "1.0");
+        p.set(MAX_TIME_PROP, "3.0");
+        p.set(SPLIT_SHIFT_PAY_TYPES, "[\"PAY_SECOND_SHIFT_HOURS\"]");
+        p.set(ACTUAL_PUNCH_PROP, "true");
+        p.set(MIN_HOURS_PAID, "0.0");
+        p.set(MAX_HOURS_PAID, "99.0");
+        p.set(FIRST_SHIFT_MAX, "99.0");
+        p.set(SECOND_SHIFT_MAX, "99.0");
+        p.set(DEDUCT_MIN_WAGE, "false");
+        p.set(FIXED_AMOUNT, "1.0");
+        p
+    }
+    fn validate(&self, p: &RuleParams) -> ValidationResults {
+        let name = "Split Shift Differential Rate";
+        let mut r = ValidationResults::new();
+        earning_selected(p, EARNING, &mut r, name);
+        if p.double_at(MAX_TIME_PROP) < p.double_at(MIN_TIME_PROP) {
+            r.push(format!(
+                "{name}: Max Time must be greater than or equal to Min Time"
+            ));
+        }
+        for (key, label) in [
+            (MIN_TIME_PROP, "Min Time"),
+            (DIFF_RATE_PROP, "Differential Rate"),
+            (MIN_HOURS_PAID, "Min Hours Paid"),
+        ] {
+            if p.double_at(key) < 0.0 {
+                r.push(format!(
+                    "{name}: {label} must be greater than or equal to 0"
+                ));
+            }
+        }
+        if p.double_at(MAX_HOURS_PAID) < p.double_at(MIN_HOURS_PAID) {
+            r.push(format!(
+                "{name}: Max Hours Paid must be greater than or equal to Min Hours Paid"
+            ));
+        }
+        if crate::common::enums::split_shift_pay_types::parse_split_shift_pay_types(
+            p.get(SPLIT_SHIFT_PAY_TYPES).unwrap_or(""),
+        )
+        .is_empty()
+        {
+            r.push(format!(
+                "{name}: at least one Split Shift Pay Type must be selected"
+            ));
+        }
+        at_least_a_cent(p, FIXED_AMOUNT, "Fixed Amount", &mut r, name);
         r
     }
 }

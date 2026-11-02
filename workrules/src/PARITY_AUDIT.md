@@ -47,15 +47,15 @@ see "Test backing" below for why.
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
-| 4+ | `shiftearning` — 20 of 23 rules (slices 1-4) + shared base, `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 4" |
+| 4 | `shiftearning` — 23 of 23 rules + runner + registry (slices 1-5), `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | **done** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 5" |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
+32 `RuleType`s in all; 15 ported, 17 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**1,960 tests, 742 of them transcribed Java assertions.** Clippy clean,
+**1,989 tests, 784 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -108,9 +108,8 @@ the end of this file.
 **`weeklyearning` is done — all 8 rules and its runner.** See "`weeklyearning` —
 done" at the end of this file. Next up: `shiftearning`.
 
-**`shiftearning` is in progress — 20 of 23 rules** (slices 1-4). Remaining
-(slice 5): `ContractToFullTime`, `ContractGuarantee`, `SplitShiftDifferentialRate`
-and `ShiftDifferentialRunner`. See "`shiftearning` — slice 4" at the end.
+**`shiftearning` is done — all 23 rules, its registry and `ShiftDifferentialRunner`**,
+in five slices. See "`shiftearning` — slice 5" at the end of this file.
 
 ### Unstarted scope inventory
 
@@ -230,7 +229,7 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `ShiftCorrectionRunner` | **ported** (`rules/runner/shift_correction.rs`) |
 | `DailyDifferentialRunner` (+ `DifferentialRunner`'s clearing, via `ClearTimeCardEarnings`) | **ported** (`rules/runner/daily_differential.rs`) |
 | `WeeklyDifferentialRuleRunner` | **ported** (`rules/runner/weekly_differential.rs`) |
-| `ShiftDifferentialRunner` | not ported — rules not started |
+| `ShiftDifferentialRunner` | **ported** (`rules/runner/shift_differential.rs`) |
 | `ShiftDifferenceOTRunner` | not ported |
 | `PostCalcRunner` | not ported — rules not started |
 | `ScheduleChangeValidationRunner` | not ported — rules not started |
@@ -345,7 +344,7 @@ resolves anywhere in the file.
 | 80–85 | `shiftcorrection` |
 | 86–94 | `dailyearning` |
 | 95–99 | `weeklyearning` |
-| 100–111 | `shiftearning` |
+| 100–115 | `shiftearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4163,3 +4162,74 @@ New surface: `EmployeeShift::reallocated_to_earning_hours`;
 111. **`HolidayTimeOfDay` looks each card earning's type up through
      `EarningTypePort`** to test `getType().isEarning()`; Java reads it off the
      earning. An earning whose type cannot be resolved is not counted.
+
+## `shiftearning` — slice 5
+
+The last three rules, with their configs, the family's registry and its runner:
+`ContractToFullTime`, `ContractGuarantee`, `SplitShiftDifferentialRate`,
+`ShiftEarningRegistry` (all 23 rule classes dispatch) and
+`ShiftDifferentialRunner`. **29 tests, 42 of them transcribed Java
+assertions.**
+
+| Ported | Java spec cases |
+|---|---:|
+| `ContractToFullTimeRuleImpl` | no spec — behaviour tests written from the Java |
+| `ContractGuaranteeRuleImpl` | no spec — behaviour tests written from the Java |
+| `SplitShiftDifferentialRateRuleImpl` | 39/39 (13 + 10 table rows, 15 pay-type combinations, 1 prior-shift ordering) |
+| `ShiftDifferentialRunner` | 3/3 (`ShiftDifferentialRunnerTest.groovy`) |
+
+New surface: `SplitShiftPayTypes` (reconstructed, `common/enums`);
+`JobMinWagePort` (the job's own effective minimum wage and the *current
+property's*); `ShiftEarningRegistry`; `employee_contract_hours` as a
+crate-private helper (`Employee.getContractHours(date)`); and `HolidayTimeOfDayRuleConfig`
+now carries a `priority` (it is the only config in the family that extends
+`PriorityRuleConfig`, which `ShiftDifferentialRunnerTest` exercises).
+
+### Findings
+
+- **`SplitShiftPayTypes` is another enum the checkout does not contain.** Its
+  four constants are fixed by the rule (the premium map) and the spec (config by
+  `name()`): `PAY_FIRST_SHIFT_HOURS`, `PAY_SECOND_SHIFT_HOURS`,
+  `PAY_TIME_BETWEEN_SHIFTS`, `FIXED_AMOUNT`. The `taps` checkout has only the
+  empty marker interface `SplitShiftPayTypesMultiple`.
+- **The split-shift spec has one tricky expected value worth recording.**
+  `deductMinWage` with job 2 (whose own minimum wage is 0) falls back to the
+  current property's wage of 8 and pays 4.25; with job 3 (7.25) it pays 0.5. Both
+  came from the same formula once the two sources of minimum wage were
+  separated, which is what `JobMinWagePort` is for.
+- **The split-shift spec does not put the executed shift on the card.** The
+  "earning is set" table runs the second shift against a card holding only the
+  first. The port does the same, so the "prior shift" search never sees the
+  shift it runs for even without the identity check.
+- **`ContractGuarantee` writes an earning even for zero hours.** Nothing guards a
+  zero or negative result (a shift with no net hours, with the contract still
+  short, pays a zero-hour earning at the rate gap). `ContractToFullTime`, by
+  contrast, only keeps an earning with dollars or hours.
+- **`Employee.getContractHours(date)` depends on the schedule mode.** In
+  `Weekly` schedule mode with a non-weekly pay period the calculator is the
+  `Default` one, which returns the weekly figure unscaled. The first
+  `ContractGuarantee` test draft assumed 20 hours for a bi-weekly period and got
+  10; the Java was right.
+- **`ContractGuarantee`'s home-department test is identity on the parent
+  assignment** and the contract hours count the shift's *stored* `netHours`, not
+  recomputed ones, while `ContractToFullTime` uses `ShiftUtil.getNetHours`.
+- **The runner clears three rule types**, not one: shift differential, hours
+  distribution and post-calc. A shift-differential run discards the other two
+  families' earnings too.
+- **Only `HolidayTimeOfDay` has a priority.** `RuleItemPriorityComparator`
+  matters for exactly one class here; the other 22 keep rule-set order.
+
+### Deliberate divergences (continued)
+
+112. **`ContractGuarantee` and `SplitShiftDifferential` return when the shift
+     job's rate or the employee's status for it cannot be resolved.** Java
+     dereferences the null. Same stance as 83 and 109.
+
+113. **`ContractGuarantee` reads a missing `hireDate` as "not inside the pay
+     period"** in `getContractHours`; Java's `containsDate(null)` would throw.
+
+114. **The split-shift rule's `SplitShiftPayTypes` parser drops unknown names**
+     where `valueOf` throws, and keeps order and duplicates. Same stance as 90.
+
+115. **`ShiftDifferentialRunner` passes each rule a copy of the shift.** The rules
+     take `&EmployeeShift` and none in the family changes it.

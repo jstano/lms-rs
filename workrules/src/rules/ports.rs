@@ -304,6 +304,18 @@ pub trait MinWagePort {
     fn min_wage(&self, property_id: i32, job_id: Option<i32>, effective_date: LocalDate) -> f64;
 }
 
+/// The two minimum-wage figures `SplitShiftDifferentialRateRuleImpl` reads that
+/// [`MinWagePort`] does not answer: the **job's own** effective minimum wage
+/// (`Assignment.getEffectiveMinWage(date)`, from its pay-rate rows) and the
+/// minimum wage of the *current* property (`CurrentProperty.getProperty().getMinWage()`
+/// — the property the logged-in user is working in, not the employee's).
+pub trait JobMinWagePort {
+    /// `Assignment.getEffectiveMinWage(LocalDate)`; `0.0` when the job has none.
+    fn effective_min_wage(&self, job_id: i32, date: LocalDate) -> f64;
+    /// `CurrentProperty.getProperty().getMinWage()`.
+    fn current_property_min_wage(&self) -> f64;
+}
+
 /// A property's holiday calendar. `HolidayDAO`.
 ///
 /// Fourteen call sites across the tree; `HolidayDTHrsRuleImpl` is the first

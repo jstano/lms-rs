@@ -36,6 +36,7 @@ pub mod shift_adjust_source;
 pub mod shift_adjust_type;
 pub mod shift_error_type;
 pub mod shift_type;
+pub mod split_shift_pay_types;
 pub mod start_calculation_from_type;
 pub mod time_off_status;
 pub mod uftc_punch_type;
