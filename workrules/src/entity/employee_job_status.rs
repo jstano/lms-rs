@@ -7,6 +7,7 @@
 //! to price an earning at, via the pay type.
 
 use crate::common::enums::employee_pay_type::EmployeePayType;
+use crate::entity::salary_dist::SalaryDist;
 use joda_rs::LocalDate;
 
 /// An employee's standing in one job over a period. `EmployeeJobStatus`.
@@ -24,6 +25,8 @@ pub struct EmployeeJobStatus {
     contract_hours: Option<f64>,
     contract_days: f64,
     salary_dist_id: Option<i32>,
+    salary_dist: Option<SalaryDist>,
+    annual_based: bool,
     seniority_date: Option<LocalDate>,
     home: bool,
 }
@@ -54,6 +57,8 @@ impl EmployeeJobStatus {
             contract_hours: None,
             contract_days: 0.0,
             salary_dist_id: None,
+            salary_dist: None,
+            annual_based: false,
             seniority_date: None,
             home,
         }
@@ -147,9 +152,95 @@ impl EmployeeJobStatus {
         self
     }
 
-    /// `getSalaryDist().getID()`.
+    /// `getSalaryDist().getID()`: the attached distribution's id, else the stored one.
     pub fn salary_dist_id(&self) -> Option<i32> {
-        self.salary_dist_id
+        self.salary_dist
+            .as_ref()
+            .map(SalaryDist::id)
+            .or(self.salary_dist_id)
+    }
+
+    /// The attached weekly hours pattern. `getSalaryDist()`.
+    pub fn salary_dist(&self) -> Option<&SalaryDist> {
+        self.salary_dist.as_ref()
+    }
+
+    /// Attach (or clear) the weekly hours pattern. `setSalaryDist()`.
+    pub fn set_salary_dist(&mut self, salary_dist: Option<SalaryDist>) {
+        self.salary_dist_id = salary_dist.as_ref().map(SalaryDist::id);
+        self.salary_dist = salary_dist;
+    }
+
+    /// Is the pay stored as an annual figure (hourly derived), rather than hourly?
+    /// `isAnnualBased()`.
+    pub fn annual_based(&self) -> bool {
+        self.annual_based
+    }
+
+    /// `setAnnualBased()`.
+    pub fn set_annual_based(&mut self, annual_based: bool) {
+        self.annual_based = annual_based;
+    }
+
+    /// `setAnnualRate()`.
+    pub fn set_annual_rate(&mut self, annual_rate: f64) {
+        self.annual_rate = annual_rate;
+    }
+
+    /// `setHourlyRate()`.
+    pub fn set_hourly_rate(&mut self, hourly_rate: f64) {
+        self.hourly_rate = hourly_rate;
+    }
+
+    /// Recompute the rates from the pay type. `calculateAndSetRates()`.
+    ///
+    /// `HOURLY` clears the annual figures and the distribution; `PIECE` zeroes
+    /// the hourly and annual rates; `SALARIED_EXEMPT` converts through the
+    /// distribution's weekly hours (0 with none) and the contract types through
+    /// the contract hours. The conversion goes annual-to-hourly when the status
+    /// is annual-based and hourly-to-annual otherwise, over 52 weeks, rounded to
+    /// currency. Java skips the conversion for a status with no employee
+    /// (`employee == null`); a status here always has an employee id.
+    pub fn calculate_and_set_rates(&mut self) {
+        use crate::common::enums::employee_pay_type::EmployeePayType as T;
+        match self.pay_type {
+            T::Hourly => {
+                self.annual_based = false;
+                self.set_salary_dist(None);
+                self.piece_rate = 0.0;
+                self.annual_rate = 0.0;
+            }
+            T::Piece => {
+                self.hourly_rate = 0.0;
+                self.annual_rate = 0.0;
+            }
+            T::SalariedExempt => {
+                let hours = self.salary_dist.as_ref().map_or(0.0, |d| {
+                    crate::common::numbers::round_hours(d.hours_per_week())
+                });
+                self.calculate_and_set_rates_by_hours(hours);
+            }
+            T::SalariedNonExempt | T::Contract => {
+                let hours = self.contract_hours.unwrap_or(0.0);
+                self.calculate_and_set_rates_by_hours(hours);
+            }
+        }
+    }
+
+    /// `calculateAndSetRatesByHours`, with `PayRateConverter`.
+    fn calculate_and_set_rates_by_hours(&mut self, hours: f64) {
+        use crate::common::numbers::round_currency;
+        const WEEKS_PER_YEAR: f64 = 52.0;
+        self.piece_rate = 0.0;
+        if self.annual_based {
+            self.hourly_rate = if hours == 0.0 {
+                0.0
+            } else {
+                round_currency(self.annual_rate / WEEKS_PER_YEAR / hours)
+            };
+        } else {
+            self.annual_rate = round_currency(hours * WEEKS_PER_YEAR * self.hourly_rate);
+        }
     }
 
     /// `getSeniorityDate()`.

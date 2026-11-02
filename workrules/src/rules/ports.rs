@@ -546,6 +546,12 @@ pub trait OnClockPort {
     ) -> bool;
 }
 
+/// Looking up a salary distribution. `SalaryDistDAO`.
+pub trait SalaryDistPort {
+    /// `findByID(int)`.
+    fn find_by_id(&self, id: i32) -> Option<crate::entity::salary_dist::SalaryDist>;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

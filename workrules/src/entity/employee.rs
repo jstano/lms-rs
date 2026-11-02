@@ -188,6 +188,11 @@ impl Employee {
         self.pay_group_id
     }
 
+    /// The job statuses, writable, for the reconcile rules that rewrite them.
+    pub fn employee_job_statuses_mut(&mut self) -> &mut Vec<EmployeeJobStatus> {
+        &mut self.employee_job_statuses
+    }
+
     /// Every job status, current or not. `getEmployeeJobStatuses()`.
     pub fn employee_job_statuses(&self) -> &[EmployeeJobStatus] {
         &self.employee_job_statuses

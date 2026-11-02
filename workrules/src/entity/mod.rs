@@ -37,6 +37,7 @@ pub mod property;
 pub mod punch_log;
 pub mod rule_item;
 pub mod rule_set;
+pub mod salary_dist;
 pub mod shift_category;
 pub mod temp_punch;
 pub mod time_card;

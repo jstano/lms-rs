@@ -53,14 +53,15 @@ see "Test backing" below for why.
 | 4 | `schedulechangevalidation` — 3 of 3 rules + runner | **done** |
 | 4 | `shiftdifferenceot` (`ShiftDiffOt`) — 1 of 1 rule + runner | **done** |
 | 4 | `mealpunch` — 2 of 2 rules | **done** (no runner: the punch loader drives them) |
-| 1+ | the other 12 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `reconcileemployee` — 2 of 2 rules | **done** (no runner: the reconcile process drives them) |
+| 1+ | the other 11 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 20 ported, 12 not started.
+32 `RuleType`s in all; 21 ported, 11 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**2,100 tests, 896 of them transcribed Java assertions.** Clippy clean,
+**2,117 tests, 900 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -145,7 +146,6 @@ lesson, read the Java before estimating any of these.
 | `HolidayEligibility` (HE) | 12 | 13 | `holidayeligibility`; `HolidayMatcher` at the algorithm root |
 | `PostCalc` (PC) | 8 | 13 | `postcalc`; runner `PostCalcRunner` |
 | `PostPunch` (PP) | 9 | 10 | `postpunch` |
-| `ReconcileEmployee` (RE) | 2 | 3 | `reconcileemployee` |
 | `TimeOffDistribution` (TD) | 3 | 4 | `timeoffdistribution`; single-item type |
 | `TimeOffEarning` (TE) | 3 | 3 | `timeoffearning` |
 
@@ -351,6 +351,7 @@ resolves anywhere in the file.
 | 122–124 | `schedulechangevalidation` |
 | 125–126 | `shiftdifferenceot` |
 | 127–129 | `mealpunch` |
+| 130–132 | `reconcileemployee` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4522,3 +4523,59 @@ New surface: `TempPunch` (employee, job, time); `SchedulePresencePort`
      where Java formats it with the locale-aware `ResourceMgr.formatLocalDateTime`
      (not ported). An unresolvable earning type returns no earning instead of an
      earning with a null type.
+
+## `reconcileemployee` — done
+
+`RuleType::ReconcileEmployee` (`RE`): `MissingSalaryDist` and
+`ManipulateAnnualRate`, with their configs (Java directory `reconcileemployee`,
+194 lines). **17 tests, 4 transcribed Java assertions** — the four cases of
+`ManipulateAnnualRateRuleImplTest`. `MissingSalaryDist` has no Groovy spec; its
+tests are written from the Java.
+
+These are the first rules that **rewrite the employee** rather than a time card:
+the trait takes `&mut Employee` and `today` (Java's `LocalDate.now()`), and there
+is no earning. There is no runner to port: nothing under `calcshift/rules` drives
+reconcile rules, and the reconcile process (`empmaint/reconcile`) that does is
+outside the rules tree.
+
+New surface: `SalaryDist` (id and weekly hours); on `EmployeeJobStatus` an
+attached `salary_dist`, `annual_based`, `set_annual_rate`, `set_hourly_rate`, and
+`calculate_and_set_rates` (with `PayRateConverter`'s two conversions);
+`Employee::employee_job_statuses_mut`; `SalaryDistPort` (`SalaryDistDAO`).
+
+### Findings
+
+- **`ManipulateAnnualRate` rewrites the home job too.** The home annual salary is
+  read once, before any change, and every current salaried-exempt job (home
+  included) gets `its hours / total hours × that salary`. A lone home job keeps all
+  of it; with a secondary it keeps only its share.
+- **"Current" is "contains today"**, so a status ending yesterday or starting
+  tomorrow is untouched; an hourly job or one without a distribution is skipped and
+  does not count toward the total.
+- **`MissingSalaryDist` inherits across a change of status**: a new status for the
+  same job takes the previous status's distribution (if that one is
+  salaried-exempt and has one) before falling back to the configured default.
+- **The secondary overwrite fires only for a home status that received the
+  *configured default*.** A home status that inherited its pattern does not reset
+  its secondaries, and when it does fire it **overwrites patterns the secondaries
+  already had**.
+- **The rule sorts the employee's own status list** (job id, then start date) as a
+  side effect.
+- **`calculateAndSetRates` branches on pay type**, so `MissingSalaryDist` on a
+  salaried-exempt status also changes its hourly rate (annual-based) or annual rate
+  (hourly-based) over 52 weeks.
+- **Zero total hours is a `0 / 0` → `NaN` annual rate** in `ManipulateAnnualRate`,
+  reproduced.
+
+### Deliberate divergences (continued)
+
+130. **Both rules take `today`/the employee explicitly** (no `LocalDate.now()`, no
+     Hibernate-managed employee), and operate in memory; the reconcile process
+     persists.
+
+131. **`calculate_and_set_rates` always converts**, where Java skips the conversion
+     for a status whose `employee` is null; a Rust status always has an employee id.
+
+132. **Identity comparisons become id comparisons**: "the home status was given the
+     default distribution" compares distribution ids, and a status with no
+     distribution and a missing default both read as "no distribution" and so match.

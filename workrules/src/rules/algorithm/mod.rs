@@ -14,6 +14,7 @@ pub mod mealpunch;
 pub mod overtimerate;
 pub mod punchrounding;
 pub mod punchvalidation;
+pub mod reconcileemployee;
 pub mod regularhoursdistribution;
 pub mod regularrate;
 pub mod schedulechangevalidation;
