@@ -48,14 +48,15 @@ see "Test backing" below for why.
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
 | 4 | `shiftearning` — 23 of 23 rules + runner + registry (slices 1-5), `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | **done** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 5" |
-| 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `schedulelabel` — 5 of 5 rules + runner | **done** |
+| 1+ | the other 16 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 15 ported, 17 not started.
+32 `RuleType`s in all; 16 ported, 16 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**1,989 tests, 784 of them transcribed Java assertions.** Clippy clean,
+**2,024 tests, 833 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -144,7 +145,6 @@ lesson, read the Java before estimating any of these.
 | `PostPunch` (PP) | 9 | 10 | `postpunch` |
 | `ReconcileEmployee` (RE) | 2 | 3 | `reconcileemployee` |
 | `ScheduleChangeValidation` (SV) | 3 | 5 | `schedulechangevalidation` |
-| `ScheduleLabel` (LB) | 5 | 5 | `schedulelabel` |
 | `ScheduleLabelAddendum` (LA) | 3 | 3 | `schedulelabeladdendum` |
 | `TimeOffDistribution` (TD) | 3 | 4 | `timeoffdistribution`; single-item type |
 | `TimeOffEarning` (TE) | 3 | 3 | `timeoffearning` |
@@ -172,12 +172,12 @@ a check of how the `scheduler` crate consumes rules.
 | Type | Rules | State |
 |---|---:|---|
 | `ScheduleRestriction` | 6 | 5 done, 1 deferred |
-| `ScheduleLabel` | 5 | not started |
+| `ScheduleLabel` | 5 | done |
 | `ScheduleLabelAddendum` | 3 | not started |
 | `ScheduleChangeValidation` | 3 | not started |
 | `ScheduleLunch` | 3 | done |
 
-Remaining: 11 rules in three families, plus the deferred `ScheduleRestriction`
+Remaining: 6 rules in two families, plus the deferred `ScheduleRestriction`
 rule, each family needing its own runner.
 
 **Both modules (T&A and Scheduling)**
@@ -203,7 +203,7 @@ rule, each family needing its own runner.
 **Likely minimum for T&A + Scheduling** (~100 rules plus runners; benefits,
 points, alerts and time-off can be deferred):
 
-1. Finish scheduling: `ScheduleLabel`, `ScheduleLabelAddendum`,
+1. Finish scheduling: ~~`ScheduleLabel`~~ (done), `ScheduleLabelAddendum`,
    `ScheduleChangeValidation`, the deferred `ScheduleRestriction` rule,
    `ShiftDiffOt`.
 2. The one remaining prioritized differential type (`ShiftCorrection` and
@@ -233,7 +233,8 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `ShiftDifferenceOTRunner` | not ported |
 | `PostCalcRunner` | not ported — rules not started |
 | `ScheduleChangeValidationRunner` | not ported — rules not started |
-| `ScheduleLabelRunner`, `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | not ported — rules not started |
+| `ScheduleLabelRunner` | **ported** (`rules/runner/schedule_label.rs`) |
+| `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | not ported — rules not started |
 | `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
 
 So for nine of the fourteen ported families the rules exist and are tested
@@ -345,6 +346,7 @@ resolves anywhere in the file.
 | 86–94 | `dailyearning` |
 | 95–99 | `weeklyearning` |
 | 100–115 | `shiftearning` |
+| 116–118 | `schedulelabel` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4233,3 +4235,68 @@ now carries a `priority` (it is the only config in the family that extends
 
 115. **`ShiftDifferentialRunner` passes each rule a copy of the shift.** The rules
      take `&EmployeeShift` and none in the family changes it.
+
+## `schedulelabel` — done
+
+`RuleType::ScheduleLabel` (`LB`), five rules and their runner, in one slice:
+`NoLabel`, `ApprovedTimeOffLabel`, `AvailableNotScheduled`, `NotScheduledOrOff`
+and `UnavailableAllDay` (Java directory `schedulelabel`, 335 lines), with
+`ScheduleLabelRunner`. **35 tests, 49 of them transcribed Java assertions**:
+every row of all four rule specs plus `ScheduleLabelRunnerTest`'s three cases.
+
+| Ported | Java spec cases |
+|---|---:|
+| `NoLabelRuleImpl` | none (the rule does nothing) |
+| `ApprovedTimeOffLabelRuleImpl` | 17 (5 tests; the "rule checks if employee is off" table is 13 rows) |
+| `AvailableNotScheduledRuleImpl` | 7 |
+| `NotScheduledOrOffRuleImpl` | 17 |
+| `UnavailableAllDayRuleImpl` | 5 |
+| `ScheduleLabelRunner` | 3/3 |
+
+The two "defaults are filled before save" tests spy on `fixMap`; the port has no
+`fixMap` to spy on, so they assert the observable effect instead (an unset rule
+item runs on the defaults without throwing).
+
+New surface: `TimeOffStatus` (already present), `EmployeeAvailType`,
+`EmployeeTimeOff` (status, span, type id, `fullDay`, `toDateTimeRange()`),
+`EmployeeAvailability` (+ `Employee::is_required_off_for_day`),
+`EmployeeScheduleLabel::rule_item_id`, `EmployeeScheduleLabelPort`, and on
+`TimeCard`: `time_off_requests`, `schedule_labels_mut`, `date_range`,
+`schedule_labels_for_date_range` (`TimeCardData::with_time_off_requests`,
+`with_date_range`). Rules take a `TimeCard` rather than a `ScheduleCalcDataSet`
+(divergence 23).
+
+### Findings
+
+- **`LabelRuleConfig` defaults `priority` to 1, not the `PriorityRuleConfig`
+  default of 5**, and rejects a priority below 1. The five configs override
+  `RuleConfig::priority` so the runner's sort uses 1.
+- **The two time-off rules disagree about what "covers a day" means.**
+  `ApprovedTimeOffLabel` and `NotScheduledOrOff` compare the **date parts** of the
+  request's start and end, inclusive. `AvailableNotScheduled` uses the
+  *exclusive* overlap of the day with `toDateTimeRange()`, which for a
+  `fullDay` request runs to the end of its last day. A request ending exactly at
+  midnight blocks the first two from the next day but not `AvailableNotScheduled`.
+- **`AvailableNotScheduled` reads `getSchedules()`; `NotScheduledOrOff` reads
+  `getShiftsForDay()`** (the actual shifts). A schedule-only employee is
+  "scheduled" to the first and "not scheduled" to the second.
+- **"Required off" means a whole-day row only** (`startTime == endTime ==
+  midnight`); a 09:00-17:00 required-off row is ignored by both rules that ask.
+- **I overwrote an existing file while building this and caught it by
+  `git diff`.** `common/enums/time_off_status.rs` already existed with tests; the
+  first draft replaced it. Restored from git before it was built on; worth
+  recording because the lesson is "check `git status` for `M` on a file you
+  meant to create".
+
+### Deliberate divergences (continued)
+
+116. **Labels carry the rule item id in a new `rule_item_id` field**, where the
+     earlier port had dropped it as unread. The spec asserts `ruleItemID == 1234`.
+
+117. **`Property.getWorkWeekForDate` is `WeeklyDateRange` ending on the property
+     period end date**, via `PropertyPort`, as `hours_threshold_fixed_with_max_cap`
+     does. The property entity itself is not ported.
+
+118. **`ScheduleLabelRunner` sorts by the config's priority with defaults
+     filled.** Java parses the raw `priority` parameter with `Integer.valueOf` and
+     throws `NumberFormatException` when it is absent; the port ranks it 1.

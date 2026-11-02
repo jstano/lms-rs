@@ -10,7 +10,9 @@
 //! What rules do need is the job statuses (to find the rate in force on a date)
 //! and the employee-level rule sets, which are the first step of resolution.
 
+use crate::common::enums::employee_avail_type::EmployeeAvailType;
 use crate::common::enums::employee_status_type::EmployeeStatusType;
+use crate::entity::employee_availability::EmployeeAvailability;
 use crate::entity::employee_job_status::EmployeeJobStatus;
 use crate::entity::employee_status::EmployeeStatus;
 use crate::entity::rule_set::RuleSet;
@@ -32,6 +34,7 @@ pub struct Employee {
     employee_job_statuses: Vec<EmployeeJobStatus>,
     statuses: Vec<EmployeeStatus>,
     rule_sets: Vec<RuleSet>,
+    availability: Vec<EmployeeAvailability>,
 }
 
 impl Employee {
@@ -54,6 +57,7 @@ impl Employee {
             employee_job_statuses,
             statuses: Vec::new(),
             rule_sets: Vec::new(),
+            availability: Vec::new(),
         }
     }
 
@@ -145,6 +149,23 @@ impl Employee {
     /// The customer-facing employee number. `getEmpID()`.
     pub fn emp_id(&self) -> &str {
         &self.emp_id
+    }
+
+    /// Attach the employee's weekly availability rows. `setAvailability()`.
+    #[must_use]
+    pub fn with_availability(mut self, availability: Vec<EmployeeAvailability>) -> Self {
+        self.availability = availability;
+        self
+    }
+
+    /// Is there a **whole-day required-off** row for this date's weekday?
+    /// `employeeIsRequiredOffForDay(LocalDate)`.
+    pub fn is_required_off_for_day(&self, date: LocalDate) -> bool {
+        self.availability.iter().any(|row| {
+            row.request_type() == EmployeeAvailType::RequiredOff
+                && row.is_all_day()
+                && row.iso_day_of_week() == date.day_of_week().value()
+        })
     }
 
     /// `getHireDate()`.

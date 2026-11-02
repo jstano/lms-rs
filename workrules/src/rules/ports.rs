@@ -466,6 +466,14 @@ pub trait HolidayDataPort {
     fn eligible_hours(&self, employee_id: i32, period: &DateRange) -> Option<EligibleHours>;
 }
 
+/// Saving and clearing schedule labels. `EmployeeScheduleLabelDAO`.
+pub trait EmployeeScheduleLabelPort {
+    /// `save(EmployeeScheduleLabel)`.
+    fn save(&mut self, label: &crate::entity::employee_schedule_label::EmployeeScheduleLabel);
+    /// `removeRuleGeneratedLabelsForPeriod(employeeID, DateRange)`.
+    fn remove_rule_generated_labels_for_period(&mut self, employee_id: i32, period: &DateRange);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -90,6 +90,7 @@ use crate::entity::employee_earning::EmployeeEarning;
 use crate::entity::employee_job_status::EmployeeJobStatus;
 use crate::entity::employee_schedule_label::EmployeeScheduleLabel;
 use crate::entity::employee_shift::EmployeeShift;
+use crate::entity::employee_time_off::EmployeeTimeOff;
 use crate::entity::flsa_data::FlsaData;
 use crate::entity::hours_distribution::HoursDistribution;
 use crate::entity::hours_distribution_type::HoursDistributionType;
@@ -150,6 +151,25 @@ pub trait TimeCard {
 
     /// The labels on the employee's days. `getScheduleLabels()`.
     fn schedule_labels(&self) -> &[EmployeeScheduleLabel];
+
+    /// The employee's time-off requests. `getTimeOffRequests()`.
+    fn time_off_requests(&self) -> &[EmployeeTimeOff];
+
+    /// The labels, writable: rules add to and the label runner clears them.
+    /// `addScheduleLabel()` / `clearRuleSourcedScheduleLabels()`.
+    fn schedule_labels_mut(&mut self) -> &mut Vec<EmployeeScheduleLabel>;
+
+    /// The range a schedule calculation covers. `ScheduleCalcDataSet.getDateRange()`.
+    fn date_range(&self) -> &DateRange;
+
+    /// Labels dated inside `range`, both ends inclusive.
+    /// `getScheduleLabelsForDateRange(DateRange)`.
+    fn schedule_labels_for_date_range(&self, range: &DateRange) -> Vec<&EmployeeScheduleLabel> {
+        self.schedule_labels()
+            .iter()
+            .filter(|label| range.contains_date(label.date()))
+            .collect()
+    }
 
     /// The shifts whose shift date is `date`. `getShiftsForDay(LocalDate)`.
     fn shifts_for_day(&self, date: LocalDate) -> Vec<&EmployeeShift> {
@@ -640,6 +660,8 @@ pub struct TimeCardData {
     shifts: Vec<EmployeeShift>,
     schedules: Vec<EmployeeShift>,
     schedule_labels: Vec<EmployeeScheduleLabel>,
+    time_off_requests: Vec<EmployeeTimeOff>,
+    date_range: DateRange,
     work_day_start_time: joda_rs::LocalTime,
     earnings: Vec<EmployeeEarning>,
     hours_distribution_types: Vec<HoursDistributionType>,
@@ -672,6 +694,8 @@ impl Default for TimeCardData {
             shifts: Vec::new(),
             schedules: Vec::new(),
             schedule_labels: Vec::new(),
+            time_off_requests: Vec::new(),
+            date_range: DateRange::new(LocalDate::of(1900, 1, 1), LocalDate::of(1900, 1, 14)),
             work_day_start_time: joda_rs::LocalTime::of(0, 0, 0),
             earnings: Vec::new(),
             hours_distribution_types: Vec::new(),
@@ -703,6 +727,20 @@ impl TimeCardData {
     #[must_use]
     pub fn with_work_day_start_time(mut self, time: joda_rs::LocalTime) -> Self {
         self.work_day_start_time = time;
+        self
+    }
+
+    /// Set the employee's time-off requests.
+    #[must_use]
+    pub fn with_time_off_requests(mut self, requests: Vec<EmployeeTimeOff>) -> Self {
+        self.time_off_requests = requests;
+        self
+    }
+
+    /// Set the range a schedule calculation covers.
+    #[must_use]
+    pub fn with_date_range(mut self, range: DateRange) -> Self {
+        self.date_range = range;
         self
     }
 
@@ -844,6 +882,18 @@ impl TimeCard for TimeCardData {
 
     fn schedule_labels(&self) -> &[EmployeeScheduleLabel] {
         &self.schedule_labels
+    }
+
+    fn time_off_requests(&self) -> &[EmployeeTimeOff] {
+        &self.time_off_requests
+    }
+
+    fn schedule_labels_mut(&mut self) -> &mut Vec<EmployeeScheduleLabel> {
+        &mut self.schedule_labels
+    }
+
+    fn date_range(&self) -> &DateRange {
+        &self.date_range
     }
 
     fn work_day_start_time(&self) -> joda_rs::LocalTime {

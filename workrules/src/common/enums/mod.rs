@@ -19,6 +19,7 @@ pub mod anniversary_date_types;
 pub mod change_reason_type;
 pub mod earn_type;
 pub mod earning_source;
+pub mod employee_avail_type;
 pub mod employee_calculation_mode;
 pub mod employee_event_type;
 pub mod employee_pay_type;

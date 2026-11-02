@@ -4,8 +4,8 @@
 //!
 //! A short text tag on one employee's day — "OFF", "VAC" — applied by a
 //! manager or by a `schedulelabel` rule. The daily-differential rules gate on
-//! it. The rule item id and `extraData` blob do not come across; nothing the
-//! ported rules do reads them.
+//! it. The `extraData` blob does not come across; nothing the ported rules
+//! do reads it. The rule item id does, for the `schedulelabel` rules that write labels.
 
 use crate::common::enums::label_source::LabelSource;
 use joda_rs::LocalDate;
@@ -17,6 +17,7 @@ pub struct EmployeeScheduleLabel {
     date: LocalDate,
     label: String,
     source: LabelSource,
+    rule_item_id: Option<i32>,
 }
 
 impl EmployeeScheduleLabel {
@@ -32,7 +33,20 @@ impl EmployeeScheduleLabel {
             date,
             label: label.into(),
             source,
+            rule_item_id: None,
         }
+    }
+
+    /// Record the rule item that made this label. `setRuleItemID()`.
+    #[must_use]
+    pub fn with_rule_item_id(mut self, rule_item_id: i32) -> Self {
+        self.rule_item_id = Some(rule_item_id);
+        self
+    }
+
+    /// `getRuleItemID()`.
+    pub fn rule_item_id(&self) -> Option<i32> {
+        self.rule_item_id
     }
 
     /// `getEmployeeID()`.
