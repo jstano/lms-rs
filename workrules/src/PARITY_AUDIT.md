@@ -45,7 +45,10 @@ see "Test backing" below for why.
 | 4 | `schedulelunch` — 3 of 3 rules | **done** |
 | 4 | `shiftadjustment` — 7 of 7 rules | **done** |
 | 4+ | `shiftcorrection`, `dailyearning`, `weeklyearning`, `shiftearning` | not started — prioritized next, in this order, at the user's request |
-| 1+ | the other 16 families | not started |
+| 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
+
+32 `RuleType`s in all; 11 ported, 4 prioritized next, 17 more behind them.
+(An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
@@ -92,6 +95,102 @@ end of this file.
 
 **`shiftadjustment` is done — all 7 rules.** See "`shiftadjustment` — done" at
 the end of this file. Next up: `shiftcorrection`.
+
+### Unstarted scope inventory
+
+Measured against `taps/taps/src/main/java/com/unifocus/watson/server/labor/rules/algorithm/`
+and the 225-entry `RuleClass` catalogue (`rules/rule_class.rs`). "Catalogue"
+is the number of `RuleClass` entries for that `RuleType`; "Java impls" is the
+count of `*Impl.java` files in the Java directory, which **includes per-family
+abstract bases**, so it normally exceeds the catalogue count by 1-3. Counts are
+a first measurement, not a scoping pass: per the "Measure before scheduling"
+lesson, read the Java before estimating any of these.
+
+**Prioritized next, in this order, at the user's request:**
+
+| RuleType (code) | Catalogue | Java impls | Java directory / notes |
+|---|---:|---:|---|
+| `ShiftCorrection` (SC) | 3 | 4 | `shiftcorrection` |
+| `DailyDifferential` (DD) | 9 | 10 | `dailyearning` |
+| `WeeklyDifferential` (WD) | 8 | 9 | `weeklyearning` |
+| `ShiftDifferential` (DF) | 23 | 24 | `shiftearning` — own `utility` subpackage; "closer to a second `hoursdistribution`" |
+
+**Behind those, unprioritized:**
+
+| RuleType (code) | Catalogue | Java impls | Java directory / notes |
+|---|---:|---:|---|
+| `ShiftDiffOt` (SD) | 1 | — | runner `ShiftDifferenceOTRunner`; single-item type. Unverified whether its rule is the same class as the deferred `ShiftDifferenceOTRuleImpl` of `hoursdistribution`; check before porting either |
+| `BenefitAccrual` (BA) | 15 | 16 | `benefitaccrual` |
+| `BenefitExpiration` (BE) | 7 | 8 | `benefitexpiration` |
+| `ClosePayPeriod` (CP) | 2 | 3 | `closepayperiod` |
+| `EmployeeAlert` (EA) | 7 | 8 | `employeealerts`; plus top-level `ActualsAlertRuleImpl` and `ScheduleAlertRuleImpl` |
+| `EmployeeEvent` (EE) | 3 | 4 | `employeeevent` |
+| `EmployeePoints` (EP) | 18 | 21 | `employeepoints` |
+| `HolidayEligibility` (HE) | 12 | 13 | `holidayeligibility`; `HolidayMatcher` at the algorithm root |
+| `MealPunch` (MP) | 2 | 2 | `mealpunch`; single-item type |
+| `PostCalc` (PC) | 8 | 13 | `postcalc`; runner `PostCalcRunner` |
+| `PostPunch` (PP) | 9 | 10 | `postpunch` |
+| `ReconcileEmployee` (RE) | 2 | 3 | `reconcileemployee` |
+| `ScheduleChangeValidation` (SV) | 3 | 5 | `schedulechangevalidation` |
+| `ScheduleLabel` (LB) | 5 | 5 | `schedulelabel` |
+| `ScheduleLabelAddendum` (LA) | 3 | 3 | `schedulelabeladdendum` |
+| `TimeOffDistribution` (TD) | 3 | 4 | `timeoffdistribution`; single-item type |
+| `TimeOffEarning` (TE) | 3 | 3 | `timeoffearning` |
+
+**Naming traps.** The Java directory names `dailyearning`, `weeklyearning` and
+`shiftearning` correspond to `RuleType`s called `DailyDifferential`,
+`WeeklyDifferential` and `ShiftDifferential`; the runners are the
+`*DifferentialRunner` classes. Do not search the catalogue for "earning".
+
+**Shared algorithm-root helpers not yet ported** (in
+`algorithm/` next to the family directories): `ShiftMatchingUtil`,
+`ShiftTimeInPeriodCalculator`, `MinimumHoursWorkedRuleHelper`, `HolidayMatcher`.
+`shiftearning`'s `utility` subpackage exists in Rust only as
+`shift_time_window_utility.rs`, pulled forward by `schedulelunch` (see its
+section); the rest of that subpackage is untouched.
+
+### Runner inventory
+
+Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
+`rules/runner/{punch_rounding,regular_hours_distribution}.rs` only.
+
+| Java runner | State |
+|---|---|
+| `PunchRoundingRunner` (+ `PunchRoundingUtil`) | **ported** |
+| `RegularHoursDistributionRunner` | **ported** |
+| `HoursDistributionRunner` | not ported — rules are, the runner is not |
+| `RegularRateRunner`, `OTRateRunner`, `DTRateRunner`, `EarningRateRunner` (+ `EarningRateRunnerData`, `EarningRateRunnerPair`), `PremiumRateRunner`, `RateRunner` | not ported — rate rules are |
+| `ShiftAdjustmentRunner` | not ported — rules are |
+| `ScheduleLunchRunner`, `AuditableScheduleLunchRunner` | not ported — rules are |
+| `ShiftCorrectionRunner` | not ported — rules not started |
+| `ShiftDifferentialRunner`, `DailyDifferentialRunner`, `WeeklyDifferentialRuleRunner`, `DifferentialRunner` | not ported — rules not started |
+| `ShiftDifferenceOTRunner` | not ported |
+| `PostCalcRunner` | not ported — rules not started |
+| `ScheduleChangeValidationRunner` | not ported — rules not started |
+| `ScheduleLabelRunner`, `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | not ported — rules not started |
+| `ClearTimeCardEarnings`, `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
+
+So for nine of the eleven ported families the rules exist and are tested
+individually but nothing yet drives them in Java's order; the runner layer
+(and the end-to-end calculation order across families) is a separate piece of
+work that no wave currently covers.
+
+### Deferred and open items, in one place
+
+These are each recorded where they arose; this is the roll-up.
+
+- `AnnualSalaryOverHoursRegRateRuleImpl` — deferred (divergence 57; needs a
+  service that is not a DAO).
+- `schedulerestriction`'s sixth rule — deferred (see its section).
+- `ShiftDifferenceOTRuleImpl` — no catalogue entry; deferred with `hoursdistribution`.
+- `MinDailyHrsRuleConfig` overlapping-tier validation — not ported (divergence 79).
+- `JSONUtils` multi-select id-list helpers — deferred until a family needs them.
+- DAO ports — `rules/ports.rs` currently holds 11 traits (10 DAO ports plus
+  `MinWagePort`, which is not a DAO — divergence 38). The Status table's "8 of
+  19" predates the rate and scheduling families; the 19 is the Java DAO count
+  and has not been re-derived. Re-count before the next family.
+- `tbx.core` ground truth is `legacy-tbx-10.0`; the version `taps` builds
+  against is unconfirmed (see Methodology).
 
 ### `hoursdistribution` — done
 
