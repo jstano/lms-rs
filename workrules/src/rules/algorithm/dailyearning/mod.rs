@@ -115,13 +115,27 @@ pub fn earning_rate_for_shift(
     earning_type: &EarningType,
     min_wage: &dyn MinWagePort,
 ) -> Option<f64> {
-    let status = employee.employee_job_status(shift.job_id(), shift.shift_date())?;
-    let rate = status.hourly_rate();
-    let wage = min_wage.min_wage(
-        employee.property_id(),
-        Some(shift.job_id()),
+    earning_rate_for_job(
+        employee,
+        shift.job_id(),
         shift.shift_date(),
-    );
+        earning_type,
+        min_wage,
+    )
+}
+
+/// `ShiftEarningRuleImpl.getEarningRate(job, earningDate, ...)`: the same
+/// pricing for an arbitrary job and date rather than a shift's own.
+pub fn earning_rate_for_job(
+    employee: &Employee,
+    job_id: i32,
+    date: LocalDate,
+    earning_type: &EarningType,
+    min_wage: &dyn MinWagePort,
+) -> Option<f64> {
+    let status = employee.employee_job_status(job_id, date)?;
+    let rate = status.hourly_rate();
+    let wage = min_wage.min_wage(employee.property_id(), Some(job_id), date);
     Some(if earning_type.pay_at_least_min_wage() && rate < wage {
         wage
     } else {

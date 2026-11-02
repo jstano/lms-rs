@@ -47,7 +47,7 @@ see "Test backing" below for why.
 | 4 | `shiftcorrection` — 3 of 3 rules + runner | **done** |
 | 4 | `dailyearning` — 9 of 9 rules + runner | **done** |
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
-| 4+ | `shiftearning` — 23 rules + runner | **scoped, not yet ported** — see "Scoping — `shiftearning`" |
+| 4+ | `shiftearning` — 9 of 23 rules (slice 1) + shared base | **in progress** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 1" |
 | 1+ | the other 17 rule types | not started — itemized in "Unstarted scope inventory" below |
 
 32 `RuleType`s in all; 14 ported, 1 prioritized next, 17 more behind them.
@@ -55,7 +55,7 @@ see "Test backing" below for why.
 
 ## Where the work stands
 
-**1,795 tests, 605 of them transcribed Java assertions.** Clippy clean,
+**1,851 tests, 630 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -316,7 +316,7 @@ catalogue entry; it is deferred with the rules.
 
 ### Deliberate divergences — index
 
-Ninety-nine so far, listed at the end of the section that introduced them. The
+One hundred and two so far, listed at the end of the section that introduced them. The
 numbering is continuous and never reused, so a citation like "divergence 22"
 resolves anywhere in the file.
 
@@ -341,6 +341,7 @@ resolves anywhere in the file.
 | 80–85 | `shiftcorrection` |
 | 86–94 | `dailyearning` |
 | 95–99 | `weeklyearning` |
+| 100–102 | `shiftearning` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -3860,3 +3861,84 @@ Five slices, each its own commit:
 Read the Java for each slice before estimating it: the "Measure before
 scheduling" lesson has held for every family so far, and the dependency column
 above comes from imports, not from reading the rule bodies.
+
+## `shiftearning` — slice 1
+
+The shared base and nine rules: `NoEarning`, `HoursThresholdFixed`, `DOWFlat`,
+`DOWRateFactor`, `WeeklyJobHrsFixed`, `HoursThresholdFixedWithMaxCap`,
+`TimeBetweenShifts`, `MinimumHoursWorkedShiftDifferential`,
+`ShiftStartTimeFlat`, with their nine configs. **56 tests, 25 of them
+transcribed Java assertions.** The registry and runner wait for slice 5.
+
+| Ported | Java spec cases |
+|---|---:|
+| `NoEarningRuleImpl` | no spec |
+| `HoursThresholdFixedRuleImpl` | no spec — behaviour tests written from the Java |
+| `DOWFlatRuleImpl` | no spec — behaviour tests written from the Java |
+| `DOWRateFactorRuleImpl` | 7/7 rows |
+| `WeeklyJobHrsFixedRuleImpl` | no spec — behaviour tests written from the Java |
+| `HoursThresholdFixedWithMaxCapRuleImpl` | 6/7 — the seventh asserts `fixMap` plumbing on a mock config |
+| `TimeBetweenShiftsRuleImpl` | no spec — behaviour tests written from the Java |
+| `MinimumHoursWorkedShiftDifferentialRuleImpl` | 12/12 rows |
+| `ShiftStartTimeFlatRuleImpl` | no spec — behaviour tests written from the Java |
+
+New surface: the `ShiftEarningRule` trait (`execute(&EmployeeShift, &mut dyn
+TimeCard, &RuleItem)` — the runner passes a clone of the card's shift),
+`shift_is_eligible` and `new_shift_earning`; `EmployeeEarning::{from_rule_item,
+rule_class, set_earning_date_and_pay_date}`;
+`EmployeeShift::{with_reallocated_to_earning_hours,
+net_hours_with_reallocated_undone}`; `dailyearning::earning_rate_for_job`.
+
+### Findings
+
+- **Reallocated hours are real, and the Groovy proves it.** `DOWRateFactor`'s
+  third `where:` row gives a shift 8 net hours and a `WORKED` adjustment of -2
+  hours that was reallocated to an earning, and expects **10** hours: the rule
+  prices `net - reallocated`. A first reading ("`getNetHoursWithReallocated...`
+  is just `getNetHours`") would have been wrong.
+- **`HoursThresholdFixedWithMaxCap` counts by rule *class*; its
+  `weeklyearning` sibling counts by rule item.** The spec pins it with an
+  earning whose rule item has the *same id* but a different class — which is
+  not counted. `EmployeeEarning` therefore now records the item's class
+  alongside its id.
+- **Two rules check the period differently from the rest.** `WeeklyJobHrsFixed`
+  tests only the work week's *end* date for being open, not the shift's own
+  date (so it can pay for a week whose early days are closed);
+  `HoursThresholdFixedWithMaxCap` checks the shift is open but counts prior
+  earnings toward its cap whether their period is open or closed.
+- **`WeeklyJobHrsFixed` pays once per job per week**, guarded by an earning of
+  the same rule item, date and job already on the card (job compared by id,
+  where Java compares object identity).
+- **`TimeBetweenShifts`' parameter keys are capitalized phrases** (`Hours
+  Between Shifts`, `Dollars`, `Earning`), like `MinBreakRuleConfig`'s. It
+  treats a previous shift ending *exactly* at this one's start as a zero-hour
+  gap, and it is the only rule here that refuses to write an earning if the
+  earning type cannot be found.
+- **`MinimumHoursWorkedShiftDifferential` backfills from the daily rule's
+  config**, as `MinDailyWorkedHours` did from its sibling's — harmless here,
+  since the only key the daily config lacks (`MinimumWage`) reads as `false`
+  when absent either way.
+- **`TDouble.roundCurrency` keeps four places, not two.** A test that assumed
+  "rounded to cents" caught it; `dollars()` is 1.006 and only `totalDollars()`
+  is 1.01. (`roundHours` and `round(x, 2)` are the two-place ones.)
+- **`HoursThresholdFixed`, `DOWFlat` and `WeeklyJobHrsFixed` read their
+  parameters without `fixMap`**, and `actualPunchTime` defaults to `true`: a
+  rule item with no parameters computes hours from raw punches, so a shift with
+  stored net hours but no punches is worth zero. Easy to trip over in a test.
+
+### Deliberate divergences (continued)
+
+100. **`HoursThresholdFixed`, `DOWFlat` and `WeeklyJobHrsFixed` backfill their
+     parameters from the defaults.** Java reads them off the rule item with no
+     `fixMap` (their `ruleConfig` field is unused), so a missing one throws.
+     Same stance as divergences 81, 89 and 95.
+
+101. **Reallocated-to-earning adjustments are one scalar on the shift.**
+     `EmployeeShift::with_reallocated_to_earning_hours` stands in for walking the
+     adjustments list for `WORKED` adjustments whose `reallocatedToEarning` is
+     set — the same narrowing as `adj_hours` and the schedule-lunch flag
+     (divergences 76-77). The sum is rounded to two places at load, where Java
+     rounds after each addition.
+
+102. **A shift with no IN punch skips `ShiftStartTimeFlat`**, where Java
+     dereferences the null. Same stance as divergence 83.

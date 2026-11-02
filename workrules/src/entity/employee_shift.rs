@@ -85,6 +85,11 @@ pub struct EmployeeShift {
     /// "has any", since nothing here carries adjustment-to-`RuleItem`
     /// provenance. See divergence 76.
     schedule_lunch_adjustment: bool,
+    /// The sum of the `adjHours` of this shift's `WORKED` adjustments that have
+    /// been reallocated to an earning (`getReallocatedToEarning() != null`).
+    /// Stands in for walking the (unported) adjustments list; see
+    /// [`net_hours_with_reallocated_undone`](EmployeeShift::net_hours_with_reallocated_undone).
+    reallocated_to_earning_hours: f64,
     /// The *persisted* errors, as last saved. Distinct from
     /// [`derived_errors`](EmployeeShift::derived_errors).
     errors: Vec<ShiftErrorType>,
@@ -119,6 +124,7 @@ impl EmployeeShift {
             planned_shift: None,
             worked_adjustments_empty: true,
             schedule_lunch_adjustment: false,
+            reallocated_to_earning_hours: 0.0,
             errors: Vec::new(),
         }
     }
@@ -617,6 +623,26 @@ impl EmployeeShift {
             worked = duration - breaks;
         }
         round_hours(worked + self.adj_hours)
+    }
+
+    /// Set the hours of `WORKED` adjustments reallocated to an earning, as
+    /// loading the shift's adjustments would.
+    #[must_use]
+    pub fn with_reallocated_to_earning_hours(mut self, hours: f64) -> Self {
+        self.reallocated_to_earning_hours = round_hours(hours);
+        self
+    }
+
+    /// Net hours with the hours already **reallocated to an earning** taken
+    /// back out. `ShiftUtil.getNetHoursWithReallocatedToEarningAdjustments`.
+    ///
+    /// `WORKED` adjustments that were turned into an earning (by, e.g., a
+    /// "pay this on its own line" rule) have already left the shift's hours and
+    /// reappeared as that earning; a rule that is about to price the *shift's*
+    /// hours undoes them so the time is not paid twice. `roundHours(net -
+    /// reallocated)`, so a reallocation of `-2` *adds* two hours back.
+    pub fn net_hours_with_reallocated_undone(&self, use_actual: bool) -> f64 {
+        round_hours(self.net_hours_using(use_actual) - self.reallocated_to_earning_hours)
     }
 
     /// Net hours worked inside a window, with the shift's adjustment applied.

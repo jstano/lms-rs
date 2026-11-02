@@ -20,6 +20,8 @@
 
 use crate::common::enums::earning_source::EarningSource;
 use crate::common::numbers::round_display_currency;
+use crate::entity::rule_item::RuleItem;
+use crate::rules::rule_class::RuleClass;
 use joda_rs::LocalDate;
 
 /// An amount owed to an employee. `EmployeeEarning`.
@@ -37,6 +39,9 @@ pub struct EmployeeEarning {
     total_dollars: f64,
     source: EarningSource,
     rule_item_id: Option<i32>,
+    /// The rule class of the rule item that wrote this earning, for the
+    /// rules that count earlier output by class rather than by item.
+    rule_class: Option<RuleClass>,
     shift_id: Option<i32>,
     note: String,
 }
@@ -67,9 +72,30 @@ impl EmployeeEarning {
             total_dollars: 0.0,
             source,
             rule_item_id: None,
+            rule_class: None,
             shift_id: None,
             note: String::new(),
         }
+    }
+
+    /// Record the whole rule item that produced this earning — its id **and**
+    /// its rule class — and the shift it belongs to. Stamps the source `RULE`.
+    ///
+    /// Java keeps the `RuleItem` object, so both are always available;
+    /// [`from_rule`](Self::from_rule) predates the rules that need the class.
+    #[must_use]
+    pub fn from_rule_item(mut self, rule_item: &RuleItem, shift_id: Option<i32>) -> Self {
+        self.rule_item_id = Some(rule_item.id());
+        self.rule_class = Some(rule_item.rule_class());
+        self.shift_id = shift_id;
+        self.source = EarningSource::Rule;
+        self
+    }
+
+    /// The rule class of the item that wrote it, if recorded.
+    /// `getRuleItem().getRuleClass()`.
+    pub fn rule_class(&self) -> Option<RuleClass> {
+        self.rule_class
     }
 
     /// Record which rule item produced this earning, and against which shift.
@@ -163,6 +189,14 @@ impl EmployeeEarning {
     /// `getNote()`.
     pub fn note(&self) -> &str {
         &self.note
+    }
+
+    /// Move the earning to another date, setting both its earning and pay
+    /// date. Rules that write on a period's last day build the earning from a
+    /// shift (dated the shift's) and then re-date it.
+    pub fn set_earning_date_and_pay_date(&mut self, date: LocalDate) {
+        self.earning_date = date;
+        self.pay_date = Some(date);
     }
 
     /// `setHours()`, which recomputes the total.

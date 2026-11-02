@@ -37,14 +37,18 @@ pub fn time_ranges_including_overlaps(
 }
 
 /// `DTUtil.convertStartTime`.
-fn convert_start_time(date: LocalDate, time: LocalTime) -> LocalDateTime {
+pub(crate) fn convert_start_time(date: LocalDate, time: LocalTime) -> LocalDateTime {
     date.at_time(time)
 }
 
 /// `DTUtil.convertEndTime` — rolls to the next day when the end time is
 /// before the start time, so a window spanning midnight still ends after it
 /// starts.
-fn convert_end_time(date: LocalDate, start_time: LocalTime, end_time: LocalTime) -> LocalDateTime {
+pub(crate) fn convert_end_time(
+    date: LocalDate,
+    start_time: LocalTime,
+    end_time: LocalTime,
+) -> LocalDateTime {
     let end = date.at_time(end_time);
     if end_time.is_before(start_time) {
         end.plus_days(1)
