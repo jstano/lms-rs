@@ -15,6 +15,7 @@ pub mod punchrounding;
 pub mod punchvalidation;
 pub mod regularhoursdistribution;
 pub mod regularrate;
+pub mod schedulechangevalidation;
 pub mod schedulelabel;
 pub mod schedulelabeladdendum;
 pub mod schedulelunch;

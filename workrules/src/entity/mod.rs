@@ -17,6 +17,7 @@ pub mod accrual_transaction;
 pub mod assignment;
 pub mod assignment_pay_rate;
 pub mod calc_data_set_stat;
+pub mod earning_request;
 pub mod earning_type;
 pub mod employee;
 pub mod employee_availability;

@@ -509,6 +509,20 @@ pub trait AccrualBalancePort {
     ) -> Option<AccrualEndingBalance>;
 }
 
+/// The current moment at the property the user is working in.
+/// `PropertyDateTimeProvider.currentDateTimeForCurrentProperty()`.
+pub trait CurrentDateTimePort {
+    /// The property-local "now".
+    fn current_date_time_for_current_property(&self) -> joda_rs::LocalDateTime;
+}
+
+/// Whether the user may overwrite scheduling penalties. `ActionSecurityProvider`
+/// asked for `SCHEDULING_FAIR_WORK_WEEK_CHANGES`.
+pub trait SchedulingPermissionPort {
+    /// Is `SCHEDULING_FAIR_WORK_WEEK_CHANGES` among the property's accessible actions?
+    fn can_overwrite_fair_work_week_changes(&self, property_id: i32) -> bool;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

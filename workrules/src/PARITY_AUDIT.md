@@ -50,14 +50,15 @@ see "Test backing" below for why.
 | 4 | `shiftearning` — 23 of 23 rules + runner + registry (slices 1-5), `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | **done** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 5" |
 | 4 | `schedulelabel` — 5 of 5 rules + runner | **done** |
 | 4 | `schedulelabeladdendum` — 3 of 3 rules + both runners | **done** |
-| 1+ | the other 15 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `schedulechangevalidation` — 3 of 3 rules + runner | **done** |
+| 1+ | the other 14 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 17 ported, 15 not started.
+32 `RuleType`s in all; 18 ported, 14 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**2,048 tests, 846 of them transcribed Java assertions.** Clippy clean,
+**2,069 tests, 868 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -145,7 +146,6 @@ lesson, read the Java before estimating any of these.
 | `PostCalc` (PC) | 8 | 13 | `postcalc`; runner `PostCalcRunner` |
 | `PostPunch` (PP) | 9 | 10 | `postpunch` |
 | `ReconcileEmployee` (RE) | 2 | 3 | `reconcileemployee` |
-| `ScheduleChangeValidation` (SV) | 3 | 5 | `schedulechangevalidation` |
 | `TimeOffDistribution` (TD) | 3 | 4 | `timeoffdistribution`; single-item type |
 | `TimeOffEarning` (TE) | 3 | 3 | `timeoffearning` |
 
@@ -174,11 +174,11 @@ a check of how the `scheduler` crate consumes rules.
 | `ScheduleRestriction` | 6 | 5 done, 1 deferred |
 | `ScheduleLabel` | 5 | done |
 | `ScheduleLabelAddendum` | 3 | done |
-| `ScheduleChangeValidation` | 3 | not started |
+| `ScheduleChangeValidation` | 3 | done |
 | `ScheduleLunch` | 3 | done |
 
-Remaining: 3 rules in one family, plus the deferred `ScheduleRestriction`
-rule, each family needing its own runner.
+Remaining: only the deferred `ScheduleRestriction` rule. All three scheduling
+families and their runners are ported.
 
 **Both modules (T&A and Scheduling)**
 
@@ -204,7 +204,7 @@ rule, each family needing its own runner.
 points, alerts and time-off can be deferred):
 
 1. Finish scheduling: ~~`ScheduleLabel`~~ (done), ~~`ScheduleLabelAddendum`~~ (done),
-   `ScheduleChangeValidation`, the deferred `ScheduleRestriction` rule,
+   ~~`ScheduleChangeValidation`~~ (done), the deferred `ScheduleRestriction` rule,
    `ShiftDiffOt`.
 2. The one remaining prioritized differential type (`ShiftCorrection` and
    `DailyDifferential` are done).
@@ -232,7 +232,7 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `ShiftDifferentialRunner` | **ported** (`rules/runner/shift_differential.rs`) |
 | `ShiftDifferenceOTRunner` | not ported |
 | `PostCalcRunner` | not ported — rules not started |
-| `ScheduleChangeValidationRunner` | not ported — rules not started |
+| `ScheduleChangeValidationRunner` | **ported** (`rules/runner/schedule_change_validation.rs`) |
 | `ScheduleLabelRunner` | **ported** (`rules/runner/schedule_label.rs`) |
 | `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | **ported** (`rules/runner/schedule_label_addendum.rs`) |
 | `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
@@ -348,6 +348,7 @@ resolves anywhere in the file.
 | 100–115 | `shiftearning` |
 | 116–118 | `schedulelabel` |
 | 119–121 | `schedulelabeladdendum` |
+| 122–124 | `schedulechangevalidation` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4352,3 +4353,62 @@ save_all}`; `EmployeeScheduleLabel::{id, extra_data}`.
 
 121. **A missing home job in the period returns nothing** where Java dereferences
      null (`getLastHomeEmployeeJobStatusForPeriod`). Same stance as 83 and 109.
+
+## `schedulechangevalidation` — done
+
+`RuleType::ScheduleChangeValidation` (`SV`): `AddHoursPenalty`,
+`RemoveHoursPenalty` and `ShiftModificationPenalty`, their three-level config
+hierarchy, and `ScheduleChangeValidationRunner` (Java directory
+`schedulechangevalidation`, 320 lines). **21 tests, 22 transcribed Java
+assertions** (a `where:` table is one function): `AddHoursPenaltyRuleImplTest` 6,
+`RemoveHoursPenaltyRuleImplTest` 6, `ShiftModificationPenaltyRuleImplTest` 10.
+The runner has no Groovy spec; its tests are written from the Java.
+
+These rules **return** an `EarningRequest` (new, `entity/earning_request.rs`)
+instead of writing an earning, for the scheduling UI to show before a user with
+the `SCHEDULING_FAIR_WORK_WEEK_CHANGES` action overwrites or accepts it. Either
+shift may be absent: no original is an added shift, no update a removed one.
+
+New surface: `EarningRequest`; `CurrentDateTimePort`
+(`PropertyDateTimeProvider.currentDateTimeForCurrentProperty`);
+`SchedulingPermissionPort` (`ActionSecurityProvider`).
+
+### Findings
+
+- **`usePlanningPeriodStartDate` can never be true.** Java reads it with
+  `Boolean.getBoolean(String)`, which returns whether a *system property* named
+  by that string is "true", not the string's own value. The planning-period branch
+  is unreachable for any real configuration, and the shift's start time is always
+  used. Ported as the same dead option (divergence 122).
+- **The notice window is open at both ends and in fractional days.** The edit
+  qualifies only when `secondThreshold < days to start < firstThreshold`
+  (default 1 to 10 days), measured from "now at the current property" to the
+  **original** shift's start. One minute past the shift start, or a day of
+  notice or less, pays nothing.
+- **`ShiftModificationPenalty` needs the stored net hours to match exactly**
+  (`== 0`, a floating-point equality) and then any one of: date, start
+  time-of-day, end time-of-day or job differs. Moving a shift an hour earlier
+  while also making it an hour shorter is *not* a modification.
+- **The add and remove rules treat an absent shift as zero hours**, so adding a
+  whole shift is "added hours" and deleting one is "removed hours".
+- **`percentageOfHours` replaces `earningAmount` with a percentage**, applied to
+  the absolute hours changed, then split into hours or cost by the earning type's
+  unit again. Without it the amount is a flat figure.
+- **None of the three configs extends `PriorityRuleConfig`.** `priority` is an
+  ordinary parameter (default 0) the runner's sort never reads, so rule-set order
+  is the run order.
+- **An unknown earning type counts as `HOURS`** and an absent description with an
+  unknown type has no name to fall back on (Java: `NullPointerException`; the port
+  uses an empty note, divergence 123).
+
+### Deliberate divergences (continued)
+
+122. **`usePlanningPeriodStartDate` is ignored** (see the finding): the port does
+     not carry the planning-period lookup Java could in principle reach.
+
+123. **An absent earning type with no penalty description gives an empty note**
+     where Java throws.
+
+124. **`execute` drops the `ScheduleCalcDataSet` argument.** No rule in the family
+     reads it. It keeps the separate `params` argument, because the specs pass a
+     blank rule item with their own parameter map.

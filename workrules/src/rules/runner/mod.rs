@@ -15,6 +15,7 @@ pub mod clear_time_card_earnings;
 pub mod daily_differential;
 pub mod punch_rounding;
 pub mod regular_hours_distribution;
+pub mod schedule_change_validation;
 pub mod schedule_label;
 pub mod schedule_label_addendum;
 pub mod shift_correction;

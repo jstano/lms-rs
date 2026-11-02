@@ -155,9 +155,11 @@ pub(crate) mod fixtures {
         let employee = Employee::new(0, 1, "x", Vec::new());
         let period = DateRange::new(LocalDate::of(2017, 4, 1), LocalDate::of(2017, 4, 7));
         let rule_item = RuleItem::new(1, 1, "n", RuleClass::NoOpSchAddnm, Default::default());
-        assert!(NoOpScheduleLabelAddendumRule
-            .execute(&employee, &period, &[], &rule_item)
-            .is_empty());
+        assert!(
+            NoOpScheduleLabelAddendumRule
+                .execute(&employee, &period, &[], &rule_item)
+                .is_empty()
+        );
     }
 
     #[test]
