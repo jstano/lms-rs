@@ -4,8 +4,8 @@
 //!
 //! A short text tag on one employee's day — "OFF", "VAC" — applied by a
 //! manager or by a `schedulelabel` rule. The daily-differential rules gate on
-//! it. The `extraData` blob does not come across; nothing the ported rules
-//! do reads it. The rule item id does, for the `schedulelabel` rules that write labels.
+//! it. The rule item id and `extraData` come across for the `schedulelabel` and
+//! `schedulelabeladdendum` families that write them.
 
 use crate::common::enums::label_source::LabelSource;
 use joda_rs::LocalDate;
@@ -18,6 +18,8 @@ pub struct EmployeeScheduleLabel {
     label: String,
     source: LabelSource,
     rule_item_id: Option<i32>,
+    id: i32,
+    extra_data: Option<String>,
 }
 
 impl EmployeeScheduleLabel {
@@ -34,6 +36,8 @@ impl EmployeeScheduleLabel {
             label: label.into(),
             source,
             rule_item_id: None,
+            id: 0,
+            extra_data: None,
         }
     }
 
@@ -42,6 +46,28 @@ impl EmployeeScheduleLabel {
     pub fn with_rule_item_id(mut self, rule_item_id: i32) -> Self {
         self.rule_item_id = Some(rule_item_id);
         self
+    }
+
+    /// Set the database id. `setId()`.
+    #[must_use]
+    pub fn with_id(mut self, id: i32) -> Self {
+        self.id = id;
+        self
+    }
+
+    /// `getID()`.
+    pub fn id(&self) -> i32 {
+        self.id
+    }
+
+    /// The text a label addendum rule attached. `getExtraData()`.
+    pub fn extra_data(&self) -> Option<&str> {
+        self.extra_data.as_deref()
+    }
+
+    /// `setExtraData()`.
+    pub fn set_extra_data(&mut self, extra_data: impl Into<String>) {
+        self.extra_data = Some(extra_data.into());
     }
 
     /// `getRuleItemID()`.

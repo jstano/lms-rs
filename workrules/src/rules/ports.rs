@@ -472,6 +472,41 @@ pub trait EmployeeScheduleLabelPort {
     fn save(&mut self, label: &crate::entity::employee_schedule_label::EmployeeScheduleLabel);
     /// `removeRuleGeneratedLabelsForPeriod(employeeID, DateRange)`.
     fn remove_rule_generated_labels_for_period(&mut self, employee_id: i32, period: &DateRange);
+    /// `countEmployeeLabelsMatchingText(employeeID, text, DateRange)`: stored
+    /// labels with this text in the period.
+    fn count_employee_labels_matching_text(
+        &self,
+        employee_id: i32,
+        text: &str,
+        period: &DateRange,
+    ) -> i32;
+    /// `saveAll(List<EmployeeScheduleLabel>)`.
+    fn save_all(
+        &mut self,
+        labels: &[crate::entity::employee_schedule_label::EmployeeScheduleLabel],
+    );
+}
+
+/// An accrual's closing balance on a date. `AccrualEndingBalanceDTO`.
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct AccrualEndingBalance {
+    /// `getEndingTotalBalance()`.
+    pub ending_total_balance: f64,
+    /// `getAsOfDate()`: the date the balance is struck.
+    pub as_of_date: LocalDate,
+}
+
+/// The benefit query the accrual-balance label addendum uses.
+/// `BenefitQueriesAPIJava`.
+pub trait AccrualBalancePort {
+    /// `getEarliestAccrualBalanceOnOrAfterDate(employeeID, accrualTypeID, date)`;
+    /// `None` where Java returns null (no transaction or projection found).
+    fn earliest_accrual_balance_on_or_after(
+        &self,
+        employee_id: i32,
+        accrual_earning_type_id: i32,
+        date: LocalDate,
+    ) -> Option<AccrualEndingBalance>;
 }
 
 #[cfg(test)]

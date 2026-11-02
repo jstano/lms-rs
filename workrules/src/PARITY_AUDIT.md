@@ -49,14 +49,15 @@ see "Test backing" below for why.
 | 4 | `weeklyearning` — 8 of 8 rules + runner | **done** |
 | 4 | `shiftearning` — 23 of 23 rules + runner + registry (slices 1-5), `HolidayMatcher`, `ShiftTimeInPeriodCalculator` | **done** — see "Scoping — `shiftearning`" and "`shiftearning` — slice 5" |
 | 4 | `schedulelabel` — 5 of 5 rules + runner | **done** |
-| 1+ | the other 16 rule types | not started — itemized in "Unstarted scope inventory" below |
+| 4 | `schedulelabeladdendum` — 3 of 3 rules + both runners | **done** |
+| 1+ | the other 15 rule types | not started — itemized in "Unstarted scope inventory" below |
 
-32 `RuleType`s in all; 16 ported, 16 not started.
+32 `RuleType`s in all; 17 ported, 15 not started.
 (An earlier revision of this row said "16": a miscount, 32 − 11 − 4 = 17.)
 
 ## Where the work stands
 
-**2,024 tests, 833 of them transcribed Java assertions.** Clippy clean,
+**2,048 tests, 846 of them transcribed Java assertions.** Clippy clean,
 `cargo fmt` clean.
 
 Waves 0 and 1 are complete: the support layer, the catalogue, the parameter and
@@ -145,7 +146,6 @@ lesson, read the Java before estimating any of these.
 | `PostPunch` (PP) | 9 | 10 | `postpunch` |
 | `ReconcileEmployee` (RE) | 2 | 3 | `reconcileemployee` |
 | `ScheduleChangeValidation` (SV) | 3 | 5 | `schedulechangevalidation` |
-| `ScheduleLabelAddendum` (LA) | 3 | 3 | `schedulelabeladdendum` |
 | `TimeOffDistribution` (TD) | 3 | 4 | `timeoffdistribution`; single-item type |
 | `TimeOffEarning` (TE) | 3 | 3 | `timeoffearning` |
 
@@ -173,11 +173,11 @@ a check of how the `scheduler` crate consumes rules.
 |---|---:|---|
 | `ScheduleRestriction` | 6 | 5 done, 1 deferred |
 | `ScheduleLabel` | 5 | done |
-| `ScheduleLabelAddendum` | 3 | not started |
+| `ScheduleLabelAddendum` | 3 | done |
 | `ScheduleChangeValidation` | 3 | not started |
 | `ScheduleLunch` | 3 | done |
 
-Remaining: 6 rules in two families, plus the deferred `ScheduleRestriction`
+Remaining: 3 rules in one family, plus the deferred `ScheduleRestriction`
 rule, each family needing its own runner.
 
 **Both modules (T&A and Scheduling)**
@@ -203,7 +203,7 @@ rule, each family needing its own runner.
 **Likely minimum for T&A + Scheduling** (~100 rules plus runners; benefits,
 points, alerts and time-off can be deferred):
 
-1. Finish scheduling: ~~`ScheduleLabel`~~ (done), `ScheduleLabelAddendum`,
+1. Finish scheduling: ~~`ScheduleLabel`~~ (done), ~~`ScheduleLabelAddendum`~~ (done),
    `ScheduleChangeValidation`, the deferred `ScheduleRestriction` rule,
    `ShiftDiffOt`.
 2. The one remaining prioritized differential type (`ShiftCorrection` and
@@ -234,7 +234,7 @@ Java runners live in `taps/.../server/labor/calcshift/rules/`. Rust has
 | `PostCalcRunner` | not ported — rules not started |
 | `ScheduleChangeValidationRunner` | not ported — rules not started |
 | `ScheduleLabelRunner` | **ported** (`rules/runner/schedule_label.rs`) |
-| `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | not ported — rules not started |
+| `ScheduleLabelAddendumRunner`, `ScheduleLabelAddendumExtraDataRunner` | **ported** (`rules/runner/schedule_label_addendum.rs`) |
 | `EarningSorter`, `RuleItemPriorityComparator`, `AbstractRunner` | support classes; only the priority comparator is ported (`rules/priority.rs`, post-punch only) |
 
 So for nine of the fourteen ported families the rules exist and are tested
@@ -347,6 +347,7 @@ resolves anywhere in the file.
 | 95–99 | `weeklyearning` |
 | 100–115 | `shiftearning` |
 | 116–118 | `schedulelabel` |
+| 119–121 | `schedulelabeladdendum` |
 
 The load-bearing ones for anyone continuing Wave 3: **22** (index forms are the
 primitive, because rules write through what they filtered), **23** (one struct
@@ -4300,3 +4301,54 @@ New surface: `TimeOffStatus` (already present), `EmployeeAvailType`,
 118. **`ScheduleLabelRunner` sorts by the config's priority with defaults
      filled.** Java parses the raw `priority` parameter with `Integer.valueOf` and
      throws `NumberFormatException` when it is absent; the port ranks it 1.
+
+## `schedulelabeladdendum` — done
+
+`RuleType::ScheduleLabelAddendum` (`LA`): `NoOp`, `BetweenDatesScheduleLabelCount`
+and `AccrualBalanceLabelAddendum`, `ReferenceRangeUtility`, and both runners
+(Java directory `schedulelabeladdendum`, 268 lines). **24 tests, 13 of them
+transcribed Java assertions**, i.e. every case of the five specs
+(`NoOp` 1, `BetweenDates` 2, `AccrualBalance` 4, `ReferenceRangeUtility` 3,
+`ScheduleLabelAddendumRunner` 2, `ScheduleLabelAddendumExtraDataRunner` 1).
+
+These are the only rules that **return** a result rather than write one: a map
+from label to addendum text. The port returns `(label index, text)` pairs, the
+index naming the label in the slice the rule was given — the specs build labels
+with no id, so identity cannot be an id.
+
+New surface: `AccrualBalancePort` (`BenefitQueriesAPIJava`) with
+`AccrualEndingBalance`; `EmployeeScheduleLabelPort::{count_employee_labels_matching_text,
+save_all}`; `EmployeeScheduleLabel::{id, extra_data}`.
+
+### Findings
+
+- **`ReferenceRangeUtility` includes the occurrence already running when the
+  period starts**: the start is placed in the period's year and moved back a
+  year if that lands after the period begins. The third spec case pins the edge
+  where a range starts on the period's last day.
+- **`BetweenDates` leaves unnumbered any label in a gap between reference
+  ranges**: the spec's 13 April label falls between `[…–12 Apr]` and
+  `[15 Apr–…]` and is dropped.
+- **`BetweenDates` adds stored labels only for a range that began before the
+  period**, counting from the range start to the day before the period.
+- **`AccrualBalance` numbers newest-first and counts *up***: the latest label
+  shows the base balance, earlier ones higher. Its text match is
+  case-insensitive but **not trimmed**, unlike the label-count match in
+  `schedulelabel`.
+- **`AccrualBalance` sorts the caller's list in place** in Java (divergence 119).
+- **`BetweenDates`' default reference dates are today**, so an unconfigured
+  rule is valid only on the day it is checked.
+- **The accrual spec's "no match" test stubs a method that does not exist**
+  (`getEarliestAccrualBalanceAfterDate`); the mock therefore answers null by
+  default, which is the behaviour being asserted. Transcribed as a port that
+  answers `None`.
+
+### Deliberate divergences (continued)
+
+119. **`AccrualBalance` sorts an index list, not the caller's label list.**
+
+120. **`ScheduleLabelAddendumRunner` keeps the later text when two rule items
+     label the same label.** Java's `toMap` throws `IllegalStateException`.
+
+121. **A missing home job in the period returns nothing** where Java dereferences
+     null (`getLastHomeEmployeeJobStatusForPeriod`). Same stance as 83 and 109.

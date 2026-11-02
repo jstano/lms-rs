@@ -188,6 +188,12 @@ pub(crate) mod fixtures {
         ) {
             self.removed.borrow_mut().push((employee_id, *period));
         }
+        fn count_employee_labels_matching_text(&self, _e: i32, _t: &str, _p: &DateRange) -> i32 {
+            0
+        }
+        fn save_all(&mut self, labels: &[EmployeeScheduleLabel]) {
+            self.saved.borrow_mut().extend_from_slice(labels);
+        }
     }
 
     /// The work week is the seven days from `today()`.
